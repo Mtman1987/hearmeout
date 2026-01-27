@@ -118,7 +118,6 @@ export default function LoginPage() {
                 displayName: discordInfo.username,
                 profileImageUrl: discordInfo.profilePicture,
                 discordId: discordInfo.discordId,
-                isAdmin: true,
             }, { merge: true });
         } catch (error: any) {
             console.error("Failed to update profile or Firestore:", error);
@@ -211,8 +210,7 @@ export default function LoginPage() {
         const twitchInfo = {
             username: "Madired29 | MOD",
             discordId: "1177028432949940244",
-            profilePicture: "https://cdn.discordapp.com/avatars/1177028432949940244/c2d41bae9566783581415508de900f08.png",
-            isAdmin: true
+            profilePicture: "https://cdn.discordapp.com/avatars/1177028432949940244/c2d41bae9566783581415508de900f08.png"
         };
         try {
             await updateProfile(user, {
@@ -227,7 +225,6 @@ export default function LoginPage() {
                 displayName: twitchInfo.username,
                 profileImageUrl: twitchInfo.profilePicture,
                 discordId: twitchInfo.discordId,
-                isAdmin: twitchInfo.isAdmin,
             }, { merge: true });
         } catch (error: any) {
             console.error("Failed to update profile or Firestore for Twitch user:", error);
@@ -294,3 +291,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
