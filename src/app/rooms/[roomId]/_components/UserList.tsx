@@ -256,48 +256,50 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-1 h-full">
+        {isDj && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-1 h-full">
               <MusicPlayerCard
-              currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
-              progress={room?.currentTrackProgress || 0}
-              duration={duration}
-              playing={room?.isPlaying || false}
-              isPlayerControlAllowed={canControlMusic}
-              onPlayPause={handlePlayPause}
-              onPlayNext={handlePlayNext}
-              onPlayPrev={handlePlayPrev}
-              onSeek={handleSeek}
-              activePanels={activePanels}
-              onTogglePanel={handleTogglePanel}
-            />
-          </div>
+                currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
+                progress={room?.currentTrackProgress || 0}
+                duration={duration}
+                playing={room?.isPlaying || false}
+                isPlayerControlAllowed={canControlMusic}
+                onPlayPause={handlePlayPause}
+                onPlayNext={handlePlayNext}
+                onPlayPrev={handlePlayPrev}
+                onSeek={handleSeek}
+                activePanels={activePanels}
+                onTogglePanel={handleTogglePanel}
+              />
+            </div>
 
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {activePanels.playlist && (
-                <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
-                    <PlaylistPanel
-                        playlist={room?.playlist || []}
-                        onPlaySong={handlePlaySong}
-                        currentTrackId={room?.currentTrackId || ""}
-                        isPlayerControlAllowed={canControlMusic}
-                        onRemoveSong={handleRemoveSong}
-                        onClearPlaylist={handleClearPlaylist}
-                    />
-                </div>
-            )}
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {activePanels.playlist && (
+                  <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
+                      <PlaylistPanel
+                          playlist={room?.playlist || []}
+                          onPlaySong={handlePlaySong}
+                          currentTrackId={room?.currentTrackId || ""}
+                          isPlayerControlAllowed={canControlMusic}
+                          onRemoveSong={handleRemoveSong}
+                          onClearPlaylist={handleClearPlaylist}
+                      />
+                  </div>
+              )}
 
-            {activePanels.add && (
-                <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
-                    <AddMusicPanel
-                        onAddItems={handleAddItems}
-                        onClose={() => handleTogglePanel('add')}
-                        canAddMusic={!!user}
-                    />
-                </div>
-            )}
+              {activePanels.add && (
+                  <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
+                      <AddMusicPanel
+                          onAddItems={handleAddItems}
+                          onClose={() => handleTogglePanel('add')}
+                          canAddMusic={!!user}
+                      />
+                  </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {room?.currentTrackId && (
