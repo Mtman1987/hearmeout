@@ -8,10 +8,10 @@ type PlaylistPanelProps = {
     playlist: PlaylistItem[];
     onPlaySong: (songId: string) => void;
     currentTrackId: string;
-    isHost: boolean;
+    isPlayerControlAllowed: boolean;
 }
 
-export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId, isHost }: PlaylistPanelProps) {
+export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed }: PlaylistPanelProps) {
     return (
         <Card>
             <CardHeader>
@@ -20,7 +20,7 @@ export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId, is
                 </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-                <Playlist playlist={playlist} onPlaySong={onPlaySong} currentTrackId={currentTrackId} isHost={isHost} />
+                <Playlist playlist={playlist} onPlaySong={onPlaySong} currentTrackId={currentTrackId} isPlayerControlAllowed={isPlayerControlAllowed} />
             </CardContent>
         </Card>
     )

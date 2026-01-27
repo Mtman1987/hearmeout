@@ -15,13 +15,13 @@ service cloud.firestore {
       // Allow create for any authenticated user
       allow create: if request.auth != null;
       
-      // Allow owner to update music state and room details
+      // Allow owner to update any room details
       allow update: if request.auth != null && isOwner(roomId);
       
-      // Also allow any participant to update ONLY the playlist
+      // Also allow any participant to update ONLY the music-related fields
       allow update: if request.auth != null && 
                  isParticipant(roomId, request.auth.uid) &&
-                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist']);
+                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying']);
 
       // Allow owner to delete
       allow delete: if request.auth != null && isOwner(roomId);

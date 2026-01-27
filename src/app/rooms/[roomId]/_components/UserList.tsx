@@ -64,6 +64,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   
   const isHost = !!(room && user && room.ownerId === user.uid);
   const canAddMusic = !!user;
+  const canControlMusic = !!user; // Any logged-in user can control music
 
   const handleMoveUser = (userId: string, destinationRoomId: string) => {
     // This was mock functionality. For now, I'll disable it.
@@ -71,7 +72,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handlePlaySong = (songId: string) => {
-    if (!isHost || !roomRef) return;
+    if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
@@ -79,19 +80,19 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }
 
   const handlePlayPause = (playing: boolean) => {
-    if (!isHost || !roomRef) return;
+    if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { isPlaying: playing });
   }
 
   const handlePlayNext = () => {
-    if (!isHost || !roomRef || !room?.playlist || !room.currentTrackId) return;
+    if (!canControlMusic || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
     const nextIndex = (currentIndex + 1) % room.playlist.length;
     handlePlaySong(room.playlist[nextIndex].id);
   };
 
   const handlePlayPrev = () => {
-     if (!isHost || !roomRef || !room?.playlist || !room.currentTrackId) return;
+     if (!canControlMusic || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
     const prevIndex = (currentIndex - 1 + room.playlist.length) % room.playlist.length;
     handlePlaySong(room.playlist[prevIndex].id);
@@ -124,7 +125,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
               currentTrack={currentTrack}
               playlist={room?.playlist || []}
               playing={room?.isPlaying || false}
-              isHost={isHost}
+              isPlayerControlAllowed={canControlMusic}
               onPlayPause={handlePlayPause}
               onPlayNext={handlePlayNext}
               onPlayPrev={handlePlayPrev}
@@ -141,7 +142,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                         playlist={room?.playlist || []}
                         onPlaySong={handlePlaySong}
                         currentTrackId={room?.currentTrackId || ""}
-                        isHost={isHost}
+                        isPlayerControlAllowed={canControlMusic}
                     />
                 </div>
             )}

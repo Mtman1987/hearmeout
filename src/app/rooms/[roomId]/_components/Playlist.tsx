@@ -12,7 +12,7 @@ export type PlaylistItem = {
   url: string;
 };
 
-export default function Playlist({ playlist, onPlaySong, currentTrackId, isHost }: { playlist: PlaylistItem[], onPlaySong: (songId: string) => void, currentTrackId: string, isHost: boolean }) {
+export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed }: { playlist: PlaylistItem[], onPlaySong: (songId: string) => void, currentTrackId: string, isPlayerControlAllowed: boolean }) {
   
   if (!playlist || playlist.length === 0) {
     return (
@@ -34,12 +34,12 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId, isHost 
               key={item.id}
               className={cn(
                 "flex items-center gap-2 p-2 rounded-md transition-colors",
-                isHost && "cursor-pointer hover:bg-secondary",
+                isPlayerControlAllowed && "cursor-pointer hover:bg-secondary",
                 isPlaying && "bg-secondary font-semibold"
               )}
-              onClick={() => isHost && onPlaySong(item.id)}
+              onClick={() => isPlayerControlAllowed && onPlaySong(item.id)}
             >
-              {isHost && <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />}
+              {isPlayerControlAllowed && <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />}
               {art && 
                 <Image
                     src={art.imageUrl}

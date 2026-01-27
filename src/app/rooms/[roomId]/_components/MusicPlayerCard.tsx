@@ -1,4 +1,3 @@
-
 'use client';
 
 import Image from "next/image";
@@ -37,7 +36,7 @@ export default function MusicPlayerCard({
   currentTrack,
   playlist,
   playing,
-  isHost,
+  isPlayerControlAllowed,
   onPlayPause,
   onPlayNext,
   onPlayPrev,
@@ -49,7 +48,7 @@ export default function MusicPlayerCard({
   currentTrack: PlaylistItem | undefined;
   playlist: PlaylistItem[];
   playing: boolean;
-  isHost: boolean;
+  isPlayerControlAllowed: boolean;
   onPlayPause: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
@@ -95,11 +94,11 @@ export default function MusicPlayerCard({
   }, [currentTrack]);
   
   useEffect(() => {
-    // If user is not the host, just listen for changes
-    if (!isHost && playerRef.current) {
+    // If user cannot control player, just listen for changes
+    if (!isPlayerControlAllowed && playerRef.current) {
         playerRef.current.seekTo(played);
     }
-  }, [played, isHost]);
+  }, [played, isPlayerControlAllowed]);
 
 
   if (!currentTrack) {
@@ -134,24 +133,24 @@ export default function MusicPlayerCard({
 
   const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
 
-  const handlePlayPause = () => isHost && onPlayPause(!playing);
+  const handlePlayPause = () => isPlayerControlAllowed && onPlayPause(!playing);
   const handleVolumeChange = (value: number[]) => setVolume(value[0]);
   
   const handleProgress = (state: { played: number }) => {
     if (!seeking) {
       setPlayed(state.played);
-      // Host broadcasts progress
-      if(isHost) onSeek(state.played);
+      // Player controller broadcasts progress
+      if(isPlayerControlAllowed) onSeek(state.played);
     }
   };
 
   const handleDuration = (duration: number) => setDuration(duration);
   const handleSeekChange = (value: number[]) => { 
-    if (!isHost) return;
+    if (!isPlayerControlAllowed) return;
     setPlayed(value[0]); 
   };
   const handleSeekCommit = (value: number[]) => {
-    if (!isHost) return;
+    if (!isPlayerControlAllowed) return;
     setSeeking(false);
     playerRef.current?.seekTo(value[0]);
     onSeek(value[0]);
@@ -183,8 +182,8 @@ export default function MusicPlayerCard({
                 onProgress={handleProgress}
                 onDuration={handleDuration}
                 onEnded={onPlayNext}
-                onPause={() => isHost && onPlayPause(false)}
-                onPlay={() => isHost && onPlayPause(true)}
+                onPause={() => isPlayerControlAllowed && onPlayPause(false)}
+                onPlay={() => isPlayerControlAllowed && onPlayPause(true)}
                 width="1px"
                 height="1px"
             />
@@ -241,10 +240,10 @@ export default function MusicPlayerCard({
               value={[played]}
               onValueChange={handleSeekChange}
               onValueCommit={handleSeekCommit}
-              onPointerDown={() => isHost && setSeeking(true)}
+              onPointerDown={() => isPlayerControlAllowed && setSeeking(true)}
               max={1} 
               step={0.01}
-              disabled={!isHost}
+              disabled={!isPlayerControlAllowed}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{formatTime(playedSeconds)}</span>
@@ -255,7 +254,7 @@ export default function MusicPlayerCard({
             <div className="flex items-center justify-center gap-1">
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayPrev} disabled={!isHost} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={onPlayPrev} disabled={!isPlayerControlAllowed} className="h-9 w-9">
                           <SkipBack className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
@@ -265,7 +264,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isHost}>
+                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isPlayerControlAllowed}>
                           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                         </Button>
                     </TooltipTrigger>
@@ -275,7 +274,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayNext} disabled={!isHost} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={onPlayNext} disabled={!isPlayerControlAllowed} className="h-9 w-9">
                           <SkipForward className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
