@@ -37,7 +37,7 @@ import { rooms } from "@/lib/rooms";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 
-export default function UserCard({ user, isLocal, isHost }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; }) {
+export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: number) => void; }) {
   const params = useParams();
   const roomId = params.roomId as string;
 
@@ -262,7 +262,7 @@ export default function UserCard({ user, isLocal, isHost }: { user: { id: number
                         {rooms
                             .filter(r => r.id !== roomId)
                             .map(r => (
-                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2">
+                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id)}>
                                     {r.name}
                                 </Button>
                             ))

@@ -7,9 +7,8 @@ import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 
-const users = [
+const initialUsers = [
   { id: 3, name: "You", avatarId: "avatar-3", isSpeaking: false },
-  { id: 1, name: "Sarah", avatarId: "avatar-1", isSpeaking: true },
   { id: 2, name: "Mike", avatarId: "avatar-2", isSpeaking: false },
   { id: 4, name: "David", avatarId: "avatar-4", isSpeaking: false },
   { id: 5, name: "Chloe", avatarId: "avatar-1", isSpeaking: false },
@@ -30,7 +29,12 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [playing, setPlaying] = useState(false);
+  const [users, setUsers] = useState(initialUsers);
   const isHost = users.some(u => u.name === "You");
+
+  const removeUser = (userId: number) => {
+    setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+  };
 
   const playSong = (index: number) => {
     setCurrentTrackIndex(index);
@@ -64,9 +68,9 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
   return (
     <div className="flex flex-col gap-6">
       {musicPlayerOpen && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-          <div className="lg:col-span-1">
-            <MusicPlayerCard
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="lg:col-span-1 h-full">
+             <MusicPlayerCard
               currentTrack={currentTrack}
               playing={playing}
               setPlaying={setPlaying}
@@ -101,7 +105,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {users.map((user) => (
-          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} />
+          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} onMoveUser={removeUser} />
         ))}
       </div>
     </div>
