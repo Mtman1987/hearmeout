@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -52,74 +52,54 @@ const GoogleIcon = () => (
 
 
 export default function LoginPage() {
-  const { auth, firestore, user } = useFirebase();
+  const { auth, firestore, user, isUserLoading } = useFirebase();
   const router = useRouter();
-  const [isProcessing, setIsProcessing] = useState(true);
-  const authChecked = useRef(false);
+  const [status, setStatus] = useState<'authenticating' | 'idle'>('authenticating');
 
   useEffect(() => {
-    // If the user object from the provider is ever populated, redirect.
-    // This is the definitive gate for authenticated users.
     if (user) {
       router.push('/');
-    }
-  }, [user, router]);
-
-  useEffect(() => {
-    // This effect runs once to handle the redirect logic.
-    // It checks if auth is ready and if we haven't already performed the check.
-    if (!auth || !firestore || authChecked.current) {
       return;
     }
 
-    authChecked.current = true;
-
-    const handleRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          // Success! User came from a redirect.
-          const loggedInUser = result.user;
-          const userRef = doc(firestore, 'users', loggedInUser.uid);
-          await setDoc(userRef, {
-            id: loggedInUser.uid,
-            username: loggedInUser.displayName,
-            email: loggedInUser.email,
-            displayName: loggedInUser.displayName,
-            profileImageUrl: loggedInUser.photoURL,
-          }, { merge: true });
-          // The `user` useEffect above will now handle the redirect,
-          // as the onAuthStateChanged listener will fire with the new user.
-          // The spinner remains until that happens.
-        } else {
-          // No redirect result. Show the login page, but only if there's no user signed in already.
-          if (!auth.currentUser) {
-            setIsProcessing(false);
+    if (!isUserLoading && auth && firestore) {
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result) {
+            const loggedInUser = result.user;
+            const userRef = doc(firestore, 'users', loggedInUser.uid);
+            await setDoc(userRef, {
+              id: loggedInUser.uid,
+              username: loggedInUser.displayName,
+              email: loggedInUser.email,
+              displayName: loggedInUser.displayName,
+              profileImageUrl: loggedInUser.photoURL,
+            }, { merge: true });
+          } else {
+            setStatus('idle');
           }
-        }
-      } catch (error) {
-        console.error("Authentication failed during redirect:", error);
-        setIsProcessing(false);
-      }
-    };
+        })
+        .catch((error) => {
+          console.error("Authentication failed during redirect:", error);
+          setStatus('idle');
+        });
+    }
+  }, [user, isUserLoading, auth, firestore, router]);
 
-    handleRedirect();
-  }, [auth, firestore]);
 
   const handleGuestLogin = () => {
     if (auth) {
-      signInAnonymously(auth)
-        .then(() => {
-          router.push('/');
-        })
-        .catch((error) => {
-          console.error("Anonymous sign-in failed", error);
+        setStatus('authenticating');
+        signInAnonymously(auth).catch((error) => {
+            console.error("Anonymous sign-in failed", error);
+            setStatus('idle');
         });
     }
   };
 
   const handleDiscordLogin = async () => {
     if (auth && firestore) {
+      setStatus('authenticating');
       const email = "mtman1987@example.com";
       const password = "very-secure-simulation-password-123!";
 
@@ -131,10 +111,12 @@ export default function LoginPage() {
             await createUserWithEmailAndPassword(auth, email, password);
           } catch (createError: any) {
             console.error("Simulated user creation failed:", createError);
+            setStatus('idle');
             return;
           }
         } else {
           console.error("Simulated sign-in failed:", error);
+          setStatus('idle');
           return;
         }
       }
@@ -160,9 +142,9 @@ export default function LoginPage() {
                 profileImageUrl: discordInfo.profilePicture,
                 discordId: discordInfo.discordId,
             }, { merge: true });
-            router.push('/');
         } catch (error: any) {
             console.error("Failed to update profile or Firestore:", error);
+            setStatus('idle');
         }
       }
     }
@@ -170,12 +152,12 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!auth) return;
-    setIsProcessing(true);
+    setStatus('authenticating');
     const provider = new GoogleAuthProvider();
     await signInWithRedirect(auth, provider);
   };
   
-  if (isProcessing) {
+  if (status === 'authenticating') {
     return (
         <div className="flex min-h-screen w-full items-center justify-center bg-secondary">
             <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
