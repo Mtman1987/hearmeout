@@ -37,11 +37,16 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
   const playerRef = useRef<ReactPlayer>(null);
   const lastProgressUpdateTime = useRef(0);
 
-  // Local state for this user's volume preference for the jukebox
-  const [localVolume, setLocalVolume] = useState(1);
-  const [isLocallyMuted, setIsLocallyMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const lastNonZeroVolume = useRef(1);
 
-  // Sync player to Firestore's progress
+  useEffect(() => {
+    if (volume > 0) {
+      lastNonZeroVolume.current = volume;
+    }
+  }, [volume]);
+
+  // Sync player to Firestore's progress, this keeps listeners in sync
   useEffect(() => {
     if (!isHost && playerRef.current && typeof room.currentTrackProgress === 'number') {
       const localProgress = playerRef.current.getCurrentTime();
@@ -52,8 +57,8 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
     }
   }, [room.currentTrackProgress, isHost]);
 
+  // The Host is the timekeeper for the room
   const handleProgress = (state: { playedSeconds: number }) => {
-    // Only the host writes progress updates
     if (isHost && roomRef) {
         const now = Date.now();
         // Throttle updates to every 2 seconds to avoid excessive writes
@@ -71,16 +76,17 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
         updateDocumentNonBlocking(roomRef, { currentTrackProgress: 0 });
     }
   };
-
+  
   const handleVolumeChange = (value: number[]) => {
-    const newVolume = value[0];
-    setLocalVolume(newVolume);
-    if (newVolume > 0 && isLocallyMuted) {
-      setIsLocallyMuted(false);
-    }
+    setVolume(value[0]);
   };
 
-  const isAudioPlayingForMe = !!room.isPlaying && !isLocallyMuted && localVolume > 0;
+  const toggleMute = () => {
+    setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current));
+  };
+
+  const isMuted = volume === 0;
+  const isAudioPlayingForMe = !!room.isPlaying && !isMuted;
   const currentTrack = room.playlist?.find(t => t.id === room.currentTrackId);
 
   return (
@@ -91,8 +97,7 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
             ref={playerRef}
             url={currentTrack.url}
             playing={room.isPlaying}
-            volume={localVolume}
-            muted={isLocallyMuted}
+            volume={volume}
             onDuration={handleDuration}
             onProgress={handleProgress}
             progressInterval={1000}
@@ -129,14 +134,14 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => setIsLocallyMuted(!isLocallyMuted)}
-                aria-label={isLocallyMuted ? "Unmute" : "Mute"}
+                onClick={toggleMute}
+                aria-label={isMuted ? "Unmute" : "Mute"}
               >
-                {isLocallyMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </Button>
               <Slider
                 aria-label="Volume"
-                value={[isLocallyMuted ? 0 : localVolume]}
+                value={[volume]}
                 onValueChange={handleVolumeChange}
                 max={1}
                 step={0.05}
