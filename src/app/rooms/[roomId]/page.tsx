@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, useDoc, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 
 
@@ -85,7 +85,7 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
-  const { user, firestore } = useFirebase();
+  const { firestore } = useFirebase();
   const [chatOpen, setChatOpen] = useState(false);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(true);
   
@@ -95,35 +95,6 @@ export default function RoomPage() {
   }, [firestore, params.roomId]);
 
   const { data: room } = useDoc<{ name: string, ownerId: string }>(roomRef);
-
-  useEffect(() => {
-    if (!user || !firestore || !params.roomId) return;
-
-    // This data is used by LiveKit to display user info
-    const metadata = {
-        photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-    };
-
-    const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
-
-    setDocumentNonBlocking(userInRoomRef, {
-      id: user.uid,
-      displayName: user.displayName || 'Anonymous',
-      photoURL: metadata.photoURL,
-      // The isSpeaking and isMutedByHost flags are now managed by LiveKit
-    }, { merge: true });
-
-    // Set up presence management for the Firestore user list
-    const handleBeforeUnload = () => {
-        deleteDocumentNonBlocking(userInRoomRef);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      deleteDocumentNonBlocking(userInRoomRef);
-    };
-  }, [user, firestore, params.roomId]);
 
   return (
     <SidebarProvider>

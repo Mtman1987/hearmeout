@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -60,7 +59,7 @@ export default function UserCard({
   const [isMuted, setIsMuted] = useState(false);
 
   const getParticipantPhotoURL = (metadata: string | undefined): string => {
-    if (!metadata) return `https://picsum.photos/seed/${Math.random()}/100/100`;
+    if (!metadata) return `https://picsum.photos/seed/${participant.identity}/100/100`;
     try {
       const parsed = JSON.parse(metadata);
       return parsed.photoURL || `https://picsum.photos/seed/${participant.identity}/100/100`;
@@ -111,7 +110,7 @@ export default function UserCard({
                   <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant={localParticipant?.isMicrophoneEnabled ? 'secondary' : 'ghost'} size="icon" onClick={() => localParticipant.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
+                      <Button variant={localParticipant?.isMicrophoneEnabled ? 'secondary' : 'ghost'} size="icon" onClick={() => localParticipant?.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
                           <Mic className="h-5 w-5" />
                       </Button>
                     </TooltipTrigger>

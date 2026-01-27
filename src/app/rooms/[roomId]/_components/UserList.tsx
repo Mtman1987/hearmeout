@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { collection, doc, arrayUnion, updateDoc, deleteField } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { doc, arrayUnion, updateDoc, deleteField } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +17,6 @@ import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   useParticipants,
-  useRoomContext,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 
@@ -128,13 +127,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     }
   }, [room, user, roomRef]);
 
-  const usersInRoomQuery = useMemoFirebase(() => {
-    if (!firestore || !roomId) return null;
-    return collection(firestore, 'rooms', roomId, 'users');
-  }, [firestore, roomId]);
-
-  useCollection<any>(usersInRoomQuery);
-  
   const isHost = !!(room && user && room.ownerId === user.uid);
   const canAddMusic = !!user;
   const canControlMusic = !!user;
