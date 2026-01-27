@@ -138,19 +138,19 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   return (
     <Card className="flex flex-col h-full">
        <div className="hidden">
-      {isClient && currentTrack && isPlayerControlAllowed && (
+      {isClient && currentTrack && (
             <ReactPlayer
                 ref={ref}
                 url={currentTrack.url}
                 playing={playing}
-                muted={true} // Player is always muted for the host, audio comes from the Jukebox track
-                volume={0}
+                muted={isPlayerControlAllowed ? isMuted : true}
+                volume={isPlayerControlAllowed ? (isMuted ? 0 : volume) : 0}
                 onEnded={onPlayNext}
                 onPause={() => onPlayPause(false)}
                 onPlay={() => onPlayPause(true)}
                 width="1px"
                 height="1px"
-                progressInterval={1000} // Get progress updates every second
+                progressInterval={1000}
             />
       )}
       </div>
