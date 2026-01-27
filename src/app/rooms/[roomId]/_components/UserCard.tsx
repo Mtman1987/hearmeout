@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Volume2, VolumeX, MicOff, Headphones } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
-import { AudioVisualizer } from "./AudioVisualizer";
+import { SpeakingIndicator } from "./SpeakingIndicator";
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -55,69 +56,71 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-center gap-4">
-          <Avatar className="h-12 w-12">
+          <Avatar className={cn("h-12 w-12 transition-all", { "ring-2 ring-primary ring-offset-2 ring-offset-card": user.isSpeaking && !isMuted })}>
             {avatar && <AvatarImage src={avatar.imageUrl} alt={user.name} data-ai-hint={avatar.imageHint} />}
             <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
           </Avatar>
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
-          {isLocal && (
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Audio Settings">
-                  <Headphones className="h-5 w-5" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Audio Settings</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 text-sm pt-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="input-device">Input Device</Label>
-                        <Select value={selectedInput} onValueChange={setSelectedInput} disabled={inputDevices.length === 0}>
-                            <SelectTrigger id="input-device">
-                                <SelectValue placeholder="Select input device" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {inputDevices.map(device => (
-                                    <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `microphone ${inputDevices.indexOf(device) + 1}`}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="output-device">Output Device</Label>
-                        <Select value={selectedOutput} onValueChange={setSelectedOutput} disabled={outputDevices.length === 0}>
-                            <SelectTrigger id="output-device">
-                                <SelectValue placeholder="Select output device" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {outputDevices.map(device => (
-                                    <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `speaker ${outputDevices.indexOf(device) + 1}`}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <Label htmlFor="push-to-talk" className="flex items-center gap-2 cursor-pointer">
-                            <MicOff className="h-4 w-4" /> Push to Talk
-                        </Label>
-                        <Switch id="push-to-talk" checked={pushToTalk} onCheckedChange={setPushToTalk} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <Label htmlFor="monitoring" className="flex items-center gap-2 cursor-pointer">
-                            <Headphones className="h-4 w-4" /> Monitor Own Voice
-                        </Label>
-                        <Switch id="monitoring" checked={monitoring} onCheckedChange={setMonitoring} />
-                    </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
         </div>
+         {isLocal && (
+            <div className="flex justify-end">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Audio Settings">
+                    <Headphones className="h-5 w-5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Audio Settings</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 text-sm pt-4">
+                      <div className="space-y-2">
+                          <Label htmlFor="input-device">Input Device</Label>
+                          <Select value={selectedInput} onValueChange={setSelectedInput} disabled={inputDevices.length === 0}>
+                              <SelectTrigger id="input-device">
+                                  <SelectValue placeholder="Select input device" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {inputDevices.map(device => (
+                                      <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `microphone ${inputDevices.indexOf(device) + 1}`}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                      </div>
+                       <div className="space-y-2">
+                          <Label htmlFor="output-device">Output Device</Label>
+                          <Select value={selectedOutput} onValueChange={setSelectedOutput} disabled={outputDevices.length === 0}>
+                              <SelectTrigger id="output-device">
+                                  <SelectValue placeholder="Select output device" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {outputDevices.map(device => (
+                                      <SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `speaker ${outputDevices.indexOf(device) + 1}`}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                          <Label htmlFor="push-to-talk" className="flex items-center gap-2 cursor-pointer">
+                              <MicOff className="h-4 w-4" /> Push to Talk
+                          </Label>
+                          <Switch id="push-to-talk" checked={pushToTalk} onCheckedChange={setPushToTalk} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                          <Label htmlFor="monitoring" className="flex items-center gap-2 cursor-pointer">
+                              <Headphones className="h-4 w-4" /> Monitor Own Voice
+                          </Label>
+                          <Switch id="monitoring" checked={monitoring} onCheckedChange={setMonitoring} />
+                      </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <AudioVisualizer isSpeaking={user.isSpeaking && !isMuted} />
+        <SpeakingIndicator isSpeaking={user.isSpeaking && !isMuted} />
         
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Unmute" : "Mute"}>

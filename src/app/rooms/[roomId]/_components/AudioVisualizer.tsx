@@ -15,7 +15,7 @@ export const AudioVisualizer = ({ isSpeaking }: { isSpeaking: boolean }) => {
         setHeights(Array.from({ length: 12 }, () => Math.random() * 28 + 4)); // height is h-8, so max 32px
       }, 150);
     } else {
-      setHeights([]);
+      setHeights(Array.from({ length: 12 }, () => 4));
     }
     return () => clearInterval(interval);
   }, [isSpeaking]);
@@ -30,7 +30,7 @@ export const AudioVisualizer = ({ isSpeaking }: { isSpeaking: boolean }) => {
             { "bg-primary": isSpeaking }
           )}
           style={{
-            height: isSpeaking ? `${heights[i] || 4}px` : '4px',
+            height: `${heights[i] || 4}px`,
           }}
         />
       ))}

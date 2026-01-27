@@ -28,7 +28,7 @@ const initialPlaylist: PlaylistItem[] = [
 export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean }) {
   const [playlist, setPlaylist] = useState<PlaylistItem[]>(initialPlaylist);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-  const [activeMusicPanel, setActiveMusicPanel] = useState<'playlist' | 'add' | null>(null);
+  const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [playing, setPlaying] = useState(false);
 
   const playSong = (index: number) => {
@@ -55,7 +55,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
   };
 
   const handleTogglePanel = (panel: 'playlist' | 'add') => {
-    setActiveMusicPanel(prev => prev === panel ? null : panel);
+    setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   }
 
   const currentTrack = playlist[currentTrackIndex] || initialPlaylist[0];
@@ -71,12 +71,12 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
               setPlaying={setPlaying}
               onPlayNext={handlePlayNext}
               onPlayPrev={handlePlayPrev}
-              activePanel={activeMusicPanel}
+              activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
             />
           </div>
 
-          {activeMusicPanel === 'playlist' && (
+          {activePanels.playlist && !activePanels.add && (
             <div className="lg:col-span-2">
               <PlaylistPanel
                 playlist={playlist}
@@ -86,13 +86,31 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
             </div>
           )}
 
-          {activeMusicPanel === 'add' && (
-            <div className="lg:col-span-2">
+          {!activePanels.playlist && activePanels.add && (
+             <div className="lg:col-span-2">
               <AddMusicPanel
                 onAddItems={handleAddItems}
-                onClose={() => setActiveMusicPanel(null)}
+                onClose={() => handleTogglePanel('add')}
               />
             </div>
+          )}
+          
+          {activePanels.playlist && activePanels.add && (
+            <>
+              <div className="lg:col-span-1">
+                <PlaylistPanel
+                  playlist={playlist}
+                  onPlaySong={playSong}
+                  currentTrackId={currentTrack.id}
+                />
+              </div>
+              <div className="lg:col-span-1">
+                <AddMusicPanel
+                  onAddItems={handleAddItems}
+                  onClose={() => handleTogglePanel('add')}
+                />
+              </div>
+            </>
           )}
         </div>
       )}

@@ -33,7 +33,7 @@ export default function MusicPlayerCard({
   setPlaying,
   onPlayNext,
   onPlayPrev,
-  activePanel,
+  activePanels,
   onTogglePanel,
 }: {
   currentTrack: PlaylistItem;
@@ -41,7 +41,7 @@ export default function MusicPlayerCard({
   setPlaying: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
-  activePanel: 'playlist' | 'add' | null;
+  activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
 }) {
   const [isClient, setIsClient] = useState(false);
@@ -170,12 +170,12 @@ export default function MusicPlayerCard({
         </div>
       </CardContent>
       <CardFooter className="p-0 flex-col items-start border-t">
-          <Button variant="ghost" className="w-full justify-start rounded-b-none p-4 data-[active=true]:bg-secondary" data-active={activePanel === 'playlist'} onClick={() => onTogglePanel('playlist')}>
+          <Button variant="ghost" className="w-full justify-start rounded-b-none p-4 data-[active=true]:bg-secondary" data-active={activePanels.playlist} onClick={() => onTogglePanel('playlist')}>
             <ListMusic className="mr-2" />
             Up Next
           </Button>
           <div className="border-t w-full"></div>
-           <Button variant="ghost" className="w-full justify-start rounded-t-none p-4 data-[active=true]:bg-secondary" data-active={activePanel === 'add'} onClick={() => onTogglePanel('add')}>
+           <Button variant="ghost" className="w-full justify-start rounded-t-none p-4 data-[active=true]:bg-secondary" data-active={activePanels.add} onClick={() => onTogglePanel('add')}>
             <Youtube className="mr-2" />
             Add Music
           </Button>
