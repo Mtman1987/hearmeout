@@ -15,7 +15,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks } from '@livekit/components-react';
+import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -56,7 +56,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SpeakingIndicator } from "./SpeakingIndicator";
-import { AudioTrack } from '@livekit/components-react';
 
 
 export default function UserCard({
@@ -68,7 +67,7 @@ export default function UserCard({
     isHost?: boolean;
     roomId: string;
 }) {
-  const { firestore } = useFirebase();
+  const { firestore, user: firebaseUser } = useFirebase();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -94,8 +93,12 @@ export default function UserCard({
     }
   };
 
-  const displayName = name || identity;
-  const photoURL = getParticipantPhotoURL(metadata);
+  // If this is the local user's card, use the definitive data from Firebase.
+  // Otherwise, use the data from LiveKit for remote participants.
+  const displayName = isLocal ? firebaseUser?.displayName || name : name || identity;
+  const photoURL = isLocal 
+    ? firebaseUser?.photoURL || `https://picsum.photos/seed/${firebaseUser?.uid}/100/100` 
+    : getParticipantPhotoURL(metadata);
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];

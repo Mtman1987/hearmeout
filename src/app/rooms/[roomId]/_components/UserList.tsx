@@ -76,19 +76,22 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
   useEffect(() => {
+    // Return early if we're still loading the user or if the user object is null.
     if (isUserLoading || !user) {
       return;
     }
 
-    const displayName = user.displayName || (user.isAnonymous ? 'Guest' : 'Anonymous');
-    if (!roomId || !displayName) {
-      return;
+    // A user must have a UID to connect.
+    if (!user.uid || !roomId) {
+        return;
     }
+
+    const displayName = user.displayName || (user.isAnonymous ? 'Guest' : 'Anonymous');
+    const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
+    const metadata = JSON.stringify({ photoURL });
 
     (async () => {
       try {
-        const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
-        const metadata = JSON.stringify({ photoURL });
         const token = await generateLiveKitToken(roomId, user.uid, displayName, metadata);
         setLivekitToken(token);
       } catch (e) {
@@ -100,7 +103,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
       }
     })();
-  }, [user?.uid, user?.displayName, user?.photoURL, isUserLoading, roomId, toast]);
+  }, [user, isUserLoading, roomId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && user?.uid === room.ownerId) {
