@@ -16,7 +16,7 @@ import {
   LoaderCircle
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
-import { Track, type Participant, type MediaDevice } from 'livekit-client';
+import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase } from '@/firebase';
@@ -75,8 +75,6 @@ export default function UserCard({
     activeSpeakerId,
     onMicDeviceChange,
     onSpeakerDeviceChange,
-    onToggleMic,
-    isMuted: isMutedProp,
 }: {
     participant: Participant;
     isHost?: boolean;
@@ -87,8 +85,6 @@ export default function UserCard({
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
     onSpeakerDeviceChange?: (deviceId: string) => void;
-    onToggleMic?: () => void;
-    isMuted?: boolean;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -102,13 +98,22 @@ export default function UserCard({
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
 
   const tracks = useTracks([Track.Source.Microphone], { participant });
-  const micPublication = tracks.find((t) => t.source === Track.Source.Microphone)?.publication;
-  const isMuted = isLocal ? isMutedProp : (micPublication?.isMuted ?? participant.isMicrophoneMuted);
+  const micTrackRef = tracks.find((t) => t.source === Track.Source.Microphone);
+  const micTrack = micTrackRef?.publication.track as LocalAudioTrack | undefined;
   
-  // Use LiveKit data for remote, metadata for local to get latest profile pic from Firebase
+  // This state is now derived directly from the track and is reactive for all participants.
+  const isMuted = micTrackRef?.publication.isMuted ?? participant.isMicrophoneMuted;
+
+  // The toggle function is now self-contained within the card.
+  const handleToggleMic = () => {
+    if (isLocal && micTrack) {
+      micTrack.setMuted(!micTrack.isMuted);
+    }
+  };
+  
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = isLocal ? name : participantMeta.displayName || name;
-  const photoURL = isLocal ? participantMeta.photoURL : participant.metadata ? JSON.parse(participant.metadata).photoURL : undefined;
+  const displayName = name || participantMeta.displayName || 'User';
+  const photoURL = participantMeta.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -128,7 +133,6 @@ export default function UserCard({
         const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
-        // Use window.location to force a full page reload, clearing any broken state.
         window.location.assign('/');
     } catch (error) {
         console.error("Error deleting room:", error);
@@ -156,7 +160,7 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL || `https://picsum.photos/seed/${identity}/100/100`} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
                         <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
                      {isMuted && (
@@ -225,7 +229,7 @@ export default function UserCard({
 
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={onToggleMic} className="h-7 w-7">
+                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={handleToggleMic} className="h-7 w-7">
                                         {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </Button>
                                 </TooltipTrigger>
