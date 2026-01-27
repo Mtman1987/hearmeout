@@ -33,6 +33,7 @@ import {
 
 
 export default function MusicPlayerCard({
+  roomId,
   currentTrack,
   playlist,
   playing,
@@ -44,6 +45,7 @@ export default function MusicPlayerCard({
   activePanels,
   onTogglePanel,
 }: {
+  roomId: string;
   currentTrack: PlaylistItem | undefined;
   playlist: PlaylistItem[];
   playing: boolean;
@@ -64,6 +66,29 @@ export default function MusicPlayerCard({
   const [seeking, setSeeking] = useState(false);
   
   const playerRef = useRef<ReactPlayer>(null);
+
+  // Load volume from localStorage on mount
+  useEffect(() => {
+    if (!isClient) return;
+    try {
+        const savedVolume = localStorage.getItem(`hearmeout-music-volume-${roomId}`);
+        if (savedVolume !== null && !isNaN(parseFloat(savedVolume))) {
+            setVolume(parseFloat(savedVolume));
+        }
+    } catch (e) {
+        console.error("Failed to load music volume from localStorage", e);
+    }
+  }, [roomId, isClient]);
+
+  // Save volume to localStorage on change
+  useEffect(() => {
+    if (!isClient) return;
+    try {
+        localStorage.setItem(`hearmeout-music-volume-${roomId}`, String(volume));
+    } catch (e) {
+        console.error("Failed to save music volume to localStorage", e);
+    }
+  }, [volume, roomId, isClient]);
 
   useEffect(() => {
     setPlayed(0); // Reset progress when track changes

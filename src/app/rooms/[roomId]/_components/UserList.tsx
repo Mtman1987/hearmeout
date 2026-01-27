@@ -1,3 +1,4 @@
+
 'use client';
 
 import UserCard from "./UserCard";
@@ -118,6 +119,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-1 h-full">
              <MusicPlayerCard
+              roomId={roomId}
               currentTrack={currentTrack}
               playlist={room?.playlist || []}
               playing={room?.isPlaying || false}
