@@ -63,6 +63,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: users, isLoading: usersLoading } = useCollection<RoomUser>(usersInRoomQuery);
   
   const isHost = !!(room && user && room.ownerId === user.uid);
+  const canAddMusic = !!user;
 
   const handleMoveUser = (userId: string, destinationRoomId: string) => {
     // This was mock functionality. For now, I'll disable it.
@@ -97,7 +98,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    if (!isHost || !roomRef || !room) return;
+    if (!canAddMusic || !roomRef || !room) return;
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
@@ -150,7 +151,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                     <AddMusicPanel
                         onAddItems={handleAddItems}
                         onClose={() => handleTogglePanel('add')}
-                        isHost={isHost}
+                        canAddMusic={canAddMusic}
                     />
                 </div>
             )}

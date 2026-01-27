@@ -5,13 +5,24 @@ service cloud.firestore {
     function isOwner(roomId) {
       return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
     }
+    
+    function isParticipant(roomId, userId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId)/users/$(userId));
+    }
 
     match /rooms/{roomId} {
       allow read: if request.auth != null;
       // Allow create for any authenticated user
       allow create: if request.auth != null;
+      
       // Allow owner to update music state and room details
       allow update: if request.auth != null && isOwner(roomId);
+      
+      // Also allow any participant to update ONLY the playlist
+      allow update: if request.auth != null && 
+                 isParticipant(roomId, request.auth.uid) &&
+                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist']);
+
       // Allow owner to delete
       allow delete: if request.auth != null && isOwner(roomId);
 

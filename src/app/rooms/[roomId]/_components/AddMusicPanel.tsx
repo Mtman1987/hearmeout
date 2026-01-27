@@ -11,15 +11,15 @@ import { getYoutubeInfo } from '@/app/actions';
 type AddMusicPanelProps = {
     onAddItems: (items: PlaylistItem[]) => void;
     onClose: () => void;
-    isHost: boolean;
+    canAddMusic: boolean;
 };
 
-export default function AddMusicPanel({ onAddItems, onClose, isHost }: AddMusicPanelProps) {
+export default function AddMusicPanel({ onAddItems, onClose, canAddMusic }: AddMusicPanelProps) {
     const [inputValue, setInputValue] = useState("");
     const [isFetching, setIsFetching] = useState(false);
 
     const handleAddUrl = async () => {
-        if (!inputValue.trim() || isFetching || !isHost) return;
+        if (!inputValue.trim() || isFetching || !canAddMusic) return;
 
         setIsFetching(true);
         const newItems = await getYoutubeInfo(inputValue);
@@ -32,7 +32,7 @@ export default function AddMusicPanel({ onAddItems, onClose, isHost }: AddMusicP
         }
     };
 
-    if (!isHost) {
+    if (!canAddMusic) {
         return (
              <Card>
                 <CardHeader>
@@ -41,7 +41,7 @@ export default function AddMusicPanel({ onAddItems, onClose, isHost }: AddMusicP
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className='p-4 text-sm text-muted-foreground'>Only the room host can add music to the playlist.</p>
+                    <p className='p-4 text-sm text-muted-foreground'>You must be logged in to add music to the playlist.</p>
                 </CardContent>
             </Card>
         )
@@ -71,7 +71,7 @@ export default function AddMusicPanel({ onAddItems, onClose, isHost }: AddMusicP
                             disabled={isFetching}
                         />
                     </div>
-                    <Button variant="outline" onClick={handleAddUrl} disabled={isFetching}>
+                    <Button variant="outline" onClick={handleAddUrl} disabled={isFetching || !inputValue.trim()}>
                         {isFetching ? <LoaderCircle className="animate-spin" /> : 'Add'}
                     </Button>
                     <Button variant="outline" size="icon" disabled>
