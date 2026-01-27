@@ -5,13 +5,6 @@ import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
-} from '@live![CDATA['use client';
-
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import {
-  LiveKitRoom,
-  useConnectionState,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import {
