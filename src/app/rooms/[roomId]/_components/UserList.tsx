@@ -65,6 +65,17 @@ const RoomParticipants = ({
 }) => {
   const participants = useParticipants();
 
+  const getParticipantPhotoURL = (metadata: string | undefined): string => {
+    if (!metadata) return '';
+    try {
+      const parsed = JSON.parse(metadata);
+      return parsed.photoURL || '';
+    } catch (e) {
+      console.error('Failed to parse participant metadata:', metadata, e);
+      return '';
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
       {participants.map((participant) => (
@@ -73,7 +84,7 @@ const RoomParticipants = ({
           user={{
             id: participant.identity,
             name: participant.name || participant.identity,
-            photoURL: participant.metadata ? JSON.parse(participant.metadata).photoURL : '',
+            photoURL: getParticipantPhotoURL(participant.metadata),
             isSpeaking: participant.isSpeaking,
             isMutedByHost: participant.isMicrophoneMuted,
           }}
@@ -357,7 +368,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             userChoices={{
               username: displayName,
             }}
-             onDisconnected={() => setLivekitToken(null)}
           >
             <RoomParticipants 
               isHost={isHost}
