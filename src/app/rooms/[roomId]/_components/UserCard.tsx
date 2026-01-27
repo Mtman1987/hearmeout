@@ -40,6 +40,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
 
   const [volume, setVolume] = useState(isLocal ? 1 : 0.7);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false); // New state to track loading
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>('default');
@@ -64,13 +65,18 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
             }
         } catch (e) {
             console.error("Failed to parse user preferences from localStorage", e);
+        } finally {
+            setIsLoaded(true); // Mark as loaded, even if there was an error
         }
+    } else {
+        setIsLoaded(true); // For local user, we're "loaded" immediately
     }
   }, [user.id, roomId, isLocal]);
 
   // Effect to save settings to localStorage on change
   useEffect(() => {
-    if (!isLocal) {
+    // Only save if loading is complete and it's not the local user
+    if (!isLocal && isLoaded) {
         const storageKey = `hearmeout-user-prefs-${roomId}`;
         try {
             const allPrefs = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -84,7 +90,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
              console.error("Failed to save user preferences to localStorage", e);
         }
     }
-  }, [volume, isMuted, user.id, roomId, isLocal]);
+  }, [volume, isMuted, user.id, roomId, isLocal, isLoaded]); // Add isLoaded to dependency array
 
   useEffect(() => {
     async function getMediaDevices() {
@@ -115,7 +121,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
   }
 
   return (
-    <Card className="flex flex-col h-full border">
+    <Card className="flex flex-col h-full">
       <CardHeader>
         <div className="flex items-center gap-4">
           <div className="relative">
