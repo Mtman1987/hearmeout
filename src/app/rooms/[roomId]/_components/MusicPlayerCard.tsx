@@ -129,19 +129,19 @@ export default function MusicPlayerCard({
             </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col justify-end gap-4">
-        <div className="flex items-center gap-4">
+      <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-between">
           <AudioVisualizer isSpeaking={playing} />
           <div className="flex items-center gap-2">
-              <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist">
-                  <ListMusic className="h-5 w-5" />
+              <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
+                  <ListMusic className="h-4 w-4" />
               </Button>
-              <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music">
-                  <Youtube className="h-5 w-5" />
+              <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music" className="h-8 w-8">
+                  <Youtube className="h-4 w-4" />
               </Button>
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
             <Slider 
               value={[played]} 
               onValueChange={handleSeekChange}
@@ -155,20 +155,20 @@ export default function MusicPlayerCard({
               <span>{formatTime(duration)}</span>
             </div>
         </div>
-        <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4">
-            <div className="flex items-center justify-center gap-2">
-                <Button variant="ghost" size="icon" onClick={onPlayPrev}>
-                  <SkipBack />
+        <div className="flex items-center justify-center sm:justify-between gap-x-2 gap-y-2 flex-wrap">
+            <div className="flex items-center justify-center gap-1">
+                <Button variant="ghost" size="icon" onClick={onPlayPrev} className="h-9 w-9">
+                  <SkipBack className="h-4 w-4" />
                 </Button>
-                <Button size="lg" className="h-12 w-12 rounded-full" onClick={handlePlayPause}>
-                  {playing ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+                <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause}>
+                  {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={onPlayNext}>
-                  <SkipForward />
+                <Button variant="ghost" size="icon" onClick={onPlayNext} className="h-9 w-9">
+                  <SkipForward className="h-4 w-4" />
                 </Button>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-24">
-                <Volume2 className="text-muted-foreground" />
+            <div className="flex items-center gap-2 w-full max-w-24 flex-1 sm:flex-initial sm:w-24">
+                <Volume2 className="h-5 w-5 text-muted-foreground" />
                 <Slider 
                     value={[volume]} 
                     onValueChange={handleVolumeChange}
