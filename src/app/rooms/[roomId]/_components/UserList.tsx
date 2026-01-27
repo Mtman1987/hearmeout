@@ -62,8 +62,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { localParticipant } = useLocalParticipant();
   const { audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
-  const [musicTrackPublication, setMusicTrackPublication] = useState<LocalTrackPublication | null>(null);
-
+  
+  const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
   const playerRef = useRef<ReactPlayer>(null);
 
   const roomRef = useMemoFirebase(() => {
@@ -86,105 +86,52 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [room, isRoomOwner, roomRef]);
   
   useEffect(() => {
-    if (!isRoomOwner || !localParticipant || !musicDeviceId) {
-        return;
-    }
-
-    let musicTrack: Awaited<ReturnType<typeof createLocalAudioTrack>> | null = null;
-    
-    // Function to capture audio from the invisible ReactPlayer
-    const captureAndPublish = async () => {
-        // Stop any existing track
-        if (musicTrackPublication) {
-            await localParticipant.unpublishTrack(musicTrackPublication.track, true);
-        }
-        if (musicTrack) {
-           musicTrack.stop();
-        }
-
-        try {
-            // Get the HTML5 video element from ReactPlayer
-            const videoElement = playerRef.current?.getInternalPlayer() as HTMLVideoElement;
-            if (!videoElement) {
-                console.error("Could not get internal player element.");
-                return;
-            }
-            videoElement.crossOrigin = "anonymous"; // Important for capturing audio
-
-            // @ts-ignore - captureStream is present on HTMLMediaElement
-            const stream: MediaStream = videoElement.captureStream ? videoElement.captureStream() : videoElement.mozCaptureStream ? videoElement.mozCaptureStream() : null;
-            if (!stream || stream.getAudioTracks().length === 0) {
-                 console.error("Player is not ready or has no audio track.");
-                 // Retry after a short delay
-                 setTimeout(captureAndPublish, 500);
-                 return;
-            }
-            
-            // Create a local audio track from the player's stream
-            musicTrack = await createLocalAudioTrack({
-                deviceId: musicDeviceId, // This is a bit of a misnomer, we're not using a device
-            });
-
-            // We need to replace the track's underlying MediaStreamTrack with the one from the player
-            const playerAudioTrack = stream.getAudioTracks()[0];
-            await musicTrack.replaceTrack(playerAudioTrack);
-
-            const publication = await localParticipant.publishTrack(musicTrack, {
-                name: 'Jukebox',
-                source: 'jukebox',
-            });
-            setMusicTrackPublication(publication);
-
-        } catch (e) {
-            console.error("Error capturing or publishing music track:", e);
-        }
-    };
-    
-    // Instead of using the selected device, we now capture the stream from the player
-    // This effect now needs to re-run when the track changes or player becomes ready
-    // We'll call this function manually when needed. For now, let's tie it to deviceId change.
-    
-    if (playerRef.current) {
-        // Attempt to publish when the device is selected.
-        // A better approach might be to wait for the player to be 'onReady'
-    }
-
     const setupJukeboxTrack = async () => {
-      // Clean up previous track if it exists
-      if (musicTrackPublication) {
-        await localParticipant.unpublishTrack(musicTrackPublication.track, true);
+      if (!isRoomOwner || !localParticipant || !musicDeviceId) {
+        // If conditions are not met, unpublish any existing track.
+        if (musicTrackPublicationRef.current) {
+          try {
+            await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
+          } catch (e) {
+             console.error("Failed to unpublish jukebox track on condition change:", e);
+          }
+          musicTrackPublicationRef.current = null;
+        }
+        return;
       }
-      if (musicTrack) {
-        musicTrack.stop();
-      }
-
-      // Create a new audio track for the Jukebox
-      const track = await createLocalAudioTrack({ deviceId: musicDeviceId });
-      const publication = await localParticipant.publishTrack(track, {
-        name: 'Jukebox', // This name might not be directly visible but is good for metadata
-        source: 'jukebox', // Custom source to identify it
-      });
-
-      // Set a different identity for the publication if possible, or handle on client
-      // For simplicity, we filter by source or name client-side.
-      // LiveKit doesn't let you set a different identity for a track, the participant is the identity.
-      // So we will create a "Jukebox" participant instead. This requires a second token.
       
-      setMusicTrackPublication(publication);
-    }
-    
+      // Clean up previous track before creating a new one.
+      if (musicTrackPublicationRef.current) {
+        try {
+          await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
+        } catch (e) {
+          console.error("Failed to unpublish existing jukebox track:", e);
+        }
+      }
+
+      // Create and publish the new jukebox track.
+      try {
+        const track = await createLocalAudioTrack({ deviceId: musicDeviceId });
+        const publication = await localParticipant.publishTrack(track, {
+          name: 'Jukebox',
+          source: 'jukebox',
+        });
+        musicTrackPublicationRef.current = publication;
+      } catch (e) {
+        console.error("Failed to create and publish jukebox track:", e);
+      }
+    };
+
     setupJukeboxTrack();
 
-    // Cleanup function
+    // The main cleanup for when the component unmounts.
     return () => {
-        if (musicTrackPublication) {
-            localParticipant.unpublishTrack(musicTrackPublication.track, true);
-        }
-        if (musicTrack) {
-            musicTrack.stop();
-        }
+      if (musicTrackPublicationRef.current && localParticipant) {
+        localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true)
+          .catch(e => console.error("Failed to unpublish jukebox track on unmount:", e));
+        musicTrackPublicationRef.current = null;
+      }
     };
-
   }, [isRoomOwner, localParticipant, musicDeviceId]);
 
   
