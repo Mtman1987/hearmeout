@@ -155,7 +155,7 @@ export default function MusicPlayerCard({
               <span>{formatTime(duration)}</span>
             </div>
         </div>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4">
             <div className="flex items-center justify-center gap-2">
                 <Button variant="ghost" size="icon" onClick={onPlayPrev}>
                   <SkipBack />
@@ -167,7 +167,7 @@ export default function MusicPlayerCard({
                   <SkipForward />
                 </Button>
             </div>
-            <div className="flex items-center gap-2 w-24">
+            <div className="flex items-center gap-2 w-full sm:w-24">
                 <Volume2 className="text-muted-foreground" />
                 <Slider 
                     value={[volume]} 
