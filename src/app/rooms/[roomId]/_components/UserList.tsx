@@ -2,7 +2,7 @@
 
 import UserCard from "./UserCard";
 import MusicPlayerCard from "./MusicPlayerCard";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
@@ -22,6 +22,7 @@ interface RoomData {
   ownerId: string;
   playlist?: PlaylistItem[];
   currentTrackId?: string;
+  currentTrackProgress?: number;
   isPlaying?: boolean;
 }
 
@@ -67,7 +68,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         updateDocumentNonBlocking(roomRef!, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
-            isPlaying: false
+            isPlaying: false,
+            currentTrackProgress: 0
         });
     }
   }, [room, user, roomRef]);
@@ -81,6 +83,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
+        currentTrackProgress: 0
     });
   }
 
@@ -128,9 +131,11 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         const deletedIndex = room.playlist.findIndex(t => t.id === songId);
         const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
         updates.currentTrackId = newPlaylist[nextIndex]?.id;
+        updates.currentTrackProgress = 0;
       } else {
         updates.currentTrackId = deleteField();
         updates.isPlaying = false;
+        updates.currentTrackProgress = deleteField();
       }
     }
     
@@ -143,8 +148,27 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       playlist: [],
       currentTrackId: deleteField(),
       isPlaying: false,
+      currentTrackProgress: deleteField(),
     });
   };
+
+  const lastProgressUpdateTime = useRef(0);
+  const handleProgressUpdate = (progress: number) => {
+    if (!canControlMusic || !roomRef) return;
+    const now = Date.now();
+    // Update at most once every 2 seconds
+    if (now - lastProgressUpdateTime.current > 2000) {
+      updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
+      lastProgressUpdateTime.current = now;
+    }
+  };
+
+  const handleSeekCommit = (progress: number) => {
+    if (!canControlMusic || !roomRef) return;
+    // Force an immediate update when the host seeks
+    updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
+  };
+
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
@@ -159,11 +183,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 currentTrack={currentTrack}
                 playlist={room?.playlist || []}
                 playing={room?.isPlaying || false}
+                progress={room?.currentTrackProgress}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
                 onPlayNext={handlePlayNext}
                 onPlayPrev={handlePlayPrev}
-                onSeek={() => {}} 
+                onProgressUpdate={handleProgressUpdate}
+                onSeekCommit={handleSeekCommit}
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
               />

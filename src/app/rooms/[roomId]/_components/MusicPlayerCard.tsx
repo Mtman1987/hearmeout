@@ -37,11 +37,13 @@ export default function MusicPlayerCard({
   currentTrack,
   playlist,
   playing,
+  progress,
   isPlayerControlAllowed,
   onPlayPause,
   onPlayNext,
   onPlayPrev,
-  onSeek,
+  onProgressUpdate,
+  onSeekCommit,
   activePanels,
   onTogglePanel,
 }: {
@@ -49,11 +51,13 @@ export default function MusicPlayerCard({
   currentTrack: PlaylistItem | undefined;
   playlist: PlaylistItem[];
   playing: boolean;
+  progress?: number;
   isPlayerControlAllowed: boolean;
   onPlayPause: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
-  onSeek: (played: number) => void;
+  onProgressUpdate: (progress: number) => void;
+  onSeekCommit: (progress: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
 }) {
@@ -62,7 +66,7 @@ export default function MusicPlayerCard({
 
   const [volume, setVolume] = useState(0.5);
   const [isMuted, setIsMuted] = useState(false);
-  const [played, setPlayed] = useState(0);
+  const [played, setPlayed] = useState(0); // Local state for UI slider, 0-1
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
   
@@ -91,21 +95,36 @@ export default function MusicPlayerCard({
     }
   }, [volume, roomId, isClient]);
 
+  // Effect to sync remote players to the host's progress
+  useEffect(() => {
+    if (!isPlayerControlAllowed && playerRef.current && typeof progress === 'number') {
+      const player = playerRef.current;
+      const currentDuration = player.getDuration();
+      if (currentDuration > 0) {
+        const currentProgress = player.getCurrentTime() / currentDuration;
+        // Only seek if the difference is significant (e.g., > 2 seconds)
+        // to avoid jerky playback from minor latency.
+        if (Math.abs(progress - currentProgress) * currentDuration > 2) {
+          player.seekTo(progress, 'fraction');
+        }
+      }
+    }
+  }, [progress, isPlayerControlAllowed]);
+  
+  // Effect to reset progress only when the track ID actually changes
   useEffect(() => {
     if (currentTrack) {
-        setPlayed(0); // Reset progress when track changes
+        // When a new track starts, seek to its initial progress (could be 0 or a saved value)
+        const initialProgress = progress || 0;
+        setPlayed(initialProgress);
+        if (playerRef.current) {
+            playerRef.current.seekTo(initialProgress, 'fraction');
+        }
     } else {
         setPlayed(0);
         setDuration(0);
     }
-  }, [currentTrack]);
-  
-  useEffect(() => {
-    // If user cannot control player, just listen for changes
-    if (!isPlayerControlAllowed && playerRef.current) {
-        playerRef.current.seekTo(played);
-    }
-  }, [played, isPlayerControlAllowed]);
+  }, [currentTrack?.id]);
 
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -122,23 +141,29 @@ export default function MusicPlayerCard({
   }
   
   const handleProgress = (state: { played: number }) => {
+    // This callback comes from the ReactPlayer instance.
     if (!seeking) {
-      setPlayed(state.played);
-      // Player controller broadcasts progress
-      if(isPlayerControlAllowed) onSeek(state.played);
+      setPlayed(state.played); // Update local UI slider
+      // The host is responsible for broadcasting their progress
+      if (isPlayerControlAllowed) {
+        onProgressUpdate(state.played); // This is throttled in the parent component
+      }
     }
   };
 
   const handleDuration = (duration: number) => setDuration(duration);
+
   const handleSeekChange = (value: number[]) => { 
     if (!isPlayerControlAllowed || !currentTrack) return;
+    setSeeking(true); // Prevents onProgress from firing while dragging
     setPlayed(value[0]); 
   };
+
   const handleSeekCommit = (value: number[]) => {
     if (!isPlayerControlAllowed || !currentTrack) return;
     setSeeking(false);
-    playerRef.current?.seekTo(value[0]);
-    onSeek(value[0]);
+    playerRef.current?.seekTo(value[0], 'fraction');
+    onSeekCommit(value[0]); // Immediately update Firestore
   };
   
   function formatTime(seconds: number) {
