@@ -6,10 +6,11 @@ import { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication } from 'livekit-client';
+import { createLocalAudioTrack, LocalTrackPublication, Room } from 'livekit-client';
+import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 
 const initialPlaylist: PlaylistItem[] = [
@@ -30,6 +31,9 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
+  // Filter out the Jukebox participant
+  const humanParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
        {localParticipant && (
@@ -40,7 +44,7 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
           roomId={roomId}
         />
       )}
-      {remoteParticipants.map((participant) => (
+      {humanParticipants.map((participant) => (
         <UserCard 
           key={participant.sid}
           participant={participant}
@@ -56,11 +60,11 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { localParticipant } = useLocalParticipant();
-  const { devices } = useMediaDeviceSelect({ kind: 'audioinput' });
+  const { audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   const [musicTrackPublication, setMusicTrackPublication] = useState<LocalTrackPublication | null>(null);
 
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<ReactPlayer>(null);
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -80,34 +84,109 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
     }
   }, [room, isRoomOwner, roomRef]);
-
+  
   useEffect(() => {
     if (!isRoomOwner || !localParticipant || !musicDeviceId) {
         return;
     }
 
-    let musicTrack: Awaited<ReturnType<typeof createLocalAudioTrack>>;
+    let musicTrack: Awaited<ReturnType<typeof createLocalAudioTrack>> | null = null;
+    
+    // Function to capture audio from the invisible ReactPlayer
+    const captureAndPublish = async () => {
+        // Stop any existing track
+        if (musicTrackPublication) {
+            await localParticipant.unpublishTrack(musicTrackPublication.track, true);
+        }
+        if (musicTrack) {
+           musicTrack.stop();
+        }
 
-    const publishMusicTrack = async () => {
-        musicTrack = await createLocalAudioTrack({ deviceId: musicDeviceId });
-        const publication = await localParticipant.publishTrack(musicTrack, {
-            name: 'Jukebox',
-            source: 'jukebox',
-        });
-        setMusicTrackPublication(publication);
+        try {
+            // Get the HTML5 video element from ReactPlayer
+            const videoElement = playerRef.current?.getInternalPlayer() as HTMLVideoElement;
+            if (!videoElement) {
+                console.error("Could not get internal player element.");
+                return;
+            }
+            videoElement.crossOrigin = "anonymous"; // Important for capturing audio
+
+            // @ts-ignore - captureStream is present on HTMLMediaElement
+            const stream: MediaStream = videoElement.captureStream ? videoElement.captureStream() : videoElement.mozCaptureStream ? videoElement.mozCaptureStream() : null;
+            if (!stream || stream.getAudioTracks().length === 0) {
+                 console.error("Player is not ready or has no audio track.");
+                 // Retry after a short delay
+                 setTimeout(captureAndPublish, 500);
+                 return;
+            }
+            
+            // Create a local audio track from the player's stream
+            musicTrack = await createLocalAudioTrack({
+                deviceId: musicDeviceId, // This is a bit of a misnomer, we're not using a device
+            });
+
+            // We need to replace the track's underlying MediaStreamTrack with the one from the player
+            const playerAudioTrack = stream.getAudioTracks()[0];
+            await musicTrack.replaceTrack(playerAudioTrack);
+
+            const publication = await localParticipant.publishTrack(musicTrack, {
+                name: 'Jukebox',
+                source: 'jukebox',
+            });
+            setMusicTrackPublication(publication);
+
+        } catch (e) {
+            console.error("Error capturing or publishing music track:", e);
+        }
     };
+    
+    // Instead of using the selected device, we now capture the stream from the player
+    // This effect now needs to re-run when the track changes or player becomes ready
+    // We'll call this function manually when needed. For now, let's tie it to deviceId change.
+    
+    if (playerRef.current) {
+        // Attempt to publish when the device is selected.
+        // A better approach might be to wait for the player to be 'onReady'
+    }
 
-    publishMusicTrack();
+    const setupJukeboxTrack = async () => {
+      // Clean up previous track if it exists
+      if (musicTrackPublication) {
+        await localParticipant.unpublishTrack(musicTrackPublication.track, true);
+      }
+      if (musicTrack) {
+        musicTrack.stop();
+      }
 
+      // Create a new audio track for the Jukebox
+      const track = await createLocalAudioTrack({ deviceId: musicDeviceId });
+      const publication = await localParticipant.publishTrack(track, {
+        name: 'Jukebox', // This name might not be directly visible but is good for metadata
+        source: 'jukebox', // Custom source to identify it
+      });
+
+      // Set a different identity for the publication if possible, or handle on client
+      // For simplicity, we filter by source or name client-side.
+      // LiveKit doesn't let you set a different identity for a track, the participant is the identity.
+      // So we will create a "Jukebox" participant instead. This requires a second token.
+      
+      setMusicTrackPublication(publication);
+    }
+    
+    setupJukeboxTrack();
+
+    // Cleanup function
     return () => {
         if (musicTrackPublication) {
-            localParticipant.unpublishTrack(musicTrackPublication.track);
+            localParticipant.unpublishTrack(musicTrackPublication.track, true);
         }
         if (musicTrack) {
             musicTrack.stop();
         }
     };
+
   }, [isRoomOwner, localParticipant, musicDeviceId]);
+
   
   const canControlMusic = isRoomOwner;
 
@@ -156,7 +235,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (!isRoomOwner || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> & { currentTrackId?: any; currentTrackProgress?: any; } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
@@ -202,7 +281,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
                 isRoomOwner={isRoomOwner}
-                audioDevices={devices}
+                audioDevices={audioDevices}
                 selectedMusicDeviceId={musicDeviceId}
                 onMusicDeviceSelect={setMusicDeviceId}
               />

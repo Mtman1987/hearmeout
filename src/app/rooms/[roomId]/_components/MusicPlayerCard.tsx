@@ -71,9 +71,6 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
 
   const [volume, setVolume] = useState(0.5);
   const [isMuted, setIsMuted] = useState(false);
-  const [played, setPlayed] = useState(0); // Local state for UI slider, 0-1
-  const [duration, setDuration] = useState(0);
-  const [seeking, setSeeking] = useState(false);
   
   // Load volume from localStorage on mount
   useEffect(() => {
@@ -98,11 +95,6 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
     }
   }, [volume, roomId, isClient]);
 
-  // Effect to reset progress only when the track ID actually changes
-  useEffect(() => {
-    setPlayed(0);
-    setDuration(0);
-  }, [currentTrack?.id]);
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
 
@@ -116,57 +108,20 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
           setIsMuted(false);
       }
   }
-  
-  const handleProgress = (state: { played: number }) => {
-    // This callback comes from the ReactPlayer instance.
-    if (!seeking) {
-      setPlayed(state.played); // Update local UI slider
-    }
-  };
-
-  const handleDuration = (duration: number) => setDuration(duration);
-
-  const handleSeekChange = (value: number[]) => { 
-    if (!isPlayerControlAllowed || !currentTrack) return;
-    setSeeking(true); // Prevents onProgress from firing while dragging
-    setPlayed(value[0]); 
-  };
-
-  const handleSeekCommit = (value: number[]) => {
-    if (!isPlayerControlAllowed || !currentTrack || !ref || typeof ref === 'function' || !ref.current) return;
-    setSeeking(false);
-    ref.current.seekTo(value[0], 'fraction');
-  };
-  
-  function formatTime(seconds: number) {
-    if (isNaN(seconds) || seconds === Infinity) return '0:00';
-    const date = new Date(seconds * 1000);
-    const ss = date.getUTCSeconds().toString().padStart(2, '0');
-    const mm = date.getUTCMinutes().toString();
-    const hh = Math.floor(seconds / 3600);
-    if (hh > 0) {
-      return `${hh}:${mm.toString().padStart(2, '0')}:${ss}`;
-    }
-    return `${mm}:${ss}`;
-  }
-
-  const playedSeconds = duration * played;
 
   return (
     <Card className="flex flex-col h-full">
        <div className="hidden">
-      {isClient && currentTrack && (
+      {isClient && currentTrack && isPlayerControlAllowed && (
             <ReactPlayer
                 ref={ref}
                 url={currentTrack.url}
                 playing={playing}
-                muted={isMuted}
-                volume={volume}
-                onProgress={handleProgress}
-                onDuration={handleDuration}
+                muted={true} // Player is always muted for the host, audio comes from the Jukebox track
+                volume={0}
                 onEnded={onPlayNext}
-                onPause={() => isPlayerControlAllowed && onPlayPause(false)}
-                onPlay={() => isPlayerControlAllowed && onPlayPause(true)}
+                onPause={() => onPlayPause(false)}
+                onPlay={() => onPlayPause(true)}
                 width="1px"
                 height="1px"
             />
@@ -243,22 +198,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
               </Tooltip>
           </div>
         </div>
-        <div className="space-y-1">
-            <Slider 
-              value={[played]}
-              onValueChange={handleSeekChange}
-              onValueCommit={handleSeekCommit}
-              onPointerDown={() => isPlayerControlAllowed && currentTrack && setSeeking(true)}
-              max={1} 
-              step={0.01}
-              disabled={!isPlayerControlAllowed || !currentTrack}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{formatTime(playedSeconds)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-        </div>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+       
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-4">
             <div className="flex items-center justify-center gap-1">
                 <Tooltip>
                     <TooltipTrigger asChild>
