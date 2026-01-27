@@ -76,45 +76,29 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
             />
           </div>
 
-          {activePanels.playlist && !activePanels.add && (
-            <div className="lg:col-span-2">
-              <PlaylistPanel
-                playlist={playlist}
-                onPlaySong={playSong}
-                currentTrackId={currentTrack.id}
-              />
-            </div>
-          )}
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {activePanels.playlist && (
+                <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
+                    <PlaylistPanel
+                        playlist={playlist}
+                        onPlaySong={playSong}
+                        currentTrackId={currentTrack.id}
+                    />
+                </div>
+            )}
 
-          {!activePanels.playlist && activePanels.add && (
-             <div className="lg:col-span-2">
-              <AddMusicPanel
-                onAddItems={handleAddItems}
-                onClose={() => handleTogglePanel('add')}
-              />
-            </div>
-          )}
-          
-          {activePanels.playlist && activePanels.add && (
-            <>
-              <div className="lg:col-span-1">
-                <PlaylistPanel
-                  playlist={playlist}
-                  onPlaySong={playSong}
-                  currentTrackId={currentTrack.id}
-                />
-              </div>
-              <div className="lg:col-span-1">
-                <AddMusicPanel
-                  onAddItems={handleAddItems}
-                  onClose={() => handleTogglePanel('add')}
-                />
-              </div>
-            </>
-          )}
+            {activePanels.add && (
+                <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
+                    <AddMusicPanel
+                        onAddItems={handleAddItems}
+                        onClose={() => handleTogglePanel('add')}
+                    />
+                </div>
+            )}
+          </div>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {users.map((user) => (
           <UserCard key={user.id} user={user} isLocal={user.name === "You"} />
         ))}

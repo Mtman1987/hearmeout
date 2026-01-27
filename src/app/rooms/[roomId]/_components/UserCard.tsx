@@ -53,17 +53,22 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
   const avatar = placeholderData.placeholderImages.find(p => p.id === user.avatarId);
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col h-full border">
       <CardHeader>
         <div className="flex items-center gap-4">
-          <Avatar className={cn("h-12 w-12 transition-all", { "ring-2 ring-primary ring-offset-2 ring-offset-card": user.isSpeaking && !isMuted })}>
-            {avatar && <AvatarImage src={avatar.imageUrl} alt={user.name} data-ai-hint={avatar.imageHint} />}
-            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className={cn("h-12 w-12 transition-all")}>
+              {avatar && <AvatarImage src={avatar.imageUrl} alt={user.name} data-ai-hint={avatar.imageHint} />}
+              <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            {user.isSpeaking && !isMuted && (
+              <div className="absolute inset-0 rounded-full ring-2 ring-primary ring-offset-2 ring-offset-card animate-pulse"></div>
+            )}
+          </div>
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
         </div>
          {isLocal && (
-            <div className="flex justify-end">
+            <div className="flex justify-center mt-2">
               <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Audio Settings">
@@ -119,7 +124,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
             </div>
           )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-4 flex-grow justify-end">
         <SpeakingIndicator isSpeaking={user.isSpeaking && !isMuted} />
         
         <div className="flex items-center gap-2">
