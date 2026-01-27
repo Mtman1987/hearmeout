@@ -92,7 +92,12 @@ export default function MusicPlayerCard({
   }, [volume, roomId, isClient]);
 
   useEffect(() => {
-    setPlayed(0); // Reset progress when track changes
+    if (currentTrack) {
+        setPlayed(0); // Reset progress when track changes
+    } else {
+        setPlayed(0);
+        setDuration(0);
+    }
   }, [currentTrack]);
   
   useEffect(() => {
@@ -103,39 +108,11 @@ export default function MusicPlayerCard({
   }, [played, isPlayerControlAllowed]);
 
 
-  if (!currentTrack) {
-    // Render a placeholder or loading state if no track is available
-    return (
-        <Card className="flex flex-col h-full">
-            <CardHeader>
-                 <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-lg shadow-lg bg-muted flex items-center justify-center">
-                        <Music className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                        <CardTitle className="font-headline text-lg flex items-center gap-2">
-                            <Music /> Now Playing
-                        </CardTitle>
-                        <p className="text-muted-foreground text-sm truncate">No song selected</p>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
-                 <div className="space-y-1">
-                    <Slider disabled value={[0]} max={1} step={0.01} />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>0:00</span>
-                        <span>0:00</span>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-  }
+  const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
 
-  const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
-
-  const handlePlayPause = () => isPlayerControlAllowed && onPlayPause(!playing);
+  const handlePlayPause = () => isPlayerControlAllowed && currentTrack && onPlayPause(!playing);
+  const handlePlayNextWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayNext();
+  const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
   
   const handleVolumeChange = (value: number[]) => {
       setVolume(value[0]);
@@ -154,11 +131,11 @@ export default function MusicPlayerCard({
 
   const handleDuration = (duration: number) => setDuration(duration);
   const handleSeekChange = (value: number[]) => { 
-    if (!isPlayerControlAllowed) return;
+    if (!isPlayerControlAllowed || !currentTrack) return;
     setPlayed(value[0]); 
   };
   const handleSeekCommit = (value: number[]) => {
-    if (!isPlayerControlAllowed) return;
+    if (!isPlayerControlAllowed || !currentTrack) return;
     setSeeking(false);
     playerRef.current?.seekTo(value[0]);
     onSeek(value[0]);
@@ -200,7 +177,7 @@ export default function MusicPlayerCard({
       </div>
       <CardHeader>
         <div className="flex items-center gap-4">
-            {albumArt &&
+            {albumArt ? (
                 <Image
                     src={albumArt.imageUrl}
                     alt={currentTrack?.title || "Album Art"}
@@ -209,18 +186,22 @@ export default function MusicPlayerCard({
                     className="rounded-lg shadow-lg object-cover aspect-square"
                     data-ai-hint={albumArt.imageHint}
                 />
-            }
+            ) : (
+                <div className="w-16 h-16 rounded-lg shadow-lg bg-muted flex items-center justify-center">
+                    <Music className="w-8 h-8 text-muted-foreground" />
+                </div>
+            )}
             <div className="flex-1 overflow-hidden">
                 <CardTitle className="font-headline text-lg flex items-center gap-2">
                     <Music /> Now Playing
                 </CardTitle>
-                <p className="text-muted-foreground text-sm truncate">{currentTrack?.title || "..."} - {currentTrack?.artist || "..."}</p>
+                <p className="text-muted-foreground text-sm truncate">{currentTrack ? `${currentTrack.title} - ${currentTrack.artist}` : "No song selected"}</p>
             </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-          <AudioVisualizer isSpeaking={playing && !isMuted} />
+          <AudioVisualizer isSpeaking={!!currentTrack && playing && !isMuted} />
           <div className="flex items-center gap-2 ml-auto">
               <Tooltip>
                   <TooltipTrigger asChild>
@@ -249,10 +230,10 @@ export default function MusicPlayerCard({
               value={[played]}
               onValueChange={handleSeekChange}
               onValueCommit={handleSeekCommit}
-              onPointerDown={() => isPlayerControlAllowed && setSeeking(true)}
+              onPointerDown={() => isPlayerControlAllowed && currentTrack && setSeeking(true)}
               max={1} 
               step={0.01}
-              disabled={!isPlayerControlAllowed}
+              disabled={!isPlayerControlAllowed || !currentTrack}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{formatTime(playedSeconds)}</span>
@@ -263,7 +244,7 @@ export default function MusicPlayerCard({
             <div className="flex items-center justify-center gap-1">
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayPrev} disabled={!isPlayerControlAllowed} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={handlePlayPrevWithTrack} disabled={!isPlayerControlAllowed || !currentTrack} className="h-9 w-9">
                           <SkipBack className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
@@ -273,7 +254,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isPlayerControlAllowed}>
+                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isPlayerControlAllowed || !currentTrack}>
                           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                         </Button>
                     </TooltipTrigger>
@@ -283,7 +264,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayNext} disabled={!isPlayerControlAllowed} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={handlePlayNextWithTrack} disabled={!isPlayerControlAllowed || !currentTrack} className="h-9 w-9">
                           <SkipForward className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
