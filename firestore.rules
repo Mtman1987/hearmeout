@@ -18,13 +18,14 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       
-      // Allow owner to update any room details (including 'bannedUsers')
-      allow update: if request.auth != null && isOwner(roomId);
-      
-      // Also allow any participant to update ONLY the music-related fields
+      // Allow any participant to update music-related fields. This is democratic.
       allow update: if request.auth != null && 
                  isParticipant(roomId, request.auth.uid) &&
                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying']);
+
+      // Only owner can update other room details or ban users.
+      allow update: if request.auth != null && isOwner(roomId) &&
+                !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playlist', 'currentTrackId', 'isPlaying']);
 
       allow delete: if request.auth != null && isOwner(roomId);
 
@@ -34,8 +35,17 @@ service cloud.firestore {
         
         allow list, get: if request.auth != null;
         
-        // Users can update their own speaking status
-        allow update: if request.auth != null && request.auth.uid == userId && request.resource.data.keys().hasOnly(['id', 'displayName', 'photoURL', 'isSpeaking']);
+        // A user can update their own 'isSpeaking' status.
+        // The room owner can update a user's 'isMutedByHost' status.
+        allow update: if request.auth != null && (
+            (
+                request.auth.uid == userId &&
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSpeaking'])
+            ) || (
+                isOwner(roomId) &&
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isMutedByHost'])
+            )
+        );
 
         // Owner can kick (delete), or user can leave (delete)
         allow delete: if request.auth != null && (request.auth.uid == userId || isOwner(roomId));
@@ -57,3 +67,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

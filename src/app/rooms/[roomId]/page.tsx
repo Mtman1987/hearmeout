@@ -106,6 +106,7 @@ export default function RoomPage() {
       displayName: user.displayName || 'Anonymous',
       photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
       isSpeaking: false,
+      isMutedByHost: false,
     }, { merge: true });
 
     // Set up presence management
@@ -157,3 +158,5 @@ export default function RoomPage() {
     </SidebarProvider>
   );
 }
+
+    

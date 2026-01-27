@@ -156,6 +156,10 @@
         "isSpeaking": {
           "type": "boolean",
           "description": "Indicates if the user is currently speaking."
+        },
+        "isMutedByHost": {
+          "type": "boolean",
+          "description": "Indicates if the user has been muted by the room host."
         }
       },
       "required": [
@@ -407,3 +411,5 @@
     "reasoning": "The Firestore structure is designed to ensure security, scalability, and ease of debugging. A subcollection for `users` within each `room` (`/rooms/{roomId}/users/{userId}`) is used for efficient querying of participants in real-time. This denormalized approach is better for this app's use case than a separate top-level collection for room-user relationships. Other collections like `media`, `moderation_logs`, and `messages` are also subcollections of rooms, keeping all room-related data logically grouped."
   }
 }
+
+    

@@ -31,16 +31,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { useFirebase, updateDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 
 
-export default function UserCard({ user, isLocal, isHost, onKick, onBan }: { 
-    user: { id: string; name: string; photoURL: string; isSpeaking: boolean; }; 
+export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute }: { 
+    user: { id: string; name: string; photoURL: string; isSpeaking: boolean; isMutedByHost?: boolean; }; 
     isLocal?: boolean; 
     isHost?: boolean; 
     onKick?: (userId: string) => void;
     onBan?: (userId: string) => void;
+    onMute?: (userId: string, shouldMute: boolean) => void;
 }) {
   const params = useParams<{ roomId: string }>();
   const { firestore } = useFirebase();
@@ -142,10 +143,15 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan }: {
       <CardHeader>
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Avatar className={cn("h-12 w-12 transition-all", user.isSpeaking && !isMuted && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
+            <Avatar className={cn("h-12 w-12 transition-all", user.isSpeaking && !isMuted && !user.isMutedByHost && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
               <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.id}/100/100`} alt={user.name} data-ai-hint="person portrait" />
               <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
             </Avatar>
+             {user.isMutedByHost && (
+                <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
+                    <MicOff className="w-3 h-3 text-destructive-foreground" />
+                </div>
+            )}
           </div>
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
         </div>
@@ -245,6 +251,14 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan }: {
                 <>
                 <Tooltip>
                     <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => onMute?.(user.id, !user.isMutedByHost)}>
+                            <MicOff className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{user.isMutedByHost ? 'Unmute for Room' : 'Mute for Room'}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" onClick={() => onKick?.(user.id)}>
                             <LogOut className="h-5 w-5" />
                         </Button>
@@ -264,7 +278,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan }: {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow justify-end">
-        <SpeakingIndicator isSpeaking={user.isSpeaking && !isMuted} />
+        <SpeakingIndicator isSpeaking={user.isSpeaking && !isMuted && !user.isMutedByHost} />
         
         <div className="flex items-center gap-2">
           <Tooltip>
@@ -290,3 +304,5 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan }: {
     </Card>
   );
 }
+
+    

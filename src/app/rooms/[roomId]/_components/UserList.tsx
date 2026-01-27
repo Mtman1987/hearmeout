@@ -1,4 +1,3 @@
-
 'use client';
 
 import UserCard from "./UserCard";
@@ -24,6 +23,7 @@ interface RoomUser {
   displayName: string;
   photoURL: string;
   isSpeaking: boolean;
+  isMutedByHost?: boolean;
 }
 
 interface RoomData {
@@ -89,6 +89,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         console.error("Failed to ban user:", error);
         toast({ variant: 'destructive', title: "Error", description: "Could not ban the user." });
     });
+  };
+
+  const handleMuteUser = (userId: string, shouldMute: boolean) => {
+    if (!isHost || !firestore) return;
+    const userToMuteRef = doc(firestore, 'rooms', roomId, 'users', userId);
+    updateDocumentNonBlocking(userToMuteRef, { isMutedByHost: shouldMute });
+    toast({ title: `User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
   };
 
   const handlePlaySong = (songId: string) => {
@@ -184,14 +191,17 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         {users && users.map((roomUser) => (
           <UserCard 
             key={roomUser.id} 
-            user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} 
+            user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking, isMutedByHost: roomUser.isMutedByHost}} 
             isLocal={roomUser.id === user?.uid} 
             isHost={isHost && roomUser.id !== user?.uid} 
             onKick={handleKickUser}
             onBan={handleBanUser}
+            onMute={handleMuteUser}
           />
         ))}
       </div>
     </div>
   );
 }
+
+    
