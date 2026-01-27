@@ -5,6 +5,13 @@ import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
+} from '@live![CDATA['use client';
+
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import {
+  LiveKitRoom,
+  useConnectionState,
 } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 import {
@@ -25,8 +32,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
 import { generateLiveKitToken } from '@/app/actions';
 
 function ConnectionStatusIndicator() {
@@ -172,7 +179,7 @@ function RoomPageContent() {
         isMuted: false, 
         isSpeaking: false,
     };
-    setDoc(userInRoomRef, participantData, { merge: true });
+    setDocumentNonBlocking(userInRoomRef, participantData, { merge: true });
 
     (async () => {
       try {
@@ -190,7 +197,7 @@ function RoomPageContent() {
     })();
     
     return () => {
-      deleteDoc(userInRoomRef);
+      deleteDocumentNonBlocking(userInRoomRef);
     };
   }, [user, isUserLoading, params.roomId, toast, firestore]);
 
