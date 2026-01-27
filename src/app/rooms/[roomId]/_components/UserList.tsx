@@ -12,6 +12,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
 import { MoveUserDialog } from './MoveUserDialog';
+import { generateLiveKitToken } from '@/app/actions';
+import {
+  LiveKitRoom,
+  useParticipants,
+} from '@livekit/components-react';
+import '@livekit/components-styles';
+
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -23,8 +30,6 @@ interface RoomUser {
   id: string; 
   displayName: string;
   photoURL: string;
-  isSpeaking: boolean;
-  isMutedByHost?: boolean;
 }
 
 interface RoomData {
@@ -40,9 +45,50 @@ interface UserToMove {
     name: string;
 }
 
+const RoomParticipants = ({
+  isHost,
+  handleKickUser,
+  handleBanUser,
+  handleMuteUser,
+  handleMoveInitiate
+}: {
+  isHost: boolean;
+  handleKickUser: (userId: string) => void;
+  handleBanUser: (userId: string) => void;
+  handleMuteUser: (userId: string, shouldMute: boolean) => void;
+  handleMoveInitiate: (user: UserToMove) => void;
+}) => {
+  const participants = useParticipants();
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      {participants.map((participant) => (
+        <UserCard 
+          key={participant.sid}
+          user={{
+            id: participant.identity,
+            name: participant.name || participant.identity,
+            photoURL: participant.metadata ? JSON.parse(participant.metadata).photoURL : '',
+            isSpeaking: participant.isSpeaking,
+            isMutedByHost: participant.isMicrophoneMuted,
+          }}
+          isLocal={participant.isLocal}
+          isHost={isHost && !participant.isLocal}
+          onKick={handleKickUser}
+          onBan={handleBanUser}
+          onMute={handleMuteUser}
+          onMove={handleMoveInitiate}
+        />
+      ))}
+    </div>
+  );
+};
+
+
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [userToMove, setUserToMove] = useState<UserToMove | null>(null);
+  const [livekitToken, setLivekitToken] = useState<string | null>(null);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
@@ -52,6 +98,24 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [firestore, roomId]);
 
   const { data: room } = useDoc<RoomData>(roomRef);
+
+   useEffect(() => {
+    if (!user || !roomId) return;
+
+    (async () => {
+      try {
+        const token = await generateLiveKitToken(roomId, user.uid);
+        setLivekitToken(token);
+      } catch (e) {
+        console.error('Failed to get LiveKit token', e);
+        toast({
+          variant: 'destructive',
+          title: 'Voice Connection Failed',
+          description: 'Could not connect to the voice server.',
+        });
+      }
+    })();
+  }, [user, roomId, toast]);
 
   useEffect(() => {
     // Initialize room with a default playlist if it's new
@@ -79,6 +143,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (!isHost || !firestore) return;
     const userToKickRef = doc(firestore, 'rooms', roomId, 'users', userId);
     deleteDocumentNonBlocking(userToKickRef);
+    // In a real app, you would also use LiveKit's server API to kick the user from the room.
     toast({ title: "User Kicked", description: "The user has been removed from the room." });
   };
 
@@ -99,10 +164,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleMuteUser = (userId: string, shouldMute: boolean) => {
-    if (!isHost || !firestore) return;
-    const userToMuteRef = doc(firestore, 'rooms', roomId, 'users', userId);
-    updateDocumentNonBlocking(userToMuteRef, { isMutedByHost: shouldMute });
-    toast({ title: `User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
+     if (!isHost || !firestore) return;
+    // This would now be handled by LiveKit server API to mute the participant for everyone.
+    // The UI is just an example of what a host could do.
+    toast({ title: `User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `(Simulated) The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
   };
   
   const handleMoveInitiate = (user: UserToMove) => {
@@ -115,7 +180,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     const sourceRoomId = roomId;
     const userIdToMove = userToMove.id;
 
-    // Find the full user data from the current room's user list
     const userToMoveData = users.find(u => u.id === userIdToMove);
 
     if (!userToMoveData) {
@@ -126,16 +190,12 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     const sourceUserDocRef = doc(firestore, 'rooms', sourceRoomId, 'users', userIdToMove);
     const targetUserDocRef = doc(firestore, 'rooms', targetRoomId, 'users', userIdToMove);
 
-    // Delete from old room
     deleteDocumentNonBlocking(sourceUserDocRef);
-
-    // Add to new room
-    // The `id` is part of the `userToMoveData` because of `useCollection`. We need to remove it before writing.
     const { id, ...restOfUserData } = userToMoveData;
     setDocumentNonBlocking(targetUserDocRef, restOfUserData, { merge: false });
 
     toast({ title: "User Moved", description: `${userToMove.name} has been moved to a new room.` });
-    setUserToMove(null); // Close dialog
+    setUserToMove(null);
   };
 
   const handlePlaySong = (songId: string) => {
@@ -170,7 +230,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
-    // If nothing is playing, start playing the first new song
     if (!room.isPlaying && room.playlist?.length === (room.playlist?.length - newItems.length)) {
        handlePlaySong(newItems[0].id);
     }
@@ -227,21 +286,32 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             </div>
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
-          {users && users.map((roomUser) => (
-            <UserCard 
-              key={roomUser.id} 
-              user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking, isMutedByHost: roomUser.isMutedByHost}} 
-              isLocal={roomUser.id === user?.uid} 
-              isHost={isHost && roomUser.id !== user?.uid} 
-              onKick={handleKickUser}
-              onBan={handleBanUser}
-              onMute={handleMuteUser}
-              onMove={handleMoveInitiate}
+        
+        {livekitToken && process.env.NEXT_PUBLIC_LIVEKIT_URL ? (
+          <LiveKitRoom
+            serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
+            token={livekitToken}
+            connect={true}
+            video={false}
+            audio={true}
+            userChoices={{
+              username: user?.displayName || user?.uid,
+            }}
+             onDisconnected={() => setLivekitToken(null)}
+          >
+            <RoomParticipants 
+              isHost={isHost} 
+              handleBanUser={handleBanUser} 
+              handleKickUser={handleKickUser}
+              handleMuteUser={handleMuteUser}
+              handleMoveInitiate={handleMoveInitiate}
             />
-          ))}
-        </div>
+          </LiveKitRoom>
+        ) : (
+           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+             {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
+           </div>
+        )}
       </div>
        {userToMove && (
           <MoveUserDialog

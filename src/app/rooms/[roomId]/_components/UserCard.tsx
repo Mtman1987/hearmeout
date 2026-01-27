@@ -31,11 +31,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, updateDocumentNonBlocking, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import {
+    LocalParticipant,
+    RemoteParticipant,
+    Track,
+} from 'livekit-client';
+import { useLocalParticipant, useTracks } from '@livekit/components-react';
 
-
-export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute, onMove }: { 
+export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove }: { 
     user: { id: string; name: string; photoURL: string; isSpeaking: boolean; isMutedByHost?: boolean; }; 
     isLocal?: boolean; 
     isHost?: boolean; 
@@ -45,7 +48,6 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
     onMove?: (user: { id: string; name: string; }) => void;
 }) {
   const params = useParams<{ roomId: string }>();
-  const { firestore } = useFirebase();
 
   // Audio settings state
   const [volume, setVolume] = useState(isLocal ? 1 : 0.7);
@@ -55,7 +57,6 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>('default');
   const [selectedOutput, setSelectedOutput] = useState<string>('default');
-  const [pushToTalk, setPushToTalk] = useState(false);
   const [monitoring, setMonitoring] = useState(false);
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
 
@@ -66,16 +67,13 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number>();
 
-  const userInRoomRef = useMemoFirebase(() => {
-      if (!firestore || !params.roomId || !user.id) return null;
-      return doc(firestore, 'rooms', params.roomId, 'users', user.id);
-  }, [firestore, params.roomId, user.id]);
+  const { localParticipant } = useLocalParticipant();
 
-  const handleToggleSpeaking = () => {
-    if (isLocal && userInRoomRef) {
-        updateDocumentNonBlocking(userInRoomRef, { isSpeaking: !user.isSpeaking });
-    }
-  }
+  const audioTracks = useTracks(
+    [Track.Source.Microphone],
+    { onlySubscribed: true }
+  ).filter(trackRef => trackRef.participant.identity === user.id);
+
 
   // Load non-local user preferences from localStorage
   useEffect(() => {
@@ -146,12 +144,16 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
     };
 
     const setupMonitoring = async () => {
-      if (!isLocal || !monitoring || typeof navigator === 'undefined') return;
+      if (!isLocal || !monitoring || typeof navigator === 'undefined' || !localParticipant) return;
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { deviceId: selectedInput ? { exact: selectedInput } : undefined }
+        await localParticipant.setMicrophoneEnabled(true, {
+          deviceId: selectedInput,
         });
+
+        const stream = localParticipant.getTrack(Track.Source.Microphone)?.mediaStream;
+        if (!stream) return;
+
         streamRef.current = stream;
 
         // Setup for audio analysis (visualizer)
@@ -179,7 +181,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
         if (monitorAudioRef.current) {
           monitorAudioRef.current.srcObject = stream;
           monitorAudioRef.current.volume = isMuted ? 0 : volume;
-          monitorAudioRef.current.muted = false; // The audio element is never muted; we control volume manually
+          monitorAudioRef.current.muted = false;
           if (selectedOutput && typeof monitorAudioRef.current.setSinkId === 'function') {
             await monitorAudioRef.current.setSinkId(selectedOutput);
           }
@@ -192,10 +194,25 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
     
     if (monitoring) {
       setupMonitoring();
+    } else {
+        if(isLocal && localParticipant) {
+            // We only disable the microphone if monitoring is explicitly turned off
+            // and we aren't "broadcasting" (which is now always on for simplicity)
+            // For a real app, you'd have a separate "Broadcast" toggle.
+            // localParticipant.setMicrophoneEnabled(false);
+        }
     }
 
     return cleanup;
-  }, [isLocal, monitoring, selectedInput, selectedOutput]);
+  }, [isLocal, monitoring, selectedInput, selectedOutput, localParticipant]);
+
+  // Effect to manage microphone publishing
+  useEffect(() => {
+    if (isLocal && localParticipant) {
+        localParticipant.setMicrophoneEnabled(true, { deviceId: selectedInput });
+    }
+  }, [isLocal, localParticipant, selectedInput]);
+
 
   // Effect to update volume/mute of the monitoring audio element
   useEffect(() => {
@@ -215,6 +232,19 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
   return (
     <>
       {isLocal && <audio ref={monitorAudioRef} style={{ display: "none" }} />}
+       {!isLocal && audioTracks.map(trackRef => (
+        <audio
+          key={trackRef.publication.trackSid}
+          ref={(el) => {
+            if (el && trackRef.publication.track) {
+              el.srcObject = trackRef.publication.track.mediaStream as MediaStream;
+              el.volume = isMuted ? 0 : volume;
+              el.play().catch(e => console.error("Remote audio play failed", e));
+            }
+          }}
+          style={{ display: 'none' }}
+        />
+      ))}
       <Card className="flex flex-col h-full">
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -236,11 +266,11 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
                   <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant={user.isSpeaking ? 'secondary' : 'ghost'} size="icon" onClick={handleToggleSpeaking} aria-label="Toggle Mic Broadcast">
+                      <Button variant={localParticipant?.isMicrophoneEnabled ? 'secondary' : 'ghost'} size="icon" onClick={() => localParticipant?.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
                           <Mic className="h-5 w-5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Toggle Mic Broadcast</TooltipContent>
+                    <TooltipContent>Toggle Mic</TooltipContent>
                   </Tooltip>
                   <Dialog>
                       <Tooltip>
@@ -273,10 +303,6 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
                                       {outputDevices.map(device => (<SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `speaker ${outputDevices.indexOf(device) + 1}`}</SelectItem>))}
                                   </SelectContent>
                               </Select>
-                          </div>
-                          <div className="flex items-center justify-between">
-                              <Label htmlFor="push-to-talk" className="flex items-center gap-2 cursor-pointer"><MicOff className="h-4 w-4" /> Push to Talk</Label>
-                              <Switch id="push-to-talk" checked={pushToTalk} onCheckedChange={setPushToTalk} />
                           </div>
                           <div className="flex items-center justify-between">
                               <Label htmlFor="monitoring" className="flex items-center gap-2 cursor-pointer"><Headphones className="h-4 w-4" /> Monitor Own Voice</Label>
@@ -319,7 +345,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute,
               onValueChange={handleVolumeChange}
               max={1}
               step={0.05}
-              disabled={!isLocal && isMuted}
+              disabled={isMuted}
             />
           </div>
         </CardContent>

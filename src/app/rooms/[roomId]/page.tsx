@@ -99,17 +99,21 @@ export default function RoomPage() {
   useEffect(() => {
     if (!user || !firestore || !params.roomId) return;
 
+    // This data is used by LiveKit to display user info
+    const metadata = {
+        photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+    };
+
     const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
 
     setDocumentNonBlocking(userInRoomRef, {
       id: user.uid,
       displayName: user.displayName || 'Anonymous',
-      photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-      isSpeaking: false,
-      isMutedByHost: false,
+      photoURL: metadata.photoURL,
+      // The isSpeaking and isMutedByHost flags are now managed by LiveKit
     }, { merge: true });
 
-    // Set up presence management
+    // Set up presence management for the Firestore user list
     const handleBeforeUnload = () => {
         deleteDocumentNonBlocking(userInRoomRef);
     };
@@ -117,7 +121,6 @@ export default function RoomPage() {
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      // This will be called on component unmount (e.g. navigating away)
       deleteDocumentNonBlocking(userInRoomRef);
     };
   }, [user, firestore, params.roomId]);
@@ -158,5 +161,3 @@ export default function RoomPage() {
     </SidebarProvider>
   );
 }
-
-    

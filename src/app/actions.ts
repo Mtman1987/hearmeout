@@ -4,6 +4,7 @@ import { moderateContent } from "@/ai/flows/sentiment-based-moderation";
 import type { ModerateContentOutput } from "@/ai/flows/sentiment-based-moderation";
 import { getYoutubeInfo as getYoutubeInfoFlow } from "@/ai/flows/get-youtube-info-flow";
 import type { PlaylistItem } from "@/app/rooms/[roomId]/_components/Playlist";
+import { AccessToken } from 'livekit-server-sdk';
 
 export async function runModeration(
   conversationHistory: string
@@ -29,4 +30,19 @@ export async function getYoutubeInfo(url: string): Promise<PlaylistItem[] | null
     console.error("Error getting YouTube info:", error);
     return null;
   }
+}
+
+export async function generateLiveKitToken(roomName: string, participantName: string) {
+  if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
+    throw new Error('LiveKit server environment variables are not configured.');
+  }
+
+  const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
+    identity: participantName,
+    ttl: '10m', // The token is valid for 10 minutes
+  });
+
+  at.addGrant({ room: roomName, roomJoin: true, canPublish: true, canSubscribe: true });
+
+  return at.toJwt();
 }
