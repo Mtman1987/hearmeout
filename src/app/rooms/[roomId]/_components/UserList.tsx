@@ -61,7 +61,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { localParticipant } = useLocalParticipant();
-  const { devices: audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
+  const { devices } = useMediaDeviceSelect({ kind: 'audioinput' });
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   
   const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
@@ -79,6 +79,22 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
   const canControlMusic = isRoomOwner;
 
+  // Effect to load saved settings from local storage
+  useEffect(() => {
+    try {
+        const savedDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
+        if (savedDeviceId) {
+            setMusicDeviceId(savedDeviceId);
+        }
+        const savedPanels = localStorage.getItem('hearmeout-active-panels');
+        if (savedPanels) {
+            setActivePanels(JSON.parse(savedPanels));
+        }
+    } catch (e) {
+        console.error("Failed to load saved state from localStorage", e);
+    }
+  }, []);
+
   // Effect to publish/unpublish the jukebox track
   useEffect(() => {
     const setupJukeboxTrack = async () => {
@@ -95,6 +111,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       }
 
       if (musicTrackPublicationRef.current) {
+         if (musicTrackPublicationRef.current.track?.mediaStreamTrack.getSettings().deviceId === musicDeviceId) {
+            return; // Already using the correct track
+        }
         await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
       }
       
@@ -125,8 +144,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (playerRef.current && !isRoomOwner && room?.currentTrackProgress) {
         const localProgress = playerRef.current.getCurrentTime();
         // Only seek if the difference is significant to avoid jitter
-        if (Math.abs(localProgress - room.currentTrackProgress) > 0.05) { // 5% difference threshold
-            playerRef.current.seekTo(room.currentTrackProgress, 'fraction');
+        if (Math.abs(localProgress - room.currentTrackProgress) > 2) { 
+            playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
         }
     }
   }, [room?.currentTrackProgress, isRoomOwner]);
@@ -137,7 +156,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       // Start interval to update progress
       progressUpdateIntervalRef.current = setInterval(() => {
         if (playerRef.current) {
-          const progress = playerRef.current.getCurrentTime(); // progress is 0 to 1
+          const progress = playerRef.current.getCurrentTime(); // progress is in seconds
           if (progress > 0) {
             updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
           }
@@ -209,7 +228,15 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleTogglePanel = (panel: 'playlist' | 'add') => {
-    setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
+    setActivePanels(prev => {
+        const newPanels = { ...prev, [panel]: !prev[panel] };
+        try {
+            localStorage.setItem('hearmeout-active-panels', JSON.stringify(newPanels));
+        } catch (e) {
+            console.error("Failed to save panel state to localStorage", e);
+        }
+        return newPanels;
+    });
   }
 
   const handleRemoveSong = (songId: string) => {
@@ -244,17 +271,27 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     });
   };
 
-  const handleSeek = (progress: number) => {
+  const handleSeek = (seconds: number) => {
     if (playerRef.current) {
-        playerRef.current.seekTo(progress, 'fraction');
+        playerRef.current.seekTo(seconds, 'seconds');
         if (canControlMusic && roomRef) {
-            updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
+            updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
         }
     }
   };
 
+  const handleMusicDeviceSelect = (deviceId: string) => {
+    setMusicDeviceId(deviceId);
+    try {
+        localStorage.setItem('hearmeout-jukebox-device-id', deviceId);
+    } catch (e) {
+        console.error("Failed to save Jukebox device to localStorage", e);
+    }
+  };
+
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  
+  const playerProgressInSeconds = room?.currentTrackProgress || 0;
+
   return (
     <>
       <div className="flex flex-col gap-6">
@@ -267,7 +304,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 currentTrack={currentTrack}
                 playlist={room?.playlist || []}
                 playing={room?.isPlaying || false}
-                progress={room?.currentTrackProgress || 0}
+                progress={playerProgressInSeconds}
                 onSeek={handleSeek}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
@@ -276,9 +313,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
                 isRoomOwner={isRoomOwner}
-                audioDevices={audioDevices}
+                audioDevices={devices}
                 selectedMusicDeviceId={musicDeviceId}
-                onMusicDeviceSelect={setMusicDeviceId}
+                onMusicDeviceSelect={handleMusicDeviceSelect}
               />
             </div>
 

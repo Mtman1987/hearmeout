@@ -50,8 +50,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   audioDevices: MediaDevice[];
   selectedMusicDeviceId?: string;
   onMusicDeviceSelect: (deviceId: string) => void;
-  progress: number;
-  onSeek: (progress: number) => void;
+  progress: number; // Progress in seconds
+  onSeek: (seconds: number) => void;
 }>(({
   roomId,
   currentTrack,
@@ -72,6 +72,12 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
 }, ref) => {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
+
+  const internalPlayerRef = useRef<ReactPlayer | null>(null);
+  const [duration, setDuration] = useState(0);
+
+  // This allows the parent to control the player while also having an internal ref
+  React.useImperativeHandle(ref, () => internalPlayerRef.current!, []);
 
   const [volume, setVolume] = useState(0.5);
   const [isMuted, setIsMuted] = useState(false);
@@ -132,6 +138,13 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
     }
     setIsSeeking(false);
   }
+  
+  const formatTime = (seconds: number) => {
+    const floorSeconds = Math.floor(seconds);
+    const min = Math.floor(floorSeconds / 60);
+    const sec = floorSeconds % 60;
+    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+  };
 
   const devices = audioDevices || [];
 
@@ -140,17 +153,20 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
        <div className="hidden">
       {isClient && currentTrack && (
             <ReactPlayer
-                ref={ref}
+                ref={internalPlayerRef}
                 url={currentTrack.url}
                 playing={playing}
-                muted={isPlayerControlAllowed ? isMuted : true}
-                volume={isPlayerControlAllowed ? (isMuted ? 0 : volume) : 0}
+                volume={isRoomOwner ? (isMuted ? 0 : volume) : 0}
+                muted={!isRoomOwner} // Only the host's player makes sound
+                onDuration={setDuration}
                 onEnded={onPlayNext}
                 onPause={() => onPlayPause(false)}
                 onPlay={() => onPlayPause(true)}
                 width="1px"
                 height="1px"
                 progressInterval={1000}
+                // We don't use onProgress here anymore for the host,
+                // as progress is now polled in UserList via an interval
             />
       )}
       </div>
@@ -184,7 +200,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 <Label htmlFor="music-bot-device" className="col-span-1 text-sm">Jukebox Source</Label>
                 <Select
                     onValueChange={onMusicDeviceSelect}
-                    defaultValue={selectedMusicDeviceId}
+                    value={selectedMusicDeviceId}
                     disabled={devices.length === 0}
                 >
                     <SelectTrigger id="music-bot-device" className="col-span-2">
@@ -231,10 +247,14 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 value={[seekValue]}
                 onValueChange={handleSeekChange}
                 onValueCommit={handleSeekCommit}
-                max={1}
-                step={0.001}
-                disabled={!isPlayerControlAllowed}
+                max={duration}
+                step={1}
+                disabled={!isPlayerControlAllowed || !currentTrack}
             />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>{formatTime(seekValue)}</span>
+                <span>{formatTime(duration)}</span>
+            </div>
         </div>
        
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -273,7 +293,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
             <div className="flex items-center gap-2 flex-1 min-w-24">
                  <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setIsMuted(!isMuted)} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={() => setIsMuted(!isMuted)} className="h-9 w-9" disabled={!isRoomOwner}>
                             {isMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
                         </Button>
                     </TooltipTrigger>
@@ -286,6 +306,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                     onValueChange={handleVolumeChange}
                     max={1}
                     step={0.05}
+                    disabled={!isRoomOwner}
                 />
             </div>
         </div>
