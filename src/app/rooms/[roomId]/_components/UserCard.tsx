@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
-import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -107,8 +108,7 @@ export default function UserCard({
   
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
 
-  const tracks = useTracks([Track.Source.Microphone], { participant });
-  const micTrackRef = tracks.find((t) => t.source === Track.Source.Microphone);
+  const micTrackRef = useTracks([Track.Source.Microphone], { participant }).find((t) => t.source === Track.Source.Microphone);
   
   // The UI is now driven by the database state.
   const isMuted = firestoreUser?.isMuted ?? false;
@@ -118,11 +118,14 @@ export default function UserCard({
     // Only applies to the local participant's card on their own screen.
     if (isLocal && micTrackRef?.publication.track) {
       const micTrack = micTrackRef.publication.track;
-      // Use a type guard to ensure we have a LocalAudioTrack
-      if (micTrack instanceof LocalAudioTrack) {
-        if (firestoreUser?.isMuted !== undefined && micTrack.isMuted !== firestoreUser.isMuted) {
-          // This should now work without crashing.
-          micTrack.setMuted(firestoreUser.isMuted);
+      
+      // SUPER-SAFE GUARD:
+      // We check if the track object exists AND if it has a 'setMuted' method
+      // before we even think about calling it. This is safer than `instanceof`.
+      if (micTrack && typeof (micTrack as any).setMuted === 'function') {
+        const localTrack = micTrack as LocalAudioTrack; // We can now safely cast
+        if (firestoreUser?.isMuted !== undefined && localTrack.isMuted !== firestoreUser.isMuted) {
+          localTrack.setMuted(firestoreUser.isMuted);
         }
       }
     }
@@ -172,13 +175,7 @@ export default function UserCard({
 
   return (
     <>
-      {tracks.map(trackRef => (
-        <AudioTrack
-            key={trackRef.publication.trackSid}
-            trackRef={trackRef}
-            volume={!isLocal ? effectiveVolume : undefined}
-        />
-      ))}
+      {micTrackRef && <AudioTrack trackRef={micTrackRef} volume={!isLocal ? effectiveVolume : undefined} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
