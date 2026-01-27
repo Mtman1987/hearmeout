@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from "react";
@@ -51,37 +52,50 @@ const GoogleIcon = () => (
 
 
 export default function LoginPage() {
-  const { auth, firestore, isUserLoading } = useFirebase();
+  const { auth, firestore, user, isUserLoading } = useFirebase();
   const router = useRouter();
   const [isProcessingLogin, setIsProcessingLogin] = useState(true);
 
   useEffect(() => {
-    if (auth && firestore) {
-      getRedirectResult(auth)
-        .then(async (result) => {
-          if (result) {
-            const user = result.user;
-            const userRef = doc(firestore, 'users', user.uid);
-            await setDoc(userRef, {
-              id: user.uid,
-              username: user.displayName,
-              email: user.email,
-              displayName: user.displayName,
-              profileImageUrl: user.photoURL,
-            }, { merge: true });
-            router.push('/');
-          } else {
-            setIsProcessingLogin(false);
-          }
-        })
-        .catch((error) => {
-          console.error("Google redirect sign-in failed:", error);
-          setIsProcessingLogin(false);
-        });
-    } else if (!isUserLoading) {
-      setIsProcessingLogin(false);
+    // If firebase isn't ready, just wait.
+    if (isUserLoading || !auth || !firestore) {
+      return;
     }
-  }, [auth, firestore, router, isUserLoading]);
+    
+    // If there is an authenticated user, they shouldn't be on the login page.
+    if (user) {
+      router.push('/');
+      return;
+    }
+
+    // If there is no user, we check if this is a return from a redirect login.
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result) {
+          // A user was successfully signed in.
+          // We will create their profile.
+          // The `onAuthStateChanged` listener will update the `user` state,
+          // which will cause this effect to run again and trigger the redirect above.
+          const loggedInUser = result.user;
+          const userRef = doc(firestore, 'users', loggedInUser.uid);
+          await setDoc(userRef, {
+            id: loggedInUser.uid,
+            username: loggedInUser.displayName,
+            email: loggedInUser.email,
+            displayName: loggedInUser.displayName,
+            profileImageUrl: loggedInUser.photoURL,
+          }, { merge: true });
+        } else {
+          // This isn't a redirect, so we're done processing.
+          setIsProcessingLogin(false);
+        }
+      })
+      .catch((error) => {
+        console.error("Google redirect sign-in failed:", error);
+        setIsProcessingLogin(false);
+      });
+
+  }, [auth, firestore, router, isUserLoading, user]);
 
   const handleGuestLogin = () => {
     if (auth) {
@@ -159,6 +173,13 @@ export default function LoginPage() {
         </div>
     );
   }
+  
+  if (user) {
+    // A user is logged in, but the redirect to '/' hasn't happened yet.
+    // Render nothing to prevent flashing the login page.
+    return null;
+  }
+
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-secondary p-4 relative">
