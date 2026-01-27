@@ -17,8 +17,8 @@ const allMockUsers = [
   { id: 9, name: "Emily", avatarId: "avatar-3", isSpeaking: false },
 ];
 
-const usersByRoom: { [key: string]: typeof allMockUsers } = {
-    "1": [allMockUsers[0], allMockUsers[2], allMockUsers[3]], // Lofi: Mike, Chloe, Alex
+let usersByRoom: { [key: string]: typeof allMockUsers } = {
+    "1": [allMockUsers[0], allMockUsers[2]], // Lofi: Mike, Chloe
     "2": [allMockUsers[1], allMockUsers[4]], // Indie: David, Sarah
     "3": [allMockUsers[0], allMockUsers[1], allMockUsers[5], allMockUsers[6]], // Throwback: Mike, David, Ben, Emily
     "4": [allMockUsers[3], allMockUsers[4]], // Gaming: Alex, Sarah
@@ -58,9 +58,22 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const isHost = users.some(u => u.name === "You");
 
-  const removeUser = (userId: number) => {
+  const handleMoveUser = (userId: number, destinationRoomId: string) => {
+    const userToMove = allMockUsers.find(u => u.id === userId);
+    if (!userToMove) return;
+
+    // Remove from current room in our mock data store
+    usersByRoom[roomId] = usersByRoom[roomId]?.filter(u => u.id !== userId) || [];
+    
+    // Add to destination room if not already there
+    if (!usersByRoom[destinationRoomId]?.some(u => u.id === userId)) {
+        usersByRoom[destinationRoomId] = [...(usersByRoom[destinationRoomId] || []), userToMove];
+    }
+    
+    // Update local state for the current room to reflect the removal
     setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
   };
+
 
   const playSong = (index: number) => {
     setCurrentTrackIndex(index);
@@ -131,7 +144,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {users.map((user) => (
-          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} onMoveUser={removeUser} />
+          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} onMoveUser={handleMoveUser} />
         ))}
       </div>
     </div>

@@ -37,7 +37,7 @@ import { rooms } from "@/lib/rooms";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 
-export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: number) => void; }) {
+export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: number, destinationRoomId: string) => void; }) {
   const params = useParams();
   const roomId = params.roomId as string;
 
@@ -53,6 +53,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
 
   // Effect to load settings from localStorage on mount
   useEffect(() => {
+    setIsLoaded(false); // Reset loaded state on user/room change
     if (!isLocal) { 
         const storageKey = `hearmeout-user-prefs-${roomId}`;
         try {
@@ -69,7 +70,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
         } catch (e) {
             console.error("Failed to parse user preferences from localStorage", e);
         } finally {
-            setIsLoaded(true); // Mark as loaded, even if there was an error
+            setIsLoaded(true); // Mark as loaded after attempting to read
         }
     } else {
         setIsLoaded(true); // For local user, we're "loaded" immediately
@@ -93,7 +94,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
              console.error("Failed to save user preferences to localStorage", e);
         }
     }
-  }, [volume, isMuted, user.id, roomId, isLocal, isLoaded]); // Add isLoaded to dependency array
+  }, [volume, isMuted, user.id, roomId, isLocal, isLoaded]);
 
   useEffect(() => {
     async function getMediaDevices() {
@@ -135,7 +136,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
           </div>
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
         </div>
-         <div className="flex justify-center items-center mt-2 gap-2 h-9">
+         <div className="flex justify-center items-center mt-2 gap-1 h-9">
             {isLocal ? (
                 <>
                 <Dialog>
@@ -262,7 +263,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
                         {rooms
                             .filter(r => r.id !== roomId)
                             .map(r => (
-                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id)}>
+                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id, r.id)}>
                                     {r.name}
                                 </Button>
                             ))
