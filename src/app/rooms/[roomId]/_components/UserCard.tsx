@@ -89,59 +89,29 @@ export default function UserCard({
     [Track.Source.Microphone],
     { participant }
   );
-
-  const room = useRoomContext();
-  const { devices: speakerDevices, activeDeviceId: activeSpeakerId, setMediaDevice: setSpeakerDevice } = useMediaDeviceSelect({ kind: 'audiooutput' });
-  const [micDevices, setMicDevices] = React.useState<MediaDeviceInfo[]>([]);
-  const [activeMicId, setActiveMicId] = React.useState<string>();
-
-  const micTrack = useTracks([Track.Source.Microphone], { participant: participant })
-    .find(ref => ref.source === Track.Source.Microphone);
-
-  React.useEffect(() => {
-    if (!isLocal) return;
-
-    const getDevices = async () => {
-        try {
-            const devices = await Room.getLocalDevices('audioinput');
-            setMicDevices(devices);
-            
-            const savedMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-            const currentMic = micTrack?.publication.track?.mediaStreamTrack.getSettings().deviceId;
-
-            if (savedMicId && devices.some(d => d.deviceId === savedMicId)) {
-                if (currentMic !== savedMicId) {
-                    await micTrack?.publication.track?.setDeviceId(savedMicId);
-                }
-                setActiveMicId(savedMicId);
-            } else if(currentMic) {
-                setActiveMicId(currentMic);
-            } else if (devices.length > 0) {
-                setActiveMicId(devices[0].deviceId);
-            }
-        } catch (e) {
-            console.error("Failed to get audio devices:", e);
-        }
-    };
-
-    const handleDeviceChange = () => getDevices();
-    room.on(RoomEvent.MediaDevicesChanged, handleDeviceChange);
-    getDevices();
-
-    return () => {
-        room.off(RoomEvent.MediaDevicesChanged, handleDeviceChange);
-    };
-}, [isLocal, room, micTrack]);
-
-const handleMicDeviceChange = async (deviceId: string) => {
-    if (micTrack?.publication.track) {
-        await micTrack.publication.track.setDeviceId(deviceId);
-        setActiveMicId(deviceId);
-        localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
-    }
-};
-
   
+  // Use LiveKit's built-in hooks for device management, which is more robust
+  const { devices: speakerDevices, activeDeviceId: activeSpeakerId, setMediaDevice: setSpeakerDevice } = useMediaDeviceSelect({ kind: 'audiooutput' });
+  const { devices: micDevices, activeDeviceId: activeMicId, setMediaDevice: setMicDevice } = useMediaDeviceSelect({ kind: 'audioinput' });
+
+  // Handle setting the microphone device
+  const handleMicDeviceChange = (deviceId: string) => {
+    setMicDevice(deviceId);
+    localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
+  };
+  
+  // On mount, try to set the microphone to the one saved in local storage
+  useEffect(() => {
+    if (isLocal) {
+        const savedMicId = localStorage.getItem('hearmeout-user-mic-device-id');
+        if (savedMicId) {
+            setMicDevice(savedMicId);
+        }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocal, setMicDevice]);
+
+
   // Use Firebase data for local user, LiveKit data for remote
   const displayName = isLocal ? firebaseUser?.displayName || name : name;
   const photoURL = isLocal ? firebaseUser?.photoURL : participant.metadata ? JSON.parse(participant.metadata).photoURL : undefined;
@@ -327,18 +297,7 @@ const handleMicDeviceChange = async (deviceId: string) => {
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
                 <SpeakingIndicator audioLevel={audioLevel} />
-                {isLocal ? (
-                    <div className="space-y-1 pt-2">
-                        <Label className="text-xs text-muted-foreground">Mic Volume</Label>
-                        <Slider
-                            aria-label="My Mic Volume"
-                            defaultValue={[1]}
-                            max={1}
-                            step={0.05}
-                            disabled
-                        />
-                    </div>
-                ) : (
+                {!isLocal && (
                     <div className="flex items-center gap-2 pt-2">
                         <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
                             {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
