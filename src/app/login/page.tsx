@@ -57,28 +57,29 @@ export default function LoginPage() {
   const [isProcessing, setIsProcessing] = useState(true);
 
   useEffect(() => {
-    // If the user object is available, we are authenticated, so redirect.
+    // If user is already logged in (e.g., from a previous session or after the redirect is processed),
+    // redirect them to the home page.
     if (user) {
       router.push('/');
       return;
     }
 
-    // Wait until the initial auth state is resolved.
+    // If we're still waiting for Firebase to determine the initial auth state, just wait.
     if (isUserLoading || !auth || !firestore) {
       return;
     }
-
-    // If we're not loading and there's no user, check for a redirect result.
+    
+    // At this point, we know there's no logged-in user, and Firebase services are ready.
+    // Check if this page load is the result of a sign-in redirect.
     getRedirectResult(auth)
       .then(async (result) => {
         if (result) {
-          // A user successfully signed in via redirect.
-          // The `onAuthStateChanged` listener will soon provide the `user` object,
-          // which will trigger the redirect in the first part of this effect.
-          // Our only job here is to create the user's profile document.
+          // Yes, the user is coming back from the Google Sign-In page.
+          // The spinner is still active because isProcessing is true.
           const loggedInUser = result.user;
           const userRef = doc(firestore, 'users', loggedInUser.uid);
           
+          // Create or update their profile in Firestore.
           await setDoc(userRef, {
             id: loggedInUser.uid,
             username: loggedInUser.displayName,
@@ -87,14 +88,18 @@ export default function LoginPage() {
             profileImageUrl: loggedInUser.photoURL,
           }, { merge: true });
 
+          // Now that the profile is saved, explicitly redirect to the home page.
+          router.push('/');
+
         } else {
-          // No redirect result means this is a fresh visit to the login page.
-          // We can stop processing and show the login buttons.
+          // No, this is a fresh visit to the login page (not a redirect).
+          // Stop the spinner and show the login buttons.
           setIsProcessing(false);
         }
       })
       .catch((error) => {
-        console.error("Google redirect sign-in failed:", error);
+        console.error("Authentication failed during redirect:", error);
+        // If something went wrong, stop the spinner and show the login page.
         setIsProcessing(false);
       });
   }, [user, isUserLoading, auth, firestore, router]);
@@ -163,7 +168,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!auth || !firestore) return;
+    if (!auth) return;
     setIsProcessing(true);
     const provider = new GoogleAuthProvider();
     await signInWithRedirect(auth, provider);
@@ -226,5 +231,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
