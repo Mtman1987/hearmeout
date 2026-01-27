@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
   SidebarProvider,
   Sidebar,
@@ -171,7 +172,8 @@ function RoomHeader({ roomName, onToggleChat } : { roomName: string, onToggleCha
     );
 }
 
-export default function RoomPage({ params }: { params: { roomId: string } }) {
+export default function RoomPage() {
+  const params = useParams<{ roomId: string }>();
   const [chatOpen, setChatOpen] = useState(false);
   const room = rooms.find(r => r.id === params.roomId) || rooms[0];
 
