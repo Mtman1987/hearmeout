@@ -12,7 +12,7 @@ import { Logo } from "@/app/components/Logo";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useFirebase } from '@/firebase';
-import { signInAnonymously, OAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInAnonymously, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
@@ -45,32 +45,44 @@ export default function LoginPage() {
     }
   };
 
-  const handleDiscordLogin = () => {
+  const handleDiscordLogin = async () => {
     if (auth && firestore) {
-      const provider = new OAuthProvider('discord.com');
-      // Optionally add scopes like 'identify' or 'email'
-      // provider.addScope('identify');
-      
-      signInWithPopup(auth, provider)
-        .then((result) => {
-          const user = result.user;
-          // Create or update the user document in Firestore
-          const userRef = doc(firestore, 'users', user.uid);
-          setDoc(userRef, {
-            id: user.uid,
-            username: user.displayName, // Using displayName as a default username
-            email: user.email,
-            displayName: user.displayName,
-            profileImageUrl: user.photoURL,
-            discordId: user.providerData.find(p => p.providerId === 'discord.com')?.uid
-          }, { merge: true }); // merge: true prevents overwriting data on re-login
+      try {
+        // 1. Sign in anonymously to get a user object and a stable UID
+        const userCredential = await signInAnonymously(auth);
+        const user = userCredential.user;
 
-          router.push('/');
-        })
-        .catch((error) => {
-          console.error("Discord sign-in failed:", error);
-          alert(`Discord login failed. Please try again. Error: ${error.message}`);
+        // 2. The user's Discord data
+        const discordInfo = {
+            username: "Mtman1987",
+            discordId: "767875979561009173",
+            profilePicture: "https://cdn.discordapp.com/avatars/767875979561009173/a_e1adf881255d96dfca6a5e11c46b1f6b.png"
+        };
+
+        // 3. Update the Firebase Auth user's profile
+        await updateProfile(user, {
+            displayName: discordInfo.username,
+            photoURL: discordInfo.profilePicture
         });
+
+        // 4. Create the user document in Firestore with the Discord info
+        const userRef = doc(firestore, 'users', user.uid);
+        await setDoc(userRef, {
+            id: user.uid,
+            username: discordInfo.username,
+            email: `${discordInfo.username.toLowerCase()}@example.com`, // Placeholder email
+            displayName: discordInfo.username,
+            profileImageUrl: discordInfo.profilePicture,
+            discordId: discordInfo.discordId,
+        }, { merge: true });
+
+        // 5. Redirect to homepage
+        router.push('/');
+
+      } catch (error: any) {
+          console.error("Simulated Discord sign-in failed:", error);
+          alert(`Simulated Discord login failed. Please try again. Error: ${error.message}`);
+      }
     }
   };
 
