@@ -54,48 +54,56 @@ const GoogleIcon = () => (
 export default function LoginPage() {
   const { auth, firestore, user, isUserLoading } = useFirebase();
   const router = useRouter();
-  const [isProcessingLogin, setIsProcessingLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // If firebase isn't ready, just wait.
     if (isUserLoading || !auth || !firestore) {
-      return;
+      return; // Wait until Firebase is initialized and the initial user state is known
     }
-    
-    // If there is an authenticated user, they shouldn't be on the login page.
+
+    // If a user is already logged in (e.g., from a previous session), redirect them.
     if (user) {
       router.push('/');
       return;
     }
 
-    // If there is no user, we check if this is a return from a redirect login.
+    // If there's no user, check if we're returning from a Google Sign-In redirect
     getRedirectResult(auth)
       .then(async (result) => {
         if (result) {
-          // A user was successfully signed in.
-          // We will create their profile.
-          // The `onAuthStateChanged` listener will update the `user` state,
-          // which will cause this effect to run again and trigger the redirect above.
+          // User successfully signed in via redirect.
           const loggedInUser = result.user;
           const userRef = doc(firestore, 'users', loggedInUser.uid);
-          await setDoc(userRef, {
-            id: loggedInUser.uid,
-            username: loggedInUser.displayName,
-            email: loggedInUser.email,
-            displayName: loggedInUser.displayName,
-            profileImageUrl: loggedInUser.photoURL,
-          }, { merge: true });
+          
+          try {
+            // Create their user profile in Firestore
+            await setDoc(userRef, {
+              id: loggedInUser.uid,
+              username: loggedInUser.displayName,
+              email: loggedInUser.email,
+              displayName: loggedInUser.displayName,
+              profileImageUrl: loggedInUser.photoURL,
+            }, { merge: true });
+
+            // Directly redirect to the homepage after profile creation.
+            router.push('/');
+
+          } catch (error) {
+            console.error("Failed to create user profile:", error);
+            // Stop loading so the user isn't stuck on a spinner.
+            setIsLoading(false);
+          }
         } else {
-          // This isn't a redirect, so we're done processing.
-          setIsProcessingLogin(false);
+          // No user and no redirect result means it's a fresh visit to the login page.
+          setIsLoading(false);
         }
       })
       .catch((error) => {
         console.error("Google redirect sign-in failed:", error);
-        setIsProcessingLogin(false);
+        setIsLoading(false);
       });
+  }, [user, isUserLoading, auth, firestore, router]);
 
-  }, [auth, firestore, router, isUserLoading, user]);
 
   const handleGuestLogin = () => {
     if (auth) {
@@ -161,25 +169,18 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!auth || !firestore) return;
-    setIsProcessingLogin(true);
+    setIsLoading(true);
     const provider = new GoogleAuthProvider();
     await signInWithRedirect(auth, provider);
   };
   
-  if (isUserLoading || isProcessingLogin) {
+  if (isLoading) {
     return (
         <div className="flex min-h-screen w-full items-center justify-center bg-secondary">
             <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
         </div>
     );
   }
-  
-  if (user) {
-    // A user is logged in, but the redirect to '/' hasn't happened yet.
-    // Render nothing to prevent flashing the login page.
-    return null;
-  }
-
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-secondary p-4 relative">
