@@ -61,23 +61,26 @@ export default function UserCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // State for remote participants' volume
   const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
   const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity } = participant;
 
+  // This hook is the correct way to get the participant's tracks.
   const tracks = useTracks(
     [Track.Source.Microphone],
     { participant }
   );
 
   const getParticipantPhotoURL = (meta: string | undefined): string => {
+    // This function handles getting the photo URL from the metadata string
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
     try {
       const parsed = JSON.parse(meta);
       return parsed.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
     } catch (e) {
-      console.error('Failed to parse participant metadata:', e);
+      console.error(`Failed to parse participant metadata for ${identity}:`, meta, e);
       return `https://picsum.photos/seed/${identity}/100/100`;
     }
   };
@@ -85,6 +88,7 @@ export default function UserCard({
   const photoURL = getParticipantPhotoURL(metadata);
   const displayName = name || identity;
   
+  // For remote participants, we need to manage their volume locally
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
       setVolume(newVolume);
@@ -93,12 +97,14 @@ export default function UserCard({
       }
   };
 
+  // For the local participant, this toggles their microphone on/off for everyone
   const toggleLocalMic = () => {
     if (isLocal) {
         participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
     }
   };
 
+  // For the host, this deletes the entire room
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
         toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
@@ -117,10 +123,12 @@ export default function UserCard({
     }
   };
 
+  // The volume sent to the AudioTrack component
   const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
     <>
+      {/* This component handles playing the audio from the participant's track */}
       {tracks.map(trackRef => (
         <AudioTrack
             key={trackRef.publication.trackSid}
@@ -128,6 +136,8 @@ export default function UserCard({
             volume={effectiveVolume}
         />
       ))}
+
+      {/* The main card UI */}
       <Card className="flex flex-col h-full">
         <CardHeader>
           <div className="flex items-center gap-4">
@@ -144,6 +154,7 @@ export default function UserCard({
             </div>
             <CardTitle className="font-headline text-lg flex-1 truncate">{displayName}</CardTitle>
 
+            {/* The ... menu for the host to delete the room */}
             {isLocal && isHost && (
               <div className="ml-auto">
                 <DropdownMenu>
@@ -170,6 +181,7 @@ export default function UserCard({
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
           <SpeakingIndicator isSpeaking={isSpeaking} />
 
+           {/* Render controls for YOUR card (local participant) */}
            {isLocal ? (
              <Tooltip>
                 <TooltipTrigger asChild>
@@ -186,6 +198,7 @@ export default function UserCard({
                 <TooltipContent><p>{isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
               </Tooltip>
             ) : (
+                /* Render controls for OTHER users' cards (remote participants) */
                 <div className="flex items-center gap-2">
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -207,6 +220,7 @@ export default function UserCard({
         </CardContent>
       </Card>
       
+      {/* The confirmation dialog for deleting the room */}
       {isLocal && isHost && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
             <AlertDialogContent>
