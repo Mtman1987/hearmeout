@@ -8,7 +8,8 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
+import { createLocalAudioTrack, LocalTrackPublication } from 'livekit-client';
 import '@livekit/components-styles';
 
 const initialPlaylist: PlaylistItem[] = [
@@ -22,7 +23,6 @@ interface RoomData {
   ownerId: string;
   playlist?: PlaylistItem[];
   currentTrackId?: string;
-  currentTrackProgress?: number;
   isPlaying?: boolean;
 }
 
@@ -55,6 +55,12 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
+  const { localParticipant } = useLocalParticipant();
+  const { devices } = useMediaDeviceSelect({ kind: 'audioinput' });
+  const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
+  const [musicTrackPublication, setMusicTrackPublication] = useState<LocalTrackPublication | null>(null);
+
+  const playerRef = useRef<any>(null);
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -63,27 +69,53 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
+  const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
+
   useEffect(() => {
-    if (room && !room.playlist && user?.uid === room.ownerId) {
+    if (room && !room.playlist && isRoomOwner) {
         updateDocumentNonBlocking(roomRef!, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
-            isPlaying: false,
-            currentTrackProgress: 0
+            isPlaying: false
         });
     }
-  }, [room, user, roomRef]);
-  
-  const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
-  const canControlMusic = isRoomOwner;
+  }, [room, isRoomOwner, roomRef]);
 
+  useEffect(() => {
+    if (!isRoomOwner || !localParticipant || !musicDeviceId) {
+        return;
+    }
+
+    let musicTrack: Awaited<ReturnType<typeof createLocalAudioTrack>>;
+
+    const publishMusicTrack = async () => {
+        musicTrack = await createLocalAudioTrack({ deviceId: musicDeviceId });
+        const publication = await localParticipant.publishTrack(musicTrack, {
+            name: 'Jukebox',
+            source: 'jukebox',
+        });
+        setMusicTrackPublication(publication);
+    };
+
+    publishMusicTrack();
+
+    return () => {
+        if (musicTrackPublication) {
+            localParticipant.unpublishTrack(musicTrackPublication.track);
+        }
+        if (musicTrack) {
+            musicTrack.stop();
+        }
+    };
+  }, [isRoomOwner, localParticipant, musicDeviceId]);
+  
+  const canControlMusic = isRoomOwner;
 
   const handlePlaySong = (songId: string) => {
     if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
-        currentTrackProgress: 0
     });
   }
 
@@ -124,18 +156,16 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (!isRoomOwner || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> & { currentTrackId?: any; currentTrackProgress?: any; } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
         const deletedIndex = room.playlist.findIndex(t => t.id === songId);
         const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
         updates.currentTrackId = newPlaylist[nextIndex]?.id;
-        updates.currentTrackProgress = 0;
       } else {
         updates.currentTrackId = deleteField();
         updates.isPlaying = false;
-        updates.currentTrackProgress = deleteField();
       }
     }
     
@@ -148,27 +178,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       playlist: [],
       currentTrackId: deleteField(),
       isPlaying: false,
-      currentTrackProgress: deleteField(),
     });
   };
-
-  const lastProgressUpdateTime = useRef(0);
-  const handleProgressUpdate = (progress: number) => {
-    if (!canControlMusic || !roomRef) return;
-    const now = Date.now();
-    // Update at most once every 2 seconds
-    if (now - lastProgressUpdateTime.current > 2000) {
-      updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
-      lastProgressUpdateTime.current = now;
-    }
-  };
-
-  const handleSeekCommit = (progress: number) => {
-    if (!canControlMusic || !roomRef) return;
-    // Force an immediate update when the host seeks
-    updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
-  };
-
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
@@ -179,19 +190,21 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-1 h-full">
                <MusicPlayerCard
+                ref={playerRef}
                 roomId={roomId}
                 currentTrack={currentTrack}
                 playlist={room?.playlist || []}
                 playing={room?.isPlaying || false}
-                progress={room?.currentTrackProgress}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
                 onPlayNext={handlePlayNext}
                 onPlayPrev={handlePlayPrev}
-                onProgressUpdate={handleProgressUpdate}
-                onSeekCommit={handleSeekCommit}
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
+                isRoomOwner={isRoomOwner}
+                audioDevices={devices}
+                selectedMusicDeviceId={musicDeviceId}
+                onMusicDeviceSelect={setMusicDeviceId}
               />
             </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Image from "next/image";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, forwardRef } from "react";
 import ReactPlayer from "react-player/youtube";
 import {
   Card,
@@ -30,37 +30,42 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { MediaDevice } from "livekit-client";
 
 
-export default function MusicPlayerCard({
-  roomId,
-  currentTrack,
-  playlist,
-  playing,
-  progress,
-  isPlayerControlAllowed,
-  onPlayPause,
-  onPlayNext,
-  onPlayPrev,
-  onProgressUpdate,
-  onSeekCommit,
-  activePanels,
-  onTogglePanel,
-}: {
+const MusicPlayerCard = forwardRef<ReactPlayer, {
   roomId: string;
   currentTrack: PlaylistItem | undefined;
   playlist: PlaylistItem[];
   playing: boolean;
-  progress?: number;
   isPlayerControlAllowed: boolean;
   onPlayPause: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
-  onProgressUpdate: (progress: number) => void;
-  onSeekCommit: (progress: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
-}) {
+  isRoomOwner: boolean;
+  audioDevices: MediaDevice[];
+  selectedMusicDeviceId?: string;
+  onMusicDeviceSelect: (deviceId: string) => void;
+}>(({
+  roomId,
+  currentTrack,
+  playlist,
+  playing,
+  isPlayerControlAllowed,
+  onPlayPause,
+  onPlayNext,
+  onPlayPrev,
+  activePanels,
+  onTogglePanel,
+  isRoomOwner,
+  audioDevices,
+  selectedMusicDeviceId,
+  onMusicDeviceSelect,
+}, ref) => {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
@@ -70,8 +75,6 @@ export default function MusicPlayerCard({
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
   
-  const playerRef = useRef<ReactPlayer>(null);
-
   // Load volume from localStorage on mount
   useEffect(() => {
     if (!isClient) return;
@@ -95,37 +98,11 @@ export default function MusicPlayerCard({
     }
   }, [volume, roomId, isClient]);
 
-  // Effect to sync remote players to the host's progress
-  useEffect(() => {
-    if (!isPlayerControlAllowed && playerRef.current && typeof progress === 'number') {
-      const player = playerRef.current;
-      const currentDuration = player.getDuration();
-      if (currentDuration > 0) {
-        const currentProgress = player.getCurrentTime() / currentDuration;
-        // Only seek if the difference is significant (e.g., > 2 seconds)
-        // to avoid jerky playback from minor latency.
-        if (Math.abs(progress - currentProgress) * currentDuration > 2) {
-          player.seekTo(progress, 'fraction');
-        }
-      }
-    }
-  }, [progress, isPlayerControlAllowed]);
-  
   // Effect to reset progress only when the track ID actually changes
   useEffect(() => {
-    if (currentTrack) {
-        // When a new track starts, seek to its initial progress (could be 0 or a saved value)
-        const initialProgress = progress || 0;
-        setPlayed(initialProgress);
-        if (playerRef.current) {
-            playerRef.current.seekTo(initialProgress, 'fraction');
-        }
-    } else {
-        setPlayed(0);
-        setDuration(0);
-    }
+    setPlayed(0);
+    setDuration(0);
   }, [currentTrack?.id]);
-
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
 
@@ -144,10 +121,6 @@ export default function MusicPlayerCard({
     // This callback comes from the ReactPlayer instance.
     if (!seeking) {
       setPlayed(state.played); // Update local UI slider
-      // The host is responsible for broadcasting their progress
-      if (isPlayerControlAllowed) {
-        onProgressUpdate(state.played); // This is throttled in the parent component
-      }
     }
   };
 
@@ -160,10 +133,9 @@ export default function MusicPlayerCard({
   };
 
   const handleSeekCommit = (value: number[]) => {
-    if (!isPlayerControlAllowed || !currentTrack) return;
+    if (!isPlayerControlAllowed || !currentTrack || !ref || typeof ref === 'function' || !ref.current) return;
     setSeeking(false);
-    playerRef.current?.seekTo(value[0], 'fraction');
-    onSeekCommit(value[0]); // Immediately update Firestore
+    ref.current.seekTo(value[0], 'fraction');
   };
   
   function formatTime(seconds: number) {
@@ -185,7 +157,7 @@ export default function MusicPlayerCard({
        <div className="hidden">
       {isClient && currentTrack && (
             <ReactPlayer
-                ref={playerRef}
+                ref={ref}
                 url={currentTrack.url}
                 playing={playing}
                 muted={isMuted}
@@ -225,6 +197,27 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
+        {isRoomOwner && (
+            <div className="grid grid-cols-3 items-center gap-4">
+                <Label htmlFor="music-bot-device" className="col-span-1 text-sm">Jukebox Source</Label>
+                <Select
+                    onValueChange={onMusicDeviceSelect}
+                    defaultValue={selectedMusicDeviceId}
+                    disabled={audioDevices.length === 0}
+                >
+                    <SelectTrigger id="music-bot-device" className="col-span-2">
+                        <SelectValue placeholder="Select audio source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {audioDevices.map((device) => (
+                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                                {device.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        )}
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
           <AudioVisualizer isSpeaking={!!currentTrack && playing && !isMuted} />
           <div className="flex items-center gap-2 ml-auto">
@@ -320,4 +313,8 @@ export default function MusicPlayerCard({
       </CardContent>
     </Card>
   );
-}
+});
+
+MusicPlayerCard.displayName = "MusicPlayerCard";
+
+export default MusicPlayerCard;
