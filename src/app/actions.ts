@@ -32,13 +32,15 @@ export async function getYoutubeInfo(url: string): Promise<PlaylistItem[] | null
   }
 }
 
-export async function generateLiveKitToken(roomName: string, participantName: string) {
+export async function generateLiveKitToken(roomName: string, participantIdentity: string, participantName: string, participantMetadata: string) {
   if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
     throw new Error('LiveKit server environment variables are not configured.');
   }
 
   const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
-    identity: participantName,
+    identity: participantIdentity,
+    name: participantName,
+    metadata: participantMetadata,
     ttl: '10m', // The token is valid for 10 minutes
   });
 

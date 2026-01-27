@@ -100,6 +100,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { toast } = useToast();
   const router = useRouter();
 
+  const displayName = user?.displayName || (user?.isAnonymous ? 'Guest' : 'Anonymous');
+
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
     return doc(firestore, 'rooms', roomId);
@@ -112,7 +114,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
     (async () => {
       try {
-        const token = await generateLiveKitToken(roomId, user.uid);
+        const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
+        const metadata = JSON.stringify({ photoURL });
+
+        const token = await generateLiveKitToken(roomId, user.uid, displayName, metadata);
         setLivekitToken(token);
       } catch (e) {
         console.error('Failed to get LiveKit token', e);
@@ -123,7 +128,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
       }
     })();
-  }, [user, roomId, toast]);
+  }, [user, roomId, toast, displayName]);
 
   useEffect(() => {
     // Initialize room with a default playlist if it's new
@@ -350,7 +355,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             video={false}
             audio={true}
             userChoices={{
-              username: user?.displayName || user?.uid,
+              username: displayName,
             }}
              onDisconnected={() => setLivekitToken(null)}
           >
