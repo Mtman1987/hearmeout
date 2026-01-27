@@ -194,12 +194,12 @@ export default function LoginPage() {
           try {
             await createUserWithEmailAndPassword(auth, email, password);
           } catch (createError: any) {
-            console.error("Simulated user creation for Twitch failed:", createError);
+            console.error("Simulated user creation for Madi failed:", createError);
             setStatus('idle');
             return;
           }
         } else {
-          console.error("Simulated Twitch sign-in failed:", error);
+          console.error("Simulated sign-in for Madi failed:", error);
           setStatus('idle');
           return;
         }
@@ -207,27 +207,27 @@ export default function LoginPage() {
 
       const user = auth.currentUser;
       if (user) {
-        const twitchInfo = {
+        const userInfo = {
             username: "Madired29 | MOD",
-            twitchId: "1177028432949940244", // Example Twitch ID
+            discordId: "9876543210987654321", // Using a fake discordId for consistency
             profilePicture: `https://picsum.photos/seed/${user.uid}/100/100`
         };
         try {
             await updateProfile(user, {
-                displayName: twitchInfo.username,
-                photoURL: twitchInfo.profilePicture
+                displayName: userInfo.username,
+                photoURL: userInfo.profilePicture
             });
             const userRef = doc(firestore, 'users', user.uid);
             await setDoc(userRef, {
                 id: user.uid,
-                username: twitchInfo.username,
+                username: userInfo.username,
                 email: user.email,
-                displayName: twitchInfo.username,
-                profileImageUrl: twitchInfo.profilePicture,
-                twitchId: twitchInfo.twitchId,
+                displayName: userInfo.username,
+                profileImageUrl: userInfo.profilePicture,
+                discordId: userInfo.discordId,
             }, { merge: true });
         } catch (error: any) {
-            console.error("Failed to update profile or Firestore for Twitch user:", error);
+            console.error("Failed to update profile or Firestore for Madi:", error);
             setStatus('idle');
         }
       }
