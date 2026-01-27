@@ -12,7 +12,7 @@ const users = [
 
 export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
         {musicPlayerOpen && <MusicPlayerCard />}
         {users.map((user) => (
             <UserCard key={user.id} user={user} isLocal={user.name === "You"} />

@@ -52,7 +52,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
   const avatar = placeholderData.placeholderImages.find(p => p.id === user.avatarId);
 
   return (
-    <Card className="flex flex-col border-2 border-transparent has-[:focus-visible]:border-ring">
+    <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-center gap-4">
           <Avatar className="h-12 w-12">
@@ -116,7 +116,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col justify-end gap-4">
+      <CardContent className="flex flex-col gap-4">
         <AudioVisualizer isSpeaking={user.isSpeaking && !isMuted} />
         
         <div className="flex items-center gap-2">
