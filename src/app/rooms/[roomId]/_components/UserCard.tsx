@@ -8,7 +8,6 @@ import {
   MicOff,
   MoreVertical,
   Move,
-  Music,
   Pen,
   ShieldOff,
   Trash2,
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
-import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -106,17 +105,16 @@ export default function UserCard({
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
-  const isJukebox = identity === 'Jukebox';
 
   const userInRoomRef = useMemoFirebase(() => {
-    if (!firestore || !roomId || !identity || isJukebox) return null;
+    if (!firestore || !roomId || !identity) return null;
     return doc(firestore, 'rooms', roomId, 'users', identity);
-  }, [firestore, roomId, identity, isJukebox]);
+  }, [firestore, roomId, identity]);
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   const audioTrackRef = useTracks(
-      [Track.Source.Microphone, Track.Source.Unknown, 'jukebox' as Track.Source], 
+      [Track.Source.Microphone], 
       { participant }
   ).find((t) => t.publication.kind === 'audio');
 
@@ -125,15 +123,15 @@ export default function UserCard({
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
     if (isLocal && audioTrackRef?.publication.track) {
-      const micTrack = audioTrackRef.publication.track;
-      // SUPER-SAFE GUARD: Check if the track has the `setMuted` function before calling it.
-      if (micTrack instanceof LocalAudioTrack && typeof micTrack.setMuted === 'function') {
-        if (micTrack.isMuted !== isMuted) {
-          micTrack.setMuted(isMuted);
+        const micTrack = audioTrackRef.publication.track;
+        // SUPER-SAFE GUARD: Check if the track has the `setMuted` function before calling it.
+        if (micTrack instanceof LocalAudioTrack && typeof micTrack.setMuted === 'function') {
+            if (micTrack.isMuted !== isMuted) {
+                micTrack.setMuted(isMuted);
+            }
         }
-      }
     }
-  }, [isLocal, audioTrackRef, isMuted]);
+}, [isLocal, audioTrackRef, isMuted]);
   
   const handleToggleMic = async () => {
     if (isLocal && userInRoomRef) {
@@ -142,7 +140,7 @@ export default function UserCard({
   };
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = isJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
+  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
   const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
   const handleVolumeChange = (value: number[]) => {
@@ -184,14 +182,8 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        {isJukebox ? (
-                            <AvatarFallback><Music className="w-8 h-8" /></AvatarFallback>
-                        ) : (
-                            <>
-                                <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
-                                <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
-                            </>
-                        )}
+                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
                      {isMuted && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
@@ -283,7 +275,7 @@ export default function UserCard({
                             )}
                          </div>
                     ): (
-                        isHost && !isJukebox && (
+                        isHost && (
                            <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>

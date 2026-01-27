@@ -6,10 +6,10 @@ import { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, useCollection, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { doc, deleteField, collection } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useTracks } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice, type TrackPublication } from 'livekit-client';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { doc, deleteField } from 'firebase/firestore';
+import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
@@ -36,16 +36,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  
-  // Find the jukebox track publication, which is what listeners will play
-  const jukeboxTrack = useTracks([Track.Source.Jukebox]).find(t => t.publication.kind === 'audio')?.publication;
-
-  // Local mute state for the host's player
-  const [isHostMuted, setIsHostMuted] = useState(false);
-  
-  // Jukebox state
-  const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
-  const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
+  const actualParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
 
   // User microphone and speaker state
   const [micDeviceId, setMicDeviceId] = useState<string | undefined>();
@@ -74,14 +65,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   // Handler for changing user's primary microphone
   const handleMicDeviceChange = (deviceId: string) => {
-      if (deviceId === musicDeviceId) {
-        toast({
-            variant: "destructive",
-            title: "Device in Use",
-            description: "This device is already being used as the Jukebox audio source.",
-        });
-        return;
-      }
       setMicDeviceId(deviceId);
       try {
           localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
@@ -113,18 +96,12 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             setAllAudioInputDevices(inputs);
             setAllAudioOutputDevices(outputs);
 
-            const savedJukeboxDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
             const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
 
-            if (savedJukeboxDeviceId && inputs.some(d => d.deviceId === savedJukeboxDeviceId)) {
-                setMusicDeviceId(savedJukeboxDeviceId);
-            }
-
-            if (savedUserMicId && inputs.some(d => d.deviceId === savedUserMicId) && savedUserMicId !== savedJukeboxDeviceId) {
+            if (savedUserMicId && inputs.some(d => d.deviceId === savedUserMicId)) {
                 setMicDeviceId(savedUserMicId);
             } else if (inputs.length > 0) {
-                const defaultMic = inputs.find(d => d.deviceId !== savedJukeboxDeviceId);
-                if (defaultMic) setMicDeviceId(defaultMic.deviceId);
+                setMicDeviceId(inputs[0].deviceId);
             }
 
             const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
@@ -180,54 +157,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [localParticipant, micDeviceId, toast]);
 
 
-  // Effect to publish/unpublish the jukebox track
-  useEffect(() => {
-    const setupJukeboxTrack = async () => {
-      if (!isRoomOwner || !localParticipant || !musicDeviceId) {
-        if (musicTrackPublicationRef.current) {
-          try {
-            await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
-          } catch (e) {
-            console.error("Failed to unpublish jukebox track:", e);
-          }
-          musicTrackPublicationRef.current = null;
-        }
-        return;
-      }
-
-      if (musicTrackPublicationRef.current) {
-         if (musicTrackPublicationRef.current.track?.mediaStreamTrack.getSettings().deviceId === musicDeviceId) {
-            return;
-        }
-        await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
-      }
-      
-      try {
-        const track = await createLocalAudioTrack({ deviceId: musicDeviceId });
-        const publication = await localParticipant.publishTrack(track, {
-          name: 'Jukebox',
-          source: 'jukebox' as Track.Source,
-        });
-        musicTrackPublicationRef.current = publication;
-      } catch (e) {
-        console.error("Failed to create and publish jukebox track:", e);
-        toast({ variant: "destructive", title: "Jukebox Error", description: `Could not switch to the mic you chose. It may already be in use.` });
-      }
-    };
-
-    setupJukeboxTrack();
-
-  }, [isRoomOwner, localParticipant, musicDeviceId, toast]);
-
-  useEffect(() => {
-    if (playerRef.current && !isRoomOwner && room?.currentTrackProgress) {
-        const localProgress = playerRef.current.getCurrentTime();
-        if (Math.abs(localProgress - room.currentTrackProgress) > 2) { 
-            playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
-        }
-    }
-  }, [room?.currentTrackProgress, isRoomOwner]);
-
+  // Effect for Host to update progress
   useEffect(() => {
     if (isRoomOwner && room?.isPlaying && roomRef) {
       progressUpdateIntervalRef.current = setInterval(() => {
@@ -250,6 +180,17 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       }
     };
   }, [isRoomOwner, room?.isPlaying, roomRef]);
+
+  // Effect for listeners to sync progress
+  useEffect(() => {
+    if (playerRef.current && !isRoomOwner && room?.currentTrackProgress) {
+        const localProgress = playerRef.current.getCurrentTime();
+        // Sync if more than 3 seconds out of sync
+        if (Math.abs(localProgress - room.currentTrackProgress) > 3) { 
+            playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
+        }
+    }
+  }, [room?.currentTrackProgress, isRoomOwner]);
 
 
   useEffect(() => {
@@ -355,25 +296,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     }
   };
 
-  const handleMusicDeviceSelect = (deviceId: string) => {
-    if (deviceId === micDeviceId) {
-        toast({ variant: 'destructive', title: 'Device in Use', description: 'This device is already being used as your microphone.' });
-        return;
-    }
-    setMusicDeviceId(deviceId);
-    try {
-        localStorage.setItem('hearmeout-jukebox-device-id', deviceId);
-    } catch (e) {
-        console.error("Failed to save Jukebox device to localStorage", e);
-    }
-  };
-
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   const playerProgressInSeconds = room?.currentTrackProgress || 0;
-
-  const jukeboxDeviceList = allAudioInputDevices.filter(d => d.deviceId !== micDeviceId);
-  const microphoneDeviceList = allAudioInputDevices.filter(d => d.deviceId !== musicDeviceId);
-
 
   return (
     <>
@@ -396,12 +320,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
                 isRoomOwner={isRoomOwner}
-                audioDevices={jukeboxDeviceList}
-                selectedMusicDeviceId={musicDeviceId}
-                onMusicDeviceSelect={handleMusicDeviceSelect}
-                isHostMuted={isHostMuted}
-                onHostMuteToggle={() => setIsHostMuted(v => !v)}
-                jukeboxTrack={jukeboxTrack}
               />
             </div>
 
@@ -439,7 +357,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
               participant={localParticipant}
               isHost={isRoomOwner}
               roomId={roomId}
-              micDevices={microphoneDeviceList}
+              micDevices={allAudioInputDevices}
               speakerDevices={allAudioOutputDevices}
               activeMicId={micDeviceId || ''}
               activeSpeakerId={speakerDeviceId || ''}
@@ -448,7 +366,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             />
           )}
 
-          {remoteParticipants.map((participant) => (
+          {actualParticipants.map((participant) => (
             <UserCard
               key={participant.sid}
               participant={participant}

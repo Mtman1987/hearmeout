@@ -30,10 +30,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { MediaDevice, TrackPublication } from "livekit-client";
-import { AudioTrack } from "@livekit/components-react";
 
 
 const MusicPlayerCard = forwardRef<ReactPlayer, {
@@ -48,14 +44,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
   isRoomOwner: boolean;
-  audioDevices: MediaDevice[];
-  selectedMusicDeviceId?: string;
-  onMusicDeviceSelect: (deviceId: string) => void;
   progress: number; // Progress in seconds
   onSeek: (seconds: number) => void;
-  isHostMuted: boolean;
-  onHostMuteToggle: () => void;
-  jukeboxTrack?: TrackPublication;
 }>(({
   roomId,
   currentTrack,
@@ -68,14 +58,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   activePanels,
   onTogglePanel,
   isRoomOwner,
-  audioDevices,
-  selectedMusicDeviceId,
-  onMusicDeviceSelect,
   progress,
   onSeek,
-  isHostMuted,
-  onHostMuteToggle,
-  jukeboxTrack,
 }, ref) => {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
@@ -89,9 +73,9 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(progress);
 
-  // State for listeners' local volume.
+  // State for local volume. THIS IS THE KEY CHANGE.
   const [localVolume, setLocalVolume] = useState(1);
-  const [isListenerMuted, setIsListenerMuted] = useState(false);
+  const [isLocallyMuted, setIsLocallyMuted] = useState(false);
 
   useEffect(() => {
     if (!isSeeking) {
@@ -99,31 +83,31 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
     }
   }, [progress, isSeeking]);
   
-  // Load listener volume from localStorage on mount
+  // Load local volume from localStorage on mount
   useEffect(() => {
-    if (!isClient || isRoomOwner) return;
+    if (!isClient) return;
     try {
         const savedVolume = localStorage.getItem(`hearmeout-listener-volume-${roomId}`);
         if (savedVolume !== null) {
             const parsed = JSON.parse(savedVolume);
             setLocalVolume(parsed.volume);
-            setIsListenerMuted(parsed.isMuted);
+            setIsLocallyMuted(parsed.isMuted);
         }
     } catch (e) {
-        console.error("Failed to load listener volume from localStorage", e);
+        console.error("Failed to load local music volume from localStorage", e);
     }
-  }, [roomId, isClient, isRoomOwner]);
+  }, [roomId, isClient]);
 
-  // Save listener volume to localStorage on change
+  // Save local volume to localStorage on change
   useEffect(() => {
-    if (!isClient || isRoomOwner) return;
+    if (!isClient) return;
     try {
-        const value = { volume: localVolume, isMuted: isListenerMuted };
+        const value = { volume: localVolume, isMuted: isLocallyMuted };
         localStorage.setItem(`hearmeout-listener-volume-${roomId}`, JSON.stringify(value));
     } catch (e) {
-        console.error("Failed to save listener volume to localStorage", e);
+        console.error("Failed to save local music volume to localStorage", e);
     }
-  }, [localVolume, isListenerMuted, roomId, isClient, isRoomOwner]);
+  }, [localVolume, isLocallyMuted, roomId, isClient]);
 
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -132,10 +116,10 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   const handlePlayNextWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayNext();
   const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
   
-  const handleListenerVolumeChange = (value: number[]) => {
+  const handleLocalVolumeChange = (value: number[]) => {
       setLocalVolume(value[0]);
-      if (value[0] > 0 && isListenerMuted) {
-          setIsListenerMuted(false);
+      if (value[0] > 0 && isLocallyMuted) {
+          setIsLocallyMuted(false);
       }
   }
 
@@ -145,6 +129,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   }
   
   const handleSeekCommit = (value: number[]) => {
+    // only host can seek for everyone
     if (isPlayerControlAllowed) {
         onSeek(value[0]);
     }
@@ -158,20 +143,19 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
 
-  const devices = audioDevices || [];
-  const isAudioPlayingForAnyone = !!currentTrack && playing;
-  const isAudioPlayingForMe = isRoomOwner ? isAudioPlayingForAnyone && !isHostMuted : isAudioPlayingForAnyone && !isListenerMuted;
+  const isAudioPlayingForMe = !!currentTrack && playing && !isLocallyMuted;
 
   return (
     <Card className="flex flex-col h-full">
        <div className="hidden">
-      {isClient && currentTrack && isRoomOwner && (
+        {/* Everyone now gets a ReactPlayer. Volume and mute are controlled locally. */}
+        {isClient && currentTrack && (
             <ReactPlayer
                 ref={internalPlayerRef}
                 url={currentTrack.url}
                 playing={playing}
-                volume={1} // Master volume is always 100% for streaming quality
-                muted={isHostMuted} // Host's local mute, does not affect stream
+                volume={localVolume}
+                muted={isLocallyMuted}
                 onDuration={setDuration}
                 onEnded={onPlayNext}
                 onPause={() => onPlayPause(false)}
@@ -179,15 +163,17 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 width="1px"
                 height="1px"
                 progressInterval={1000}
+                config={{
+                    youtube: {
+                        playerVars: {
+                            // Attempts to disable controls on the embedded YouTube player
+                            controls: 0,
+                            disablekb: 1,
+                        }
+                    }
+                }}
             />
-      )}
-      {/* For listeners, render the AudioTrack from LiveKit */}
-      {isClient && jukeboxTrack && !isRoomOwner && (
-          <AudioTrack 
-              trackRef={jukeboxTrack}
-              volume={isListenerMuted ? 0 : localVolume}
-          />
-      )}
+        )}
       </div>
       <CardHeader>
         <div className="flex items-center gap-4">
@@ -214,27 +200,6 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
-        {isRoomOwner && (
-            <div className="grid grid-cols-3 items-center gap-4">
-                <Label htmlFor="music-bot-device" className="col-span-1 text-sm">Jukebox Source</Label>
-                <Select
-                    onValueChange={onMusicDeviceSelect}
-                    value={selectedMusicDeviceId}
-                    disabled={devices.length === 0}
-                >
-                    <SelectTrigger id="music-bot-device" className="col-span-2">
-                        <SelectValue placeholder="Select audio source" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {devices.map((device) => (
-                            <SelectItem key={device.deviceId} value={device.deviceId}>
-                                {device.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-        )}
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
           <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
           <div className="flex items-center gap-2 ml-auto">
@@ -309,41 +274,24 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                     </TooltipContent>
                 </Tooltip>
             </div>
+            {/* THIS IS NOW THE LOCAL VOLUME CONTROL FOR EVERYONE */}
             <div className="flex items-center gap-2 flex-1 min-w-24">
-                 {isRoomOwner ? (
-                    <div className="flex items-center gap-2 w-full">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={onHostMuteToggle} className="h-9 w-9">
-                                    {isHostMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{isHostMuted ? 'Unmute for me' : 'Mute for me'}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <span className="text-sm text-muted-foreground flex-1">(Local Mute)</span>
-                    </div>
-                ) : (
-                    <>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => setIsListenerMuted(!isListenerMuted)} className="h-9 w-9">
-                                    {isListenerMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{isListenerMuted ? 'Unmute' : 'Mute'}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <Slider 
-                            value={[isListenerMuted ? 0 : localVolume]} 
-                            onValueChange={handleListenerVolumeChange}
-                            max={1}
-                            step={0.05}
-                        />
-                    </>
-                )}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => setIsLocallyMuted(!isLocallyMuted)} className="h-9 w-9">
+                            {isLocallyMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{isLocallyMuted ? 'Unmute' : 'Mute'}</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Slider 
+                    value={[isLocallyMuted ? 0 : localVolume]} 
+                    onValueChange={handleLocalVolumeChange}
+                    max={1}
+                    step={0.05}
+                />
             </div>
         </div>
       </CardContent>
