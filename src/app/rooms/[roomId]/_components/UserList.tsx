@@ -38,30 +38,6 @@ interface RoomParticipantData {
   isMuted?: boolean;
 }
 
-
-/**
- * An invisible component that finds the 'Jukebox' participant and renders its audio track,
- * allowing everyone in the room to hear the music stream.
- */
-const JukeboxAudioHandler = () => {
-  const remoteParticipants = useRemoteParticipants();
-  const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'Jukebox');
-  
-  const tracks = useTracks(
-      [Track.Source.Microphone, Track.Source.Unknown, 'jukebox' as Track.Source], 
-      { participant: jukeboxParticipant }
-  );
-
-  if (!jukeboxParticipant) {
-    return null;
-  }
-
-  const audioTrackRef = tracks.find(trackRef => trackRef.publication.kind === 'audio');
-
-  return audioTrackRef ? <AudioTrack trackRef={audioTrackRef} /> : null;
-};
-
-
 const RoomParticipants = ({ 
     isHost, 
     roomId,
@@ -92,9 +68,6 @@ const RoomParticipants = ({
   }, [firestore, roomId]);
   const { data: firestoreUsers } = useCollection<RoomParticipantData>(usersInRoomRef);
 
-  // Filter out the Jukebox participant so it doesn't get a UI card
-  const humanParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
-
   // Find the firestore doc for the local participant
   const localFirestoreUser = firestoreUsers?.find(u => u.uid === localParticipant?.identity);
 
@@ -112,18 +85,15 @@ const RoomParticipants = ({
           activeSpeakerId={activeSpeakerId}
           onMicDeviceChange={onMicDeviceChange}
           onSpeakerDeviceChange={onSpeakerDeviceChange}
-          firestoreUser={localFirestoreUser}
         />
       )}
-      {humanParticipants.map((participant) => {
-        const firestoreUser = firestoreUsers?.find(u => u.uid === participant.identity);
+      {remoteParticipants.map((participant) => {
         return (
             <UserCard 
                 key={participant.sid}
                 participant={participant}
-                isHost={false}
+                isHost={isHost}
                 roomId={roomId}
-                firestoreUser={firestoreUser}
             />
         )
       })}
@@ -472,7 +442,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   return (
     <>
-      <JukeboxAudioHandler />
       <div className="flex flex-col gap-6">
         {musicPlayerOpen && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -539,5 +508,3 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     </>
   );
 }
-
-    

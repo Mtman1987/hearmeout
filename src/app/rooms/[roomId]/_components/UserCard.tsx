@@ -8,6 +8,7 @@ import {
   MicOff,
   MoreVertical,
   Move,
+  Music,
   Pen,
   ShieldOff,
   Trash2,
@@ -20,7 +21,7 @@ import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
 import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -105,45 +106,43 @@ export default function UserCard({
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
+  const isJukebox = identity === 'Jukebox';
 
   const userInRoomRef = useMemoFirebase(() => {
-    if (!firestore || !roomId || !identity) return null;
+    if (!firestore || !roomId || !identity || isJukebox) return null;
     return doc(firestore, 'rooms', roomId, 'users', identity);
-  }, [firestore, roomId, identity]);
+  }, [firestore, roomId, identity, isJukebox]);
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
-  const micTrackRef = useTracks([Track.Source.Microphone], { participant }).find((t) => t.source === Track.Source.Microphone);
-  
+  const audioTrackRef = useTracks(
+      [Track.Source.Microphone, Track.Source.Unknown, 'jukebox' as Track.Source], 
+      { participant }
+  ).find((t) => t.publication.kind === 'audio');
+
   const isMuted = firestoreUser?.isMuted ?? false;
 
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
-    if (isLocal && micTrackRef?.publication.track) {
-      const micTrack = micTrackRef.publication.track;
-      
-      // SUPER-SAFE GUARD: Check for the function's existence before calling it.
-      if (micTrack instanceof LocalAudioTrack) {
+    if (isLocal && audioTrackRef?.publication.track) {
+      const micTrack = audioTrackRef.publication.track;
+      // SUPER-SAFE GUARD: Check if the track has the `setMuted` function before calling it.
+      if (micTrack instanceof LocalAudioTrack && typeof micTrack.setMuted === 'function') {
         if (micTrack.isMuted !== isMuted) {
           micTrack.setMuted(isMuted);
         }
       }
     }
-  }, [isLocal, micTrackRef, isMuted]);
+  }, [isLocal, audioTrackRef, isMuted]);
   
   const handleToggleMic = async () => {
     if (isLocal && userInRoomRef) {
-      try {
-        await updateDoc(userInRoomRef, { isMuted: !isMuted });
-      } catch (error) {
-        console.error("Failed to update mute state in Firestore:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not update mute status.' });
-      }
+        updateDocumentNonBlocking(userInRoomRef, { isMuted: !isMuted });
     }
   };
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
+  const displayName = isJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
   const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
   const handleVolumeChange = (value: number[]) => {
@@ -178,15 +177,21 @@ export default function UserCard({
 
   return (
     <>
-      {micTrackRef && <AudioTrack trackRef={micTrackRef} volume={!isLocal ? effectiveVolume : undefined} />}
+      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={!isLocal ? effectiveVolume : undefined} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
-                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                        {isJukebox ? (
+                            <AvatarFallback><Music className="w-8 h-8" /></AvatarFallback>
+                        ) : (
+                            <>
+                                <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                                <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                            </>
+                        )}
                     </Avatar>
                      {isMuted && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
@@ -278,7 +283,7 @@ export default function UserCard({
                             )}
                          </div>
                     ): (
-                        isHost && (
+                        isHost && !isJukebox && (
                            <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
