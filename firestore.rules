@@ -2,30 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public rooms are readable by anyone.
-    // Private rooms are readable by their owner.
-    // Room creation requires authentication.
-    // Room updates/deletes are restricted to the owner.
+    // Helper function to check if a user can read a room's content.
+    function canReadRoom(roomId) {
+      let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
+      // Access is granted if the room is not private, or if the user is the owner.
+      return room.isPrivate == false || (request.auth != null && request.auth.uid == room.ownerId);
+    }
+
     match /rooms/{roomId} {
-      allow read: if resource.data.isPrivate == false || (request.auth != null && request.auth.uid == resource.data.ownerId);
+      // Any authenticated user can query the list of rooms.
+      // Specific read access to a room's document is controlled below.
+      allow list: if request.auth != null;
+
+      // Read access to a specific room document.
+      allow read: if canReadRoom(roomId);
+      
+      // Only authenticated users can create rooms.
       allow create: if request.auth != null;
+      
+      // Only the room owner can update or delete it.
       allow update, delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
       // Rules for room subcollections
+
       match /users/{userId} {
-        // Users can join/leave a room (create/delete their own user document)
-        // Anyone in the room can see who else is there.
-        allow read: if request.auth != null && exists(/databases/$(database)/documents/rooms/$(roomId)/users/$(request.auth.uid));
-        allow create, delete: if request.auth != null && request.auth.uid == userId;
-        // The owner of the user document can update their mute status.
-        allow update: if request.auth != null && request.auth.uid == userId;
+        // Anyone who can read the room can see the list of participants.
+        allow read: if canReadRoom(roomId);
+        
+        // A user can only create, delete, or update their own participant document.
+        allow write: if request.auth != null && request.auth.uid == userId;
       }
 
       match /messages/{messageId} {
-        // Anyone in the room can read messages.
-        allow read: if request.auth != null && exists(/databases/$(database)/documents/rooms/$(roomId)/users/$(request.auth.uid));
+        // Anyone who can read the room can read its chat messages.
+        allow read: if canReadRoom(roomId);
+
         // A user can only create messages as themselves.
         allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        
         // A user can only delete their own messages.
         allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
       }
