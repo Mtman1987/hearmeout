@@ -211,7 +211,7 @@ function RoomPageContent() {
         serverUrl={livekitUrl!}
         token={livekitToken!}
         connect={true}
-        audio={true}
+        audio={false}
         video={false}
         onError={(err) => {
             console.error("LiveKit connection error:", err);

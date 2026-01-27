@@ -15,7 +15,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack, useMediaDeviceSelect } from '@livekit/components-react';
+import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, RoomEvent } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -70,15 +70,21 @@ export default function UserCard({
     isHost,
     roomId,
     micDevices,
+    speakerDevices,
     activeMicId,
+    activeSpeakerId,
     onMicDeviceChange,
+    onSpeakerDeviceChange,
 }: {
     participant: Participant;
     isHost?: boolean;
     roomId: string;
     micDevices?: MediaDevice[];
+    speakerDevices?: MediaDevice[];
     activeMicId?: string;
+    activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
+    onSpeakerDeviceChange?: (deviceId: string) => void;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -89,15 +95,12 @@ export default function UserCard({
   const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
-  const { isLocal, isMicrophoneMuted, isSpeaking, name, identity, audioLevel } = participant;
+  const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
 
-  const tracks = useTracks(
-    [Track.Source.Microphone],
-    { participant }
-  );
+  const tracks = useTracks([Track.Source.Microphone], { participant });
+  const micPublication = tracks.find((t) => t.source === Track.Source.Microphone)?.publication;
+  const isMuted = micPublication?.isMuted ?? participant.isMicrophoneMuted;
   
-  const { devices: speakerDevices, activeDeviceId: activeSpeakerId, setMediaDevice: setSpeakerDevice } = useMediaDeviceSelect({ kind: 'audiooutput' });
-
   // Use LiveKit data for remote, metadata for local to get latest profile pic from Firebase
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
   const displayName = isLocal ? name : participantMeta.displayName || name;
@@ -112,8 +115,8 @@ export default function UserCard({
   };
 
   const toggleLocalMic = () => {
-    if (isLocal) {
-      participant.setMicrophoneEnabled(!isMicrophoneMuted);
+    if (isLocal && micPublication) {
+      micPublication.setMuted(!isMuted);
     }
   };
   
@@ -158,7 +161,7 @@ export default function UserCard({
                         <AvatarImage src={photoURL || `https://picsum.photos/seed/${identity}/100/100`} alt={displayName || 'User'} data-ai-hint="person portrait" />
                         <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
-                     {isMicrophoneMuted && (
+                     {isMuted && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
                             <MicOff className="w-3 h-3 text-destructive-foreground" />
                         </div>
@@ -196,12 +199,12 @@ export default function UserCard({
                                             </div>
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor='audiooutput'>Speaker</Label>
-                                                <Select onValueChange={setSpeakerDevice} value={activeSpeakerId} disabled={speakerDevices.length === 0}>
+                                                <Select onValueChange={onSpeakerDeviceChange} value={activeSpeakerId} disabled={!speakerDevices || speakerDevices.length === 0}>
                                                     <SelectTrigger id='audiooutput' className="col-span-2">
                                                         <SelectValue placeholder="Select a speaker" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {speakerDevices.map((device) => (
+                                                        {speakerDevices && speakerDevices.map((device) => (
                                                             <SelectItem key={device.deviceId} value={device.deviceId}>
                                                                 {device.label}
                                                             </SelectItem>
@@ -224,11 +227,11 @@ export default function UserCard({
 
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                     <Button variant="ghost" size="icon" onClick={toggleLocalMic} className="h-7 w-7">
-                                        {isMicrophoneMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={toggleLocalMic} className="h-7 w-7">
+                                        {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent><p>{isMicrophoneMuted ? 'Unmute' : 'Mute'}</p></TooltipContent>
+                                <TooltipContent><p>{isMuted ? 'Unmute' : 'Mute'}</p></TooltipContent>
                             </Tooltip>
 
                             {isHost && (

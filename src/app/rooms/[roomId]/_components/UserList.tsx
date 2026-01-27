@@ -8,7 +8,7 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks, AudioTrack } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useTracks, AudioTrack } from '@livekit/components-react';
 import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
@@ -59,14 +59,20 @@ const RoomParticipants = ({
     isHost, 
     roomId,
     micDevices,
+    speakerDevices,
     activeMicId,
+    activeSpeakerId,
     onMicDeviceChange,
+    onSpeakerDeviceChange,
 }: { 
     isHost: boolean; 
     roomId: string;
     micDevices: MediaDevice[];
+    speakerDevices: MediaDevice[];
     activeMicId: string;
+    activeSpeakerId: string;
     onMicDeviceChange: (deviceId: string) => void;
+    onSpeakerDeviceChange: (deviceId: string) => void;
 }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -83,8 +89,11 @@ const RoomParticipants = ({
           isHost={isHost}
           roomId={roomId}
           micDevices={micDevices}
+          speakerDevices={speakerDevices}
           activeMicId={activeMicId}
+          activeSpeakerId={activeSpeakerId}
           onMicDeviceChange={onMicDeviceChange}
+          onSpeakerDeviceChange={onSpeakerDeviceChange}
         />
       )}
       {humanParticipants.map((participant) => (
@@ -111,12 +120,15 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
 
-  // User microphone state & all audio devices
-  const { 
-      devices: allAudioDevices, 
-      activeDeviceId: activeMicId, 
-      setMediaDevice: setMicDevice 
-  } = useMediaDeviceSelect({ kind: 'audioinput' });
+  // User microphone and speaker state
+  const [micDeviceId, setMicDeviceId] = useState<string | undefined>();
+  const micTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
+  const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>();
+  
+  // All available devices
+  const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
+  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
+
 
   // Player and Progress state
   const playerRef = useRef<ReactPlayer>(null);
@@ -134,43 +146,118 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const canControlMusic = isRoomOwner;
 
   // Handler for changing user's primary microphone
-  const handleMicDeviceChange = async (deviceId: string) => {
+  const handleMicDeviceChange = (deviceId: string) => {
+      if (deviceId === musicDeviceId) {
+        toast({
+            variant: "destructive",
+            title: "Device in Use",
+            description: "This device is already being used as the Jukebox audio source.",
+        });
+        return;
+      }
+      setMicDeviceId(deviceId);
       try {
-          await setMicDevice(deviceId);
           localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
       } catch (e) {
-          console.error("Failed to set media device:", e);
-          toast({
-              variant: "destructive",
-              title: "Error switching microphone",
-              description: "Could not switch to the selected microphone. The device may already be in use.",
-          });
+          console.error("Failed to save mic device to localStorage", e);
       }
   };
+
+  const handleSpeakerDeviceChange = (deviceId: string) => {
+    setSpeakerDeviceId(deviceId);
+    Room.setActiveDevice('audiooutput', deviceId);
+    try {
+      localStorage.setItem('hearmeout-user-speaker-device-id', deviceId);
+    } catch (e) {
+      console.error("Failed to save speaker device to localStorage", e);
+    }
+  }
 
   // Effect to load ALL saved settings from local storage on mount
   useEffect(() => {
     if (!localParticipant) return; // Wait for participant to be available.
-    try {
-        const savedJukeboxDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
-        if (savedJukeboxDeviceId) setMusicDeviceId(savedJukeboxDeviceId);
 
-        const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-        if (savedUserMicId) {
-             setMicDevice(savedUserMicId).catch(e => {
-                console.error("Failed to set initial mic device from local storage:", e);
-                // Don't show a toast here, it's too aggressive on page load.
-            });
+    // Get all audio devices once
+    const getDevices = async () => {
+        try {
+            const [inputs, outputs] = await Promise.all([
+                Room.getLocalDevices('audioinput'),
+                Room.getLocalDevices('audiooutput'),
+            ]);
+            setAllAudioInputDevices(inputs);
+            setAllAudioOutputDevices(outputs);
+
+            // Load saved Jukebox device
+            const savedJukeboxDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
+            if (savedJukeboxDeviceId) setMusicDeviceId(savedJukeboxDeviceId);
+
+            // Load and set saved user mic, or default to first available
+            const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
+            if (savedUserMicId) {
+                setMicDeviceId(savedUserMicId);
+            } else if (inputs.length > 0) {
+                setMicDeviceId(inputs[0].deviceId);
+            }
+
+            // Load and set saved speaker device
+            const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
+             if (savedSpeakerId) {
+              setSpeakerDeviceId(savedSpeakerId);
+              Room.setActiveDevice('audiooutput', savedSpeakerId);
+            } else if (outputs.length > 0) {
+              setSpeakerDeviceId(outputs[0].deviceId);
+            }
+
+        } catch (e) {
+            console.error("Failed to get local devices", e);
+            toast({ variant: 'destructive', title: "Device Error", description: "Could not access audio devices. Please check browser permissions." });
         }
-        
+    };
+    
+    getDevices();
+    
+    try {
         const savedPanels = localStorage.getItem('hearmeout-active-panels');
         if (savedPanels) setActivePanels(JSON.parse(savedPanels));
-
     } catch (e) {
-        console.error("Failed to load saved state from localStorage", e);
+        console.error("Failed to load saved panel state from localStorage", e);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localParticipant]); // Run when localParticipant becomes available.
+  }, [localParticipant, toast]); 
+
+  // Effect to publish/unpublish the microphone track
+  useEffect(() => {
+    const setupMicTrack = async () => {
+      if (!localParticipant || !micDeviceId) return;
+
+      // Unpublish existing mic track if there is one
+      if (micTrackPublicationRef.current) {
+        try {
+          await localParticipant.unpublishTrack(micTrackPublicationRef.current.track, true);
+        } catch (e) { console.error("Failed to unpublish old mic track", e); }
+      }
+
+      // Create and publish new mic track
+      try {
+        const track = await createLocalAudioTrack({ deviceId: micDeviceId });
+        const publication = await localParticipant.publishTrack(track, {
+          source: Track.Source.Microphone,
+        });
+        micTrackPublicationRef.current = publication;
+      } catch (e) {
+        console.error("Failed to create and publish mic track:", e);
+        toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
+      }
+    };
+    setupMicTrack();
+    
+    return () => { // Cleanup on unmount
+      if (micTrackPublicationRef.current && localParticipant) {
+        localParticipant.unpublishTrack(micTrackPublicationRef.current.track, true)
+          .catch(e => console.error("Failed to unpublish mic track on unmount:", e));
+      }
+    }
+  }, [localParticipant, micDeviceId, toast]);
+
 
   // Effect to publish/unpublish the jukebox track
   useEffect(() => {
@@ -358,7 +445,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleMusicDeviceSelect = (deviceId: string) => {
-    if (deviceId === activeMicId) {
+    if (deviceId === micDeviceId) {
         toast({ variant: 'destructive', title: 'Device in Use', description: 'This device is already being used as your microphone.' });
         return;
     }
@@ -374,8 +461,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const playerProgressInSeconds = room?.currentTrackProgress || 0;
 
   // Filter device lists to prevent conflicts
-  const jukeboxDeviceList = allAudioDevices.filter(d => d.deviceId !== activeMicId);
-  const microphoneDeviceList = allAudioDevices.filter(d => d.deviceId !== musicDeviceId);
+  const jukeboxDeviceList = allAudioInputDevices.filter(d => d.deviceId !== micDeviceId);
+  const microphoneDeviceList = allAudioInputDevices.filter(d => d.deviceId !== musicDeviceId);
 
 
   return (
@@ -437,8 +524,11 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           isHost={isRoomOwner} 
           roomId={roomId}
           micDevices={microphoneDeviceList}
-          activeMicId={activeMicId || ''}
+          speakerDevices={allAudioOutputDevices}
+          activeMicId={micDeviceId || ''}
+          activeSpeakerId={speakerDeviceId || ''}
           onMicDeviceChange={handleMicDeviceChange}
+          onSpeakerDeviceChange={handleSpeakerDeviceChange}
         />
       </div>
     </>
