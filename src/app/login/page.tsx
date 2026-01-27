@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,9 +11,17 @@ import {
 } from "@/components/ui/card";
 import { Logo } from "@/app/components/Logo";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LoaderCircle } from "lucide-react";
 import { useFirebase } from '@/firebase';
-import { signInAnonymously, updateProfile, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { 
+    signInAnonymously, 
+    updateProfile, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    GoogleAuthProvider, 
+    signInWithRedirect,
+    getRedirectResult 
+} from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
@@ -42,8 +51,37 @@ const GoogleIcon = () => (
 
 
 export default function LoginPage() {
-  const { auth, firestore } = useFirebase();
+  const { auth, firestore, isUserLoading } = useFirebase();
   const router = useRouter();
+  const [isProcessingLogin, setIsProcessingLogin] = useState(true);
+
+  useEffect(() => {
+    if (auth && firestore) {
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result) {
+            const user = result.user;
+            const userRef = doc(firestore, 'users', user.uid);
+            await setDoc(userRef, {
+              id: user.uid,
+              username: user.displayName,
+              email: user.email,
+              displayName: user.displayName,
+              profileImageUrl: user.photoURL,
+            }, { merge: true });
+            router.push('/');
+          } else {
+            setIsProcessingLogin(false);
+          }
+        })
+        .catch((error) => {
+          console.error("Google redirect sign-in failed:", error);
+          setIsProcessingLogin(false);
+        });
+    } else if (!isUserLoading) {
+      setIsProcessingLogin(false);
+    }
+  }, [auth, firestore, router, isUserLoading]);
 
   const handleGuestLogin = () => {
     if (auth) {
@@ -59,49 +97,37 @@ export default function LoginPage() {
 
   const handleDiscordLogin = async () => {
     if (auth && firestore) {
-      // Hardcoded credentials for simulation. This creates a persistent user.
       const email = "mtman1987@example.com";
       const password = "very-secure-simulation-password-123!";
 
       try {
-        // Try to sign in first, in case the user already exists from a previous session.
         await signInWithEmailAndPassword(auth, email, password);
       } catch (error: any) {
-        // If the user does not exist, create a new one.
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
           try {
             await createUserWithEmailAndPassword(auth, email, password);
           } catch (createError: any) {
             console.error("Simulated user creation failed:", createError);
-            alert(`Failed to create simulated user: ${createError.message}`);
             return;
           }
         } else {
-          // For other errors (e.g., network issue), just show an alert.
           console.error("Simulated sign-in failed:", error);
-          alert(`Simulated login failed: ${error.message}`);
           return;
         }
       }
 
       const user = auth.currentUser;
-
       if (user) {
-        // The user's Discord data provided for simulation
         const discordInfo = {
             username: "Mtman1987",
             discordId: "767875979561009173",
             profilePicture: "https://cdn.discordapp.com/avatars/767875979561009173/a_e1adf881255d96dfca6a5e11c46b1f6b.png"
         };
-        
         try {
-            // Update the Firebase Auth user's profile
             await updateProfile(user, {
                 displayName: discordInfo.username,
                 photoURL: discordInfo.profilePicture
             });
-
-            // Create the user document in Firestore with the Discord info
             const userRef = doc(firestore, 'users', user.uid);
             await setDoc(userRef, {
                 id: user.uid,
@@ -111,13 +137,9 @@ export default function LoginPage() {
                 profileImageUrl: discordInfo.profilePicture,
                 discordId: discordInfo.discordId,
             }, { merge: true });
-
-            // Redirect to homepage on success
             router.push('/');
-
         } catch (error: any) {
             console.error("Failed to update profile or Firestore:", error);
-            alert(`Failed to save user data: ${error.message}`);
         }
       }
     }
@@ -125,27 +147,18 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!auth || !firestore) return;
+    setIsProcessingLogin(true);
     const provider = new GoogleAuthProvider();
-    try {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-
-        // Create or update user document in Firestore
-        const userRef = doc(firestore, 'users', user.uid);
-        await setDoc(userRef, {
-            id: user.uid,
-            username: user.displayName, // Using displayName as username
-            email: user.email,
-            displayName: user.displayName,
-            profileImageUrl: user.photoURL,
-        }, { merge: true });
-
-        router.push('/');
-    } catch (error) {
-        console.error("Google sign-in failed", error);
-        alert(`Google Sign-In failed. Please try again.`);
-    }
+    await signInWithRedirect(auth, provider);
   };
+  
+  if (isUserLoading || isProcessingLogin) {
+    return (
+        <div className="flex min-h-screen w-full items-center justify-center bg-secondary">
+            <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
+        </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-secondary p-4 relative">
