@@ -20,6 +20,7 @@
  * hierarchy and enable inherited access control:
  * - `/rooms/{roomId}/media/{mediaId}`
  * - `/rooms/{roomId}/moderation_logs/{moderationLogId}`
+ * - `/rooms/{roomId}/messages/{messageId}`
  *
  * ## Key Security Decisions
  * - **Deny All by Default**: Access is explicitly granted; anything not specified is denied.
@@ -206,6 +207,23 @@ service cloud.firestore {
         allow update: if false; // Immutable logs
         allow delete: if false; // Immutable logs
       }
+
+      /**
+       * @description
+       *   Manages chat messages within a room. Any signed-in user in a public
+       *   room or the owner of a private room can read messages. Users can only
+       *   create messages as themselves. Messages are immutable.
+       * @path
+       *   /rooms/{roomId}/messages/{messageId}
+       */
+      match /messages/{messageId} {
+        allow list, get: if isSignedIn() && (isPublicRoom(roomId) || isRoomOwner(roomId));
+        allow create: if isSignedIn() 
+                       && (isPublicRoom(roomId) || isRoomOwner(roomId))
+                       && isIncomingDataOwner('userId')
+                       && request.resource.data.text.size() > 0 && request.resource.data.text.size() < 300;
+        allow update, delete: if false; // Messages are immutable
+      }
     }
 
     // ------------------------------------------------------------------------
@@ -237,3 +255,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

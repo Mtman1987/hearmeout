@@ -13,12 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Play,
   Pause,
@@ -34,6 +29,7 @@ import {
 import placeholderData from "@/lib/placeholder-images.json";
 import Playlist, { type PlaylistItem } from "./Playlist";
 import { getYoutubeInfo } from "@/app/actions";
+import { AudioVisualizer } from "./AudioVisualizer";
 
 
 const initialPlaylist: PlaylistItem[] = [
@@ -167,6 +163,7 @@ export default function MusicPlayerCard() {
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-4">
+        <AudioVisualizer isSpeaking={playing} />
         <div className="space-y-2">
             <Slider 
               value={[played]} 
@@ -205,27 +202,22 @@ export default function MusicPlayerCard() {
         </div>
       </CardContent>
       <CardFooter className="p-0 border-t">
-          <Accordion type="single" collapsible className="w-full" defaultValue="playlist">
-            <AccordionItem value="playlist">
-              <AccordionTrigger className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <ListMusic className="h-5 w-5" />
-                  Up Next
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-0 pb-0">
+          <Tabs defaultValue="playlist" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 rounded-none -mb-px">
+                <TabsTrigger value="playlist" className="rounded-tl-none">
+                    <ListMusic className="mr-2" />
+                    Up Next
+                </TabsTrigger>
+                <TabsTrigger value="add-music" className="rounded-tr-none">
+                    <Youtube className="mr-2" />
+                    Add Music
+                </TabsTrigger>
+            </TabsList>
+            <TabsContent value="playlist" className="p-0">
                  <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack?.id} />
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="add-music" className="border-b-0">
-              <AccordionTrigger className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <Youtube className="h-5 w-5" />
-                  Add Music
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 pt-2 pb-4">
-                <div className="flex gap-2">
+            </TabsContent>
+            <TabsContent value="add-music">
+                <div className="p-4 flex gap-2">
                     <div className="relative flex-grow">
                         <Input 
                           placeholder="Add YouTube URL" 
@@ -245,14 +237,14 @@ export default function MusicPlayerCard() {
                       {isFetching ? <LoaderCircle className="animate-spin" /> : 'Add'}
                     </Button>
                     <Button variant="outline" size="icon" disabled>
-                        <Upload className="h-5 w-5" />
+                        <Upload />
                         <span className="sr-only">Upload Audio</span>
                     </Button>
                 </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+              </TabsContent>
+          </Tabs>
       </CardFooter>
     </Card>
   );
 }
+    

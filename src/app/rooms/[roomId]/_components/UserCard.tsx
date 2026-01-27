@@ -10,40 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Volume2, VolumeX, MicOff, Headphones, Settings2 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
-import { cn } from "@/lib/utils";
-
-// A simple component to simulate an audio visualizer
-const AudioVisualizer = ({ isSpeaking }: { isSpeaking: boolean }) => {
-  const [heights, setHeights] = useState<number[]>([]);
-
-  useEffect(() => {
-    if (isSpeaking) {
-      const interval = setInterval(() => {
-        setHeights(Array.from({ length: 12 }, () => Math.random() * 80 + 20));
-      }, 150);
-      return () => clearInterval(interval);
-    } else {
-        setHeights([]);
-    }
-  }, [isSpeaking]);
-
-  return (
-    <div className="flex h-8 w-full items-end gap-1">
-      {[...Array(12)].map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "w-1 rounded-full bg-primary/50 transition-all duration-150"
-          )}
-          style={{
-            height: isSpeaking ? `${heights[i] || 4}px` : '4px',
-            transition: 'height 0.1s ease-in-out',
-          }}
-        />
-      ))}
-    </div>
-  );
-};
+import { AudioVisualizer } from "./AudioVisualizer";
 
 
 export default function UserCard({ user, isLocal }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; }) {
@@ -158,3 +125,5 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
     </Card>
   );
 }
+
+    
