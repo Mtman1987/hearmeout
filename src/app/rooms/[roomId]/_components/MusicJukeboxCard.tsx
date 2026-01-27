@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ReactPlayer from 'react-player/youtube';
-import { Music, Volume2, VolumeX } from 'lucide-react';
+import { Music, Volume2, VolumeX, ListMusic, Youtube } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,11 @@ import { AudioVisualizer } from "./AudioVisualizer";
 import { type PlaylistItem } from "./Playlist";
 import { updateDocumentNonBlocking } from '@/firebase';
 import { DocumentReference } from 'firebase/firestore';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 interface RoomData {
@@ -28,9 +33,11 @@ interface MusicJukeboxCardProps {
   isHost: boolean;
   roomRef: DocumentReference | null;
   setDuration: (duration: number) => void;
+  activePanels: { playlist: boolean, add: boolean };
+  onTogglePanel: (panel: 'playlist' | 'add') => void;
 }
 
-export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }: MusicJukeboxCardProps) {
+export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, activePanels, onTogglePanel }: MusicJukeboxCardProps) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
@@ -128,6 +135,28 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }:
             </div>
           </div>
           <div className="space-y-2 flex-grow flex flex-col justify-end">
+            <div className="flex items-center gap-2 justify-end">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
+                            <ListMusic className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                        <p>Up Next</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music" className="h-8 w-8">
+                            <Youtube className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                        <p>Add Music</p>
+                    </TooltipContent>
+                </Tooltip>
+            </div>
              <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
             <div className="flex items-center gap-2 pt-2">
               <Button
