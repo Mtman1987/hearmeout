@@ -25,6 +25,7 @@ interface RoomData {
   playlist?: PlaylistItem[];
   currentTrackId?: string;
   isPlaying?: boolean;
+  currentTrackProgress?: number;
 }
 
 const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string; }) => {
@@ -60,11 +61,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { localParticipant } = useLocalParticipant();
-  const { audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
+  const { devices: audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   
   const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
   const playerRef = useRef<ReactPlayer>(null);
+  const progressUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -74,47 +77,32 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
   const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
+  const canControlMusic = isRoomOwner;
 
-  useEffect(() => {
-    if (room && !room.playlist && isRoomOwner) {
-        updateDocumentNonBlocking(roomRef!, { 
-            playlist: initialPlaylist,
-            currentTrackId: initialPlaylist[0].id,
-            isPlaying: false
-        });
-    }
-  }, [room, isRoomOwner, roomRef]);
-  
+  // Effect to publish/unpublish the jukebox track
   useEffect(() => {
     const setupJukeboxTrack = async () => {
       if (!isRoomOwner || !localParticipant || !musicDeviceId) {
-        // If conditions are not met, unpublish any existing track.
         if (musicTrackPublicationRef.current) {
           try {
             await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
           } catch (e) {
-             console.error("Failed to unpublish jukebox track on condition change:", e);
+            console.error("Failed to unpublish jukebox track:", e);
           }
           musicTrackPublicationRef.current = null;
         }
         return;
       }
-      
-      // Clean up previous track before creating a new one.
-      if (musicTrackPublicationRef.current) {
-        try {
-          await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
-        } catch (e) {
-          console.error("Failed to unpublish existing jukebox track:", e);
-        }
-      }
 
-      // Create and publish the new jukebox track.
+      if (musicTrackPublicationRef.current) {
+        await localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true);
+      }
+      
       try {
         const track = await createLocalAudioTrack({ deviceId: musicDeviceId });
         const publication = await localParticipant.publishTrack(track, {
           name: 'Jukebox',
-          source: 'jukebox',
+          source: 'jukebox', // Custom source to identify the track
         });
         musicTrackPublicationRef.current = publication;
       } catch (e) {
@@ -124,24 +112,70 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
     setupJukeboxTrack();
 
-    // The main cleanup for when the component unmounts.
     return () => {
       if (musicTrackPublicationRef.current && localParticipant) {
         localParticipant.unpublishTrack(musicTrackPublicationRef.current.track, true)
           .catch(e => console.error("Failed to unpublish jukebox track on unmount:", e));
-        musicTrackPublicationRef.current = null;
       }
     };
   }, [isRoomOwner, localParticipant, musicDeviceId]);
 
-  
-  const canControlMusic = isRoomOwner;
+  // Effect to seek the player for non-hosts
+  useEffect(() => {
+    if (playerRef.current && !isRoomOwner && room?.currentTrackProgress) {
+        const localProgress = playerRef.current.getCurrentTime();
+        // Only seek if the difference is significant to avoid jitter
+        if (Math.abs(localProgress - room.currentTrackProgress) > 0.05) { // 5% difference threshold
+            playerRef.current.seekTo(room.currentTrackProgress, 'fraction');
+        }
+    }
+  }, [room?.currentTrackProgress, isRoomOwner]);
+
+  // Effect to handle progress updates from the host
+  useEffect(() => {
+    if (isRoomOwner && room?.isPlaying && roomRef) {
+      // Start interval to update progress
+      progressUpdateIntervalRef.current = setInterval(() => {
+        if (playerRef.current) {
+          const progress = playerRef.current.getCurrentTime(); // progress is 0 to 1
+          if (progress > 0) {
+            updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
+          }
+        }
+      }, 2000); // Update every 2 seconds
+    } else {
+      // Clear interval if not playing or not owner
+      if (progressUpdateIntervalRef.current) {
+        clearInterval(progressUpdateIntervalRef.current);
+      }
+    }
+
+    return () => {
+      if (progressUpdateIntervalRef.current) {
+        clearInterval(progressUpdateIntervalRef.current);
+      }
+    };
+  }, [isRoomOwner, room?.isPlaying, roomRef]);
+
+
+  useEffect(() => {
+    if (room && !room.playlist && isRoomOwner) {
+        updateDocumentNonBlocking(roomRef!, { 
+            playlist: initialPlaylist,
+            currentTrackId: initialPlaylist[0].id,
+            isPlaying: false,
+            currentTrackProgress: 0,
+        });
+    }
+  }, [room, isRoomOwner, roomRef]);
+
 
   const handlePlaySong = (songId: string) => {
     if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
+        currentTrackProgress: 0,
     });
   }
 
@@ -182,16 +216,18 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (!isRoomOwner || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
         const deletedIndex = room.playlist.findIndex(t => t.id === songId);
         const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
         updates.currentTrackId = newPlaylist[nextIndex]?.id;
+        updates.currentTrackProgress = 0;
       } else {
         updates.currentTrackId = deleteField();
         updates.isPlaying = false;
+        updates.currentTrackProgress = deleteField();
       }
     }
     
@@ -204,7 +240,17 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       playlist: [],
       currentTrackId: deleteField(),
       isPlaying: false,
+      currentTrackProgress: deleteField(),
     });
+  };
+
+  const handleSeek = (progress: number) => {
+    if (playerRef.current) {
+        playerRef.current.seekTo(progress, 'fraction');
+        if (canControlMusic && roomRef) {
+            updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
+        }
+    }
   };
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
@@ -221,6 +267,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 currentTrack={currentTrack}
                 playlist={room?.playlist || []}
                 playing={room?.isPlaying || false}
+                progress={room?.currentTrackProgress || 0}
+                onSeek={handleSeek}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
                 onPlayNext={handlePlayNext}
