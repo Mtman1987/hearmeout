@@ -1,78 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isOwner(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
-    }
-    
-    function isParticipant(roomId, userId) {
-      return exists(/databases/$(database)/documents/rooms/$(roomId)/users/$(userId));
-    }
-
-    function isBanned(roomId) {
-      return request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.get('bannedUsers', []);
-    }
-
-    match /rooms/{roomId} {
-      // Allow any authenticated user to query the rooms collection.
-      // Client-side queries are responsible for filtering for public rooms.
-      allow list: if request.auth != null;
-
-      // Allow users to get a room document if it's public, or if they are the owner or a participant.
-      allow get: if request.auth != null && 
-                  (resource.data.isPrivate == false || 
-                   isOwner(roomId) || 
-                   isParticipant(roomId, request.auth.uid));
-
-      allow create: if request.auth != null;
-      
-      // Allow any participant to update music-related fields.
-      allow update: if request.auth != null && 
-                 isParticipant(roomId, request.auth.uid) &&
-                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying']);
-
-      // Only owner can update other room details or ban users.
-      allow update: if request.auth != null && isOwner(roomId) &&
-                !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playlist', 'currentTrackId', 'isPlaying']);
-
-      allow delete: if request.auth != null && isOwner(roomId);
-
-      match /users/{userId} {
-        // Allow user to join a room if not banned, OR if the room owner adds them.
-        allow create: if request.auth != null && !isBanned(roomId) && (request.auth.uid == userId || isOwner(roomId));
-        
-        allow list, get: if request.auth != null;
-        
-        // A user can update their own 'isSpeaking' status.
-        // The room owner can update a user's 'isMutedByHost' status.
-        allow update: if request.auth != null && (
-            (
-                request.auth.uid == userId &&
-                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSpeaking'])
-            ) || (
-                isOwner(roomId) &&
-                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isMutedByHost'])
-            )
-        );
-
-        // Owner can kick (delete), or user can leave (delete)
-        allow delete: if request.auth != null && (request.auth.uid == userId || isOwner(roomId));
-      }
-      
-      match /messages/{messageId} {
-        allow read, create: if request.auth != null;
-      }
-
-      // Deny all other subcollection writes by default
-      match /{allother=**} {
-        allow write: if false;
-      }
-    }
-
-    match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+    // These rules are simplified for development.
+    // They allow any authenticated user to read and write to the database.
+    // We will need to implement more granular security before going to production.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }
