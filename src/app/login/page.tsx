@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -52,55 +52,59 @@ const GoogleIcon = () => (
 
 
 export default function LoginPage() {
-  const { auth, firestore, user, isUserLoading } = useFirebase();
+  const { auth, firestore, user } = useFirebase();
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(true);
+  const authChecked = useRef(false);
 
   useEffect(() => {
-    // If the user is authenticated, redirect them to the home page.
-    if (!isUserLoading && user) {
+    // If the user object from the provider is ever populated, redirect.
+    // This is the definitive gate for authenticated users.
+    if (user) {
       router.push('/');
+    }
+  }, [user, router]);
+
+  useEffect(() => {
+    // This effect runs once to handle the redirect logic.
+    // It checks if auth is ready and if we haven't already performed the check.
+    if (!auth || !firestore || authChecked.current) {
       return;
     }
 
-    // Only check for redirect result if Firebase is ready and we know there's no user.
-    if (!isUserLoading && !user && auth && firestore) {
-      getRedirectResult(auth)
-        .then(async (result) => {
-          if (result) {
-            // A user has successfully signed in via redirect.
-            // The `user` object will be populated in the next render cycle by the `onAuthStateChanged` listener.
-            // We just need to create their profile doc.
-            // `isProcessing` remains true, so the user will see a spinner until the redirect from the `user` object being set.
-            const loggedInUser = result.user;
-            const userRef = doc(firestore, 'users', loggedInUser.uid);
-            
-            await setDoc(userRef, {
-              id: loggedInUser.uid,
-              username: loggedInUser.displayName,
-              email: loggedInUser.email,
-              displayName: loggedInUser.displayName,
-              profileImageUrl: loggedInUser.photoURL,
-            }, { merge: true });
+    authChecked.current = true;
 
-            // IMPORTANT: No manual redirect here. The effect will re-run when `user` is populated,
-            // and the `if (!isUserLoading && user)` block will handle the redirect.
-
-          } else {
-            // No redirect result means the user landed here directly.
-            // Stop the spinner and show the login buttons.
+    const handleRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          // Success! User came from a redirect.
+          const loggedInUser = result.user;
+          const userRef = doc(firestore, 'users', loggedInUser.uid);
+          await setDoc(userRef, {
+            id: loggedInUser.uid,
+            username: loggedInUser.displayName,
+            email: loggedInUser.email,
+            displayName: loggedInUser.displayName,
+            profileImageUrl: loggedInUser.photoURL,
+          }, { merge: true });
+          // The `user` useEffect above will now handle the redirect,
+          // as the onAuthStateChanged listener will fire with the new user.
+          // The spinner remains until that happens.
+        } else {
+          // No redirect result. Show the login page, but only if there's no user signed in already.
+          if (!auth.currentUser) {
             setIsProcessing(false);
           }
-        })
-        .catch((error) => {
-          console.error("Authentication failed during redirect:", error);
-          // If something went wrong, stop the spinner and show the login page.
-          setIsProcessing(false);
-        });
-    }
-    // The dependency array ensures this effect runs when auth state or loading status changes.
-  }, [user, isUserLoading, auth, firestore, router]);
+        }
+      } catch (error) {
+        console.error("Authentication failed during redirect:", error);
+        setIsProcessing(false);
+      }
+    };
 
+    handleRedirect();
+  }, [auth, firestore]);
 
   const handleGuestLogin = () => {
     if (auth) {
@@ -228,5 +232,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
