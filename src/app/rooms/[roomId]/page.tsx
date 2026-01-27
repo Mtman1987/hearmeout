@@ -150,7 +150,6 @@ function RoomPageContent() {
   const { firestore, user, isUserLoading } = useFirebase();
   const { toast } = useToast();
   const [chatOpen, setChatOpen] = useState(false);
-  const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
 
   const roomRef = useMemoFirebase(() => {
@@ -163,29 +162,17 @@ function RoomPageContent() {
   const isDj = user?.uid === room?.djId;
   const isDjSpotOpen = !room?.djId;
 
-  // Sync local music player state with DJ status
-  useEffect(() => {
-    if (isDj && !musicPlayerOpen) {
-      setMusicPlayerOpen(true);
-    }
-    if (!isDj && musicPlayerOpen) {
-      setMusicPlayerOpen(false);
-    }
-  }, [isDj, musicPlayerOpen]);
-
   const handleMusicIconClick = () => {
     if (!roomRef || !user || !user.displayName) return;
 
     if (isDj) {
         // Current DJ is closing the player, relinquishing the role.
-        setMusicPlayerOpen(false);
         updateDocumentNonBlocking(roomRef, { 
             djId: deleteField(),
             djDisplayName: deleteField(),
         });
     } else if (isDjSpotOpen) {
         // A listener is taking the open DJ spot.
-        setMusicPlayerOpen(true);
         updateDocumentNonBlocking(roomRef, {
             djId: user.uid,
             djDisplayName: user.displayName,
@@ -289,7 +276,7 @@ function RoomPageContent() {
             showMusicIcon={showMusicIcon}
         />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} isDj={isDj} />
+            <UserList roomId={params.roomId} isDj={isDj} />
         </main>
     </LiveKitRoom>
   );
@@ -331,5 +318,3 @@ export default function RoomPage() {
         </SidebarProvider>
     );
 }
-
-    
