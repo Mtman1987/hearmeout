@@ -36,8 +36,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-    LocalParticipant,
-    RemoteParticipant,
     Track,
 } from 'livekit-client';
 import { useLocalParticipant, useTracks } from '@livekit/components-react';
@@ -69,7 +67,6 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
   // Refs for audio processing
   const monitorAudioRef = useRef<HTMLAudioElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number>();
 
@@ -139,37 +136,42 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
   // Core monitoring logic
   useEffect(() => {
     const cleanup = () => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      streamRef.current?.getTracks().forEach(track => track.stop());
-      audioContextRef.current?.close();
-      if (monitorAudioRef.current) monitorAudioRef.current.srcObject = null;
-      streamRef.current = null;
-      audioContextRef.current = null;
-      analyserRef.current = null;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+      if (monitorAudioRef.current) {
+        monitorAudioRef.current.srcObject = null;
+      }
       setLocalAudioLevel(0);
     };
 
+    if (!isLocal || !monitoring || !localParticipant) {
+      cleanup();
+      return;
+    }
+
     const setupMonitoring = async () => {
-      if (!isLocal || !monitoring || typeof navigator === 'undefined' || !localParticipant) return;
-
       try {
-        await localParticipant.setMicrophoneEnabled(true, {
-          deviceId: selectedInput,
-        });
+        const audioTrack = localParticipant.getTrack(Track.Source.Microphone);
+        const stream = audioTrack?.mediaStream;
 
-        const stream = localParticipant.getTrack(Track.Source.Microphone)?.mediaStream;
-        if (!stream) return;
-
-        streamRef.current = stream;
+        if (!stream) {
+          console.warn("Local microphone track not available for monitoring.");
+          return;
+        }
 
         // Setup for audio analysis (visualizer)
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         audioContextRef.current = audioContext;
-        analyserRef.current = audioContext.createAnalyser();
+        const analyser = audioContext.createAnalyser();
+        analyserRef.current = analyser;
         const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyserRef.current);
+        source.connect(analyser);
 
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const draw = () => {
           if (!analyserRef.current) return;
           analyserRef.current.getByteTimeDomainData(dataArray);
@@ -177,8 +179,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
           for (const amplitude of dataArray) {
             sum += Math.abs(amplitude - 128);
           }
-          const average = sum / dataArray.length;
-          setLocalAudioLevel(average / 128); // Normalize to 0-1
+          setLocalAudioLevel(sum / dataArray.length / 128);
           animationFrameRef.current = requestAnimationFrame(draw);
         };
         draw();
@@ -188,36 +189,20 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
           monitorAudioRef.current.srcObject = stream;
           monitorAudioRef.current.volume = isMuted ? 0 : volume;
           monitorAudioRef.current.muted = false;
-          if (selectedOutput && typeof monitorAudioRef.current.setSinkId === 'function') {
-            await monitorAudioRef.current.setSinkId(selectedOutput);
+          if (selectedOutput && 'setSinkId' in monitorAudioRef.current) {
+            await (monitorAudioRef.current as any).setSinkId(selectedOutput);
           }
-          monitorAudioRef.current.play().catch(e => console.error("Monitor play failed", e));
+          await monitorAudioRef.current.play();
         }
       } catch (err) {
         console.error('Error setting up audio monitoring:', err);
       }
     };
-    
-    if (monitoring) {
-      setupMonitoring();
-    } else {
-        if(isLocal && localParticipant) {
-            // We only disable the microphone if monitoring is explicitly turned off
-            // and we aren't "broadcasting" (which is now always on for simplicity)
-            // For a real app, you'd have a separate "Broadcast" toggle.
-            // localParticipant.setMicrophoneEnabled(false);
-        }
-    }
+
+    setupMonitoring();
 
     return cleanup;
-  }, [isLocal, monitoring, selectedInput, selectedOutput, localParticipant]);
-
-  // Effect to manage microphone publishing
-  useEffect(() => {
-    if (isLocal && localParticipant) {
-        localParticipant.setMicrophoneEnabled(true, { deviceId: selectedInput });
-    }
-  }, [isLocal, localParticipant, selectedInput]);
+  }, [isLocal, monitoring, selectedOutput, localParticipant, isMuted, volume]);
 
 
   // Effect to update volume/mute of the monitoring audio element
@@ -233,7 +218,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
   }
 
   // Determine if the speaking indicator should be active
-  const isVisuallySpeaking = isLocal ? localAudioLevel > 0.1 : user.isSpeaking;
+  const isVisuallySpeaking = isLocal ? localAudioLevel > 0.05 : user.isSpeaking;
 
   return (
     <>
@@ -294,7 +279,7 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
                       <div className="space-y-4 text-sm pt-4">
                           <div className="space-y-2">
                               <Label htmlFor="input-device">Input Device</Label>
-                              <Select value={selectedInput} onValueChange={setSelectedInput} disabled={inputDevices.length === 0}>
+                              <Select value={selectedInput} onValueChange={(value) => { setSelectedInput(value); localParticipant?.setMicrophoneDevice({ deviceId: value }); }} disabled={inputDevices.length === 0}>
                                   <SelectTrigger id="input-device"><SelectValue placeholder="Select input device" /></SelectTrigger>
                                   <SelectContent>
                                       {inputDevices.map(device => (<SelectItem key={device.deviceId} value={device.deviceId}>{device.label || `microphone ${inputDevices.indexOf(device) + 1}`}</SelectItem>))}

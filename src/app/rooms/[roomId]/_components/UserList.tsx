@@ -66,13 +66,13 @@ const RoomParticipants = ({
   const participants = useParticipants();
 
   const getParticipantPhotoURL = (metadata: string | undefined): string => {
-    if (!metadata) return '';
+    if (!metadata) return `https://picsum.photos/seed/${Math.random()}/100/100`;
     try {
       const parsed = JSON.parse(metadata);
-      return parsed.photoURL || '';
+      return parsed.photoURL || `https://picsum.photos/seed/${Math.random()}/100/100`;
     } catch (e) {
       console.error('Failed to parse participant metadata:', metadata, e);
-      return '';
+      return `https://picsum.photos/seed/fallback/100/100`;
     }
   };
 
@@ -363,6 +363,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
             token={livekitToken}
             connect={true}
+            reconnect={true}
             video={false}
             audio={true}
             userChoices={{
