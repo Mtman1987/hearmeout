@@ -220,57 +220,57 @@ export default function UserCard({ user, isLocal, isHost }: { user: { id: number
                 </DropdownMenu>
                 </>
             ) : isHost ? (
-                <DropdownMenu>
+                <>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <MicOff className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Mute (Room)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <LogOut className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Kick</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Ban className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Ban</TooltipContent>
+                </Tooltip>
+                <Popover>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                    <MoreVertical className="h-5 w-5" />
-                                    <span className="sr-only">Moderate User</span>
-                                </Button>
-                            </DropdownMenuTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Moderate User</p>
-                        </TooltipContent>
-                    </Tooltip>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                            <MicOff />
-                            <span>Mute (Room)</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                            <LogOut />
-                            <span>Kick</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                            <Ban />
-                            <span>Ban</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                         <Popover>
                             <PopoverTrigger asChild>
-                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} >
-                                    <ArrowRightLeft />
-                                    <span>Move</span>
-                                </DropdownMenuItem>
+                                <Button variant="ghost" size="icon">
+                                    <ArrowRightLeft className="h-5 w-5" />
+                                </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="p-1 w-56">
-                                <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
-                                <ScrollArea className="h-40">
-                                {rooms
-                                    .filter(r => r.id !== roomId)
-                                    .map(r => (
-                                        <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2">
-                                            {r.name}
-                                        </Button>
-                                    ))
-                                }
-                                </ScrollArea>
-                            </PopoverContent>
-                        </Popover>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        </TooltipTrigger>
+                        <TooltipContent>Move</TooltipContent>
+                    </Tooltip>
+                    <PopoverContent className="p-1 w-56">
+                        <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
+                        <ScrollArea className="h-40">
+                        {rooms
+                            .filter(r => r.id !== roomId)
+                            .map(r => (
+                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2">
+                                    {r.name}
+                                </Button>
+                            ))
+                        }
+                        </ScrollArea>
+                    </PopoverContent>
+                </Popover>
+                </>
             ) : null}
         </div>
       </CardHeader>
