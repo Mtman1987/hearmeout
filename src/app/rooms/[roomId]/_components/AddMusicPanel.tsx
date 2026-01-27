@@ -49,7 +49,7 @@ export default function AddMusicPanel({ onAddItems, onClose, canAddMusic }: AddM
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className='p-4 text-sm text-muted-foreground'>Only the DJ can add music.</p>
+                    <p className='p-4 text-sm text-muted-foreground'>You must be signed in to add music.</p>
                 </CardContent>
             </Card>
         )
@@ -91,5 +91,3 @@ export default function AddMusicPanel({ onAddItems, onClose, canAddMusic }: AddM
         </Card>
     );
 }
-
-    

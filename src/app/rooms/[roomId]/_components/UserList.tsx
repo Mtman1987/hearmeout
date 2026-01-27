@@ -9,7 +9,7 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'live-client';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -194,11 +194,11 @@ export default function UserList({ musicPlayerOpen, roomId, isDj }: { musicPlaye
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    if (!canControlMusic || !roomRef || !room) return;
+    if (!user || !roomRef || !room) return;
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
-    if (!room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
+    if (canControlMusic && !room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
        handlePlaySong(newItems[0].id);
     }
   };
@@ -293,7 +293,7 @@ export default function UserList({ musicPlayerOpen, roomId, isDj }: { musicPlaye
                       <AddMusicPanel
                           onAddItems={handleAddItems}
                           onClose={() => handleTogglePanel('add')}
-                          canAddMusic={canControlMusic}
+                          canAddMusic={!!user}
                       />
                   </div>
               )}
@@ -339,5 +339,3 @@ export default function UserList({ musicPlayerOpen, roomId, isDj }: { musicPlaye
     </>
   );
 }
-
-    

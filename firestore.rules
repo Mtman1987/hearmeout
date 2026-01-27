@@ -15,11 +15,15 @@ service cloud.firestore {
 
     function canReadRoom(roomId) {
       let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
+      // Anyone can read a public room. Owners can read their private rooms.
       return room.isPrivate == false || isOwner(roomId);
     }
     
     match /rooms/{roomId} {
+      // Allow any authenticated user to see the list of public rooms.
+      // Individual room reads are handled by the 'read' rule below.
       allow list: if request.auth != null;
+
       allow read: if canReadRoom(roomId);
       allow create: if request.auth != null;
       allow delete: if isOwner(roomId);
@@ -27,23 +31,34 @@ service cloud.firestore {
       allow update: if 
         // The owner of the room can update any field.
         isOwner(roomId) ||
+
         // The current DJ can update only the music-related fields.
         (isDj(roomId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying', 'currentTrackProgress'])) ||
+
+        // Any authenticated user can add songs to the playlist.
+        // They can only modify the 'playlist' field, and only by adding to it.
+        (request.auth != null &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist']) &&
+         request.resource.data.playlist.size() > resource.data.playlist.size()) ||
+
         // Any user can become the DJ if the spot is currently open.
         (resource.data.djId == null && request.resource.data.djId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djId', 'djDisplayName'])) ||
+        
         // The current DJ can relinquish their spot.
         (isDj(roomId) && request.resource.data.djId == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djId', 'djDisplayName']));
 
       // Subcollection rules
       match /users/{userId} {
         allow read: if canReadRoom(roomId);
-        allow write: if request.auth != null && request.auth.uid == userId;
+        // User can join/leave a room if they can read it.
+        allow write: if canReadRoom(roomId) && request.auth.uid == userId;
       }
 
       match /messages/{messageId} {
         allow read: if canReadRoom(roomId);
-        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-        allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+        // User can send/delete their own messages if they can read the room.
+        allow create: if canReadRoom(roomId) && request.auth != null && request.resource.data.userId == request.auth.uid;
+        allow delete: if canReadRoom(roomId) && request.auth != null && resource.data.userId == request.auth.uid;
       }
     }
 
@@ -52,5 +67,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
