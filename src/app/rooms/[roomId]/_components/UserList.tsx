@@ -6,10 +6,10 @@ import { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { doc, deleteField } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, useCollection } from '@/firebase';
+import { doc, deleteField, collection } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants, useTracks, AudioTrack } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
+import { createLocalAudioTrack, LocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice, type Participant } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +28,16 @@ interface RoomData {
   isPlaying?: boolean;
   currentTrackProgress?: number;
 }
+
+interface RoomParticipantData {
+  id: string;
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  isSpeaking: boolean;
+  isMuted?: boolean;
+}
+
 
 /**
  * An invisible component that finds the 'Jukebox' participant and renders its audio track,
@@ -71,11 +81,22 @@ const RoomParticipants = ({
     onMicDeviceChange: (deviceId: string) => void;
     onSpeakerDeviceChange: (deviceId: string) => void;
 }) => {
+  const { firestore } = useFirebase();
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
+  // Fetch participants' data from Firestore to get mute status
+  const usersInRoomRef = useMemoFirebase(() => {
+    if (!firestore || !roomId) return null;
+    return collection(firestore, 'rooms', roomId, 'users');
+  }, [firestore, roomId]);
+  const { data: firestoreUsers } = useCollection<RoomParticipantData>(usersInRoomRef);
+
   // Filter out the Jukebox participant so it doesn't get a UI card
   const humanParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
+
+  // Find the firestore doc for the local participant
+  const localFirestoreUser = firestoreUsers?.find(u => u.uid === localParticipant?.identity);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -91,16 +112,21 @@ const RoomParticipants = ({
           activeSpeakerId={activeSpeakerId}
           onMicDeviceChange={onMicDeviceChange}
           onSpeakerDeviceChange={onSpeakerDeviceChange}
+          firestoreUser={localFirestoreUser}
         />
       )}
-      {humanParticipants.map((participant) => (
-        <UserCard 
-          key={participant.sid}
-          participant={participant}
-          isHost={false}
-          roomId={roomId}
-        />
-      ))}
+      {humanParticipants.map((participant) => {
+        const firestoreUser = firestoreUsers?.find(u => u.uid === participant.identity);
+        return (
+            <UserCard 
+                key={participant.sid}
+                participant={participant}
+                isHost={false}
+                roomId={roomId}
+                firestoreUser={firestoreUser}
+            />
+        )
+      })}
     </div>
   );
 };
@@ -513,3 +539,5 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     </>
   );
 }
+
+    

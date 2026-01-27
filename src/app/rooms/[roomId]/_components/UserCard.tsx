@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Headphones,
   Mic,
@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-import { useFirebase } from '@/firebase';
+import { useFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -64,6 +64,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 
+interface RoomParticipantData {
+  id: string;
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  isSpeaking: boolean;
+  isMuted?: boolean;
+}
 
 export default function UserCard({
     participant,
@@ -75,6 +83,7 @@ export default function UserCard({
     activeSpeakerId,
     onMicDeviceChange,
     onSpeakerDeviceChange,
+    firestoreUser,
 }: {
     participant: Participant;
     isHost?: boolean;
@@ -85,6 +94,7 @@ export default function UserCard({
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
     onSpeakerDeviceChange?: (deviceId: string) => void;
+    firestoreUser?: RoomParticipantData;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -101,19 +111,28 @@ export default function UserCard({
   const micTrackRef = tracks.find((t) => t.source === Track.Source.Microphone);
   const micTrack = micTrackRef?.publication.track as LocalAudioTrack | undefined;
   
-  // This state is now derived directly from the track and is reactive for all participants.
-  const isMuted = micTrackRef?.publication.isMuted ?? participant.isMicrophoneMuted;
+  // The UI is now driven by the database state.
+  const isMuted = firestoreUser?.isMuted ?? false;
 
-  // The toggle function is now self-contained within the card.
+  // This effect syncs the LiveKit track's state FROM the Firestore state.
+  useEffect(() => {
+    if (isLocal && micTrack && firestoreUser?.isMuted !== undefined) {
+      if (micTrack.isMuted !== firestoreUser.isMuted) {
+        micTrack.setMuted(firestoreUser.isMuted);
+      }
+    }
+  }, [isLocal, micTrack, firestoreUser?.isMuted]);
+  
   const handleToggleMic = () => {
-    if (isLocal && micTrack) {
-      micTrack.setMuted(!micTrack.isMuted);
+    if (isLocal && firestore && roomId && identity && firestoreUser) {
+      const userInRoomRef = doc(firestore, 'rooms', roomId, 'users', identity);
+      updateDocumentNonBlocking(userInRoomRef, { isMuted: !firestoreUser.isMuted });
     }
   };
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = name || participantMeta.displayName || 'User';
-  const photoURL = participantMeta.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
+  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
+  const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -176,6 +195,7 @@ export default function UserCard({
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-7 w-7"><Headphones className="h-4 w-4" /></Button>
+
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80">
                                     <div className="grid gap-4">
@@ -229,7 +249,7 @@ export default function UserCard({
 
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={handleToggleMic} className="h-7 w-7">
+                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={handleToggleMic} className="h-7 w-7" disabled={!isLocal}>
                                         {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </Button>
                                 </TooltipTrigger>
@@ -323,3 +343,5 @@ export default function UserCard({
     </>
   );
 }
+
+    
