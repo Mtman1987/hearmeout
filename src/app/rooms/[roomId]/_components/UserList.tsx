@@ -8,8 +8,8 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room } from 'livekit-client';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks, AudioTrack } from '@livekit/components-react';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 
@@ -28,11 +28,38 @@ interface RoomData {
   currentTrackProgress?: number;
 }
 
+/**
+ * An invisible component that finds the 'Jukebox' participant and renders its audio track,
+ * allowing everyone in the room to hear the music stream.
+ */
+const JukeboxAudioHandler = () => {
+  const remoteParticipants = useRemoteParticipants();
+  const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'Jukebox');
+  
+  // Attempt to subscribe to any audio track from the jukebox participant.
+  // We include Source.Unknown because the track is published with a custom source name 'jukebox'.
+  const tracks = useTracks(
+      [Track.Source.Microphone, Track.Source.Unknown], 
+      { participant: jukeboxParticipant }
+  );
+
+  if (!jukeboxParticipant) {
+    return null;
+  }
+
+  // Find the first audio track and render it. LiveKit's <AudioTrack> component
+  // handles creating the <audio> element and playing the stream.
+  const audioTrackRef = tracks.find(trackRef => trackRef.publication.kind === 'audio');
+
+  return audioTrackRef ? <AudioTrack trackRef={audioTrackRef} /> : null;
+};
+
+
 const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string; }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
-  // Filter out the Jukebox participant
+  // Filter out the Jukebox participant so it doesn't get a UI card
   const humanParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
 
   return (
@@ -294,6 +321,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   return (
     <>
+      <JukeboxAudioHandler />
       <div className="flex flex-col gap-6">
         {musicPlayerOpen && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
