@@ -17,6 +17,7 @@ import {
   SkipBack,
   SkipForward,
   Volume2,
+  VolumeX,
   Youtube,
   Music,
   ListMusic,
@@ -60,6 +61,7 @@ export default function MusicPlayerCard({
   useEffect(() => { setIsClient(true); }, []);
 
   const [volume, setVolume] = useState(0.5);
+  const [isMuted, setIsMuted] = useState(false);
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
@@ -134,7 +136,13 @@ export default function MusicPlayerCard({
   const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
 
   const handlePlayPause = () => isPlayerControlAllowed && onPlayPause(!playing);
-  const handleVolumeChange = (value: number[]) => setVolume(value[0]);
+  
+  const handleVolumeChange = (value: number[]) => {
+      setVolume(value[0]);
+      if (value[0] > 0 && isMuted) {
+          setIsMuted(false);
+      }
+  }
   
   const handleProgress = (state: { played: number }) => {
     if (!seeking) {
@@ -178,6 +186,7 @@ export default function MusicPlayerCard({
                 ref={playerRef}
                 url={currentTrack.url}
                 playing={playing}
+                muted={isMuted}
                 volume={volume}
                 onProgress={handleProgress}
                 onDuration={handleDuration}
@@ -211,7 +220,7 @@ export default function MusicPlayerCard({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-          <AudioVisualizer isSpeaking={playing} />
+          <AudioVisualizer isSpeaking={playing && !isMuted} />
           <div className="flex items-center gap-2 ml-auto">
               <Tooltip>
                   <TooltipTrigger asChild>
@@ -284,9 +293,18 @@ export default function MusicPlayerCard({
                 </Tooltip>
             </div>
             <div className="flex items-center gap-2 flex-1 min-w-24">
-                <Volume2 className="h-5 w-5 text-muted-foreground" />
+                 <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => setIsMuted(!isMuted)} className="h-9 w-9">
+                            {isMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{isMuted ? 'Unmute' : 'Mute'}</p>
+                    </TooltipContent>
+                </Tooltip>
                 <Slider 
-                    value={[volume]} 
+                    value={[isMuted ? 0 : volume]} 
                     onValueChange={handleVolumeChange}
                     max={1}
                     step={0.05}
