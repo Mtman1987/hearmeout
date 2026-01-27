@@ -15,10 +15,19 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
-      allow read: if request.auth != null;
+      // Allow any authenticated user to query the rooms collection.
+      // Client-side queries are responsible for filtering for public rooms.
+      allow list: if request.auth != null;
+
+      // Allow users to get a room document if it's public, or if they are the owner or a participant.
+      allow get: if request.auth != null && 
+                  (resource.data.isPrivate == false || 
+                   isOwner(roomId) || 
+                   isParticipant(roomId, request.auth.uid));
+
       allow create: if request.auth != null;
       
-      // Allow any participant to update music-related fields. This is democratic.
+      // Allow any participant to update music-related fields.
       allow update: if request.auth != null && 
                  isParticipant(roomId, request.auth.uid) &&
                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying']);
