@@ -8,8 +8,8 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, useCollection, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField, collection } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
+import { useLocalParticipant, useRemoteParticipants, useTracks } from '@livekit/components-react';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice, type TrackPublication } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,12 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
+  
+  // Find the jukebox track publication, which is what listeners will play
+  const jukeboxTrack = useTracks([Track.Source.Jukebox]).find(t => t.publication.kind === 'audio')?.publication;
+
+  // Local mute state for the host's player
+  const [isHostMuted, setIsHostMuted] = useState(false);
   
   // Jukebox state
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
@@ -393,6 +399,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 audioDevices={jukeboxDeviceList}
                 selectedMusicDeviceId={musicDeviceId}
                 onMusicDeviceSelect={handleMusicDeviceSelect}
+                isHostMuted={isHostMuted}
+                onHostMuteToggle={() => setIsHostMuted(v => !v)}
+                jukeboxTrack={jukeboxTrack}
               />
             </div>
 
