@@ -96,14 +96,16 @@ service cloud.firestore {
      * Checks if the requesting user is the owner of a parent room.
      */
     function isRoomOwner(roomId) {
-      return isOwner(getRoomData(roomId).ownerId);
+      let roomData = getRoomData(roomId);
+      return roomData != null && isOwner(roomData.ownerId);
     }
     
     /**
      * Checks if a parent room is public.
      */
     function isPublicRoom(roomId) {
-      return getRoomData(roomId).isPrivate == false;
+      let roomData = getRoomData(roomId);
+      return roomData != null && roomData.isPrivate == false;
     }
 
     // ------------------------------------------------------------------------
@@ -217,9 +219,8 @@ service cloud.firestore {
        *   /rooms/{roomId}/messages/{messageId}
        */
       match /messages/{messageId} {
-        allow list, get: if isSignedIn() && (isPublicRoom(roomId) || isRoomOwner(roomId));
+        allow list, get: if isSignedIn();
         allow create: if isSignedIn() 
-                       && (isPublicRoom(roomId) || isRoomOwner(roomId))
                        && isIncomingDataOwner('userId')
                        && request.resource.data.text.size() > 0 && request.resource.data.text.size() < 300;
         allow update, delete: if false; // Messages are immutable
@@ -255,5 +256,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
