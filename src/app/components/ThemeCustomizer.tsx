@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -77,7 +78,7 @@ const parseHsl = (hslStr: string) => {
     return { h, s, l };
 };
 
-export function ThemeCustomizer({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+export function ThemeCustomizer() {
     const [themes, setThemes] = useState<Theme[]>([]);
     const [currentTheme, setCurrentTheme] = useState<Theme>(defaultThemes[0]);
     const [newThemeName, setNewThemeName] = useState('');
@@ -171,7 +172,6 @@ export function ThemeCustomizer({ open, onOpenChange }: { open: boolean, onOpenC
         localStorage.setItem('custom-themes', JSON.stringify(customThemes));
         setNewThemeName('');
         toast({ title: 'Theme Saved!', description: `Theme "${newThemeName}" has been saved.` });
-        onOpenChange(false);
     };
 
     if (!isMounted) return null;
@@ -189,31 +189,29 @@ export function ThemeCustomizer({ open, onOpenChange }: { open: boolean, onOpenC
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Customize Theme</DialogTitle>
-                    <DialogDescription>Change the look and feel of the app. Your changes will be saved locally.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="theme-select" className="text-right">Preset</Label>
-                        <Select value={currentTheme.name} onValueChange={(themeName) => { const theme = themes.find(t => t.name === themeName); if (theme) setCurrentTheme(theme); }}>
-                            <SelectTrigger id="theme-select" className="col-span-3"><SelectValue placeholder="Select a theme" /></SelectTrigger>
-                            <SelectContent>{themes.map((theme) => (<SelectItem key={theme.name} value={theme.name}>{theme.name}</SelectItem>))}</SelectContent>
-                        </Select>
-                    </div>
-                    <ColorInput label="Background" colorName="background" />
-                    <ColorInput label="Primary" colorName="primary" />
-                    <ColorInput label="Accent" colorName="accent" />
+        <Card>
+            <CardHeader>
+                <CardTitle>Customize Theme</CardTitle>
+                <CardDescription>Change the look and feel of the app. Your changes will be saved locally.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="theme-select" className="text-right">Preset</Label>
+                    <Select value={currentTheme.name} onValueChange={(themeName) => { const theme = themes.find(t => t.name === themeName); if (theme) setCurrentTheme(theme); }}>
+                        <SelectTrigger id="theme-select" className="col-span-3"><SelectValue placeholder="Select a theme" /></SelectTrigger>
+                        <SelectContent>{themes.map((theme) => (<SelectItem key={theme.name} value={theme.name}>{theme.name}</SelectItem>))}</SelectContent>
+                    </Select>
                 </div>
-                <DialogFooter>
-                    <div className="flex w-full gap-2">
-                         <Input placeholder="Save as new theme..." value={newThemeName} onChange={(e) => setNewThemeName(e.target.value)} />
-                        <Button onClick={handleSaveTheme}>Save</Button>
-                    </div>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                <ColorInput label="Background" colorName="background" />
+                <ColorInput label="Primary" colorName="primary" />
+                <ColorInput label="Accent" colorName="accent" />
+            </CardContent>
+            <CardFooter>
+                <div className="flex w-full gap-2">
+                     <Input placeholder="Save as new theme..." value={newThemeName} onChange={(e) => setNewThemeName(e.target.value)} />
+                    <Button onClick={handleSaveTheme}>Save</Button>
+                </div>
+            </CardFooter>
+        </Card>
     );
 }
