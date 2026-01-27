@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Volume2, VolumeX, MicOff, Headphones } from "lucide-react";
+import { Volume2, VolumeX, MicOff, Headphones, MoreVertical } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 import { cn } from '@/lib/utils';
@@ -19,6 +19,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 export default function UserCard({ user, isLocal }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; }) {
@@ -68,7 +75,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
         </div>
          {isLocal && (
-            <div className="flex justify-center mt-2">
+            <div className="flex justify-center mt-2 gap-2">
               <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="ghost" size="icon" aria-label="Audio Settings">
@@ -121,6 +128,20 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
                   </div>
                 </DialogContent>
               </Dialog>
+              <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-5 w-5" />
+                            <span className="sr-only">Room Settings</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem>Edit Room Name</DropdownMenuItem>
+                        <DropdownMenuItem>Make Private</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive">Delete Room</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
           )}
       </CardHeader>

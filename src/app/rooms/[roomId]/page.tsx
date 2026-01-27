@@ -9,20 +9,14 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Copy, MessageSquare, X, Music, MoreVertical } from 'lucide-react';
+import { Copy, MessageSquare, X, Music } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
 import { rooms } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 
 function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName: string, onToggleChat: () => void, onToggleMusicPlayer: () => void }) {
     const { isMobile } = useSidebar();
@@ -49,20 +43,6 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
                     <Copy className="mr-2 h-4 w-4" />
                     Copy Overlay URL
                 </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-5 w-5" />
-                            <span className="sr-only">Room Settings</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit Room Name</DropdownMenuItem>
-                        <DropdownMenuItem>Make Private</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">Delete Room</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
                 <Button variant="outline" size="icon" onClick={onToggleMusicPlayer}>
                     <Music className="h-5 w-5" />
                     <span className="sr-only">Toggle Music Player</span>
