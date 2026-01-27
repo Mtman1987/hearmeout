@@ -68,7 +68,7 @@ export default function UserCard({
     isHost?: boolean;
     roomId: string;
 }) {
-  const { firestore } = useFirebase();
+  const { firestore, user: firebaseUser } = useFirebase();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -83,7 +83,7 @@ export default function UserCard({
     [Track.Source.Microphone],
     { participant }
   );
-
+  
   const getParticipantPhotoURL = (meta: string | undefined): string => {
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
     try {
@@ -95,8 +95,10 @@ export default function UserCard({
     }
   };
 
-  const photoURL = getParticipantPhotoURL(metadata);
-  const displayName = name || identity;
+  // For the local user, trust the Firebase user object as the source of truth.
+  // For remote users, use the info from the LiveKit participant object.
+  const displayName = isLocal ? (firebaseUser?.displayName || name || identity) : (name || identity);
+  const photoURL = isLocal ? (firebaseUser?.photoURL || getParticipantPhotoURL(metadata)) : getParticipantPhotoURL(metadata);
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -118,8 +120,8 @@ export default function UserCard({
         return;
     };
     setIsDeleting(true);
-    const roomRef = doc(firestore, 'rooms', roomId);
     try {
+        const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
         // Force a full page reload to clear any broken client state from LiveKit/etc.
