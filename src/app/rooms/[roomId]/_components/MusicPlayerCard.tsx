@@ -28,18 +28,20 @@ import {
   Youtube,
   Upload,
   Music,
-  ListMusic
+  ListMusic,
+  LoaderCircle
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import Playlist, { type PlaylistItem } from "./Playlist";
+import { getYoutubeInfo } from "@/app/actions";
 
 
 const initialPlaylist: PlaylistItem[] = [
-  { id: 1, title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
-  { id: 2, title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
-  { id: 3, title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
-  { id: 4, title: "Don't Stop The Music", artist: "Rihanna", artId: "album-art-1", url: "https://www.youtube.com/watch?v=yd8jh9QYfSM" },
-  { id: 5, title: "So What", artist: "Miles Davis", artId: "album-art-2", url: "https://www.youtube.com/watch?v=ylXk1LBvIqU" },
+  { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
+  { id: "2", title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
+  { id: "3", title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
+  { id: "4", title: "Don't Stop The Music", artist: "Rihanna", artId: "album-art-1", url: "https://www.youtube.com/watch?v=yd8jh9QYfSM" },
+  { id: "5", title: "So What", artist: "Miles Davis", artId: "album-art-2", url: "https://www.youtube.com/watch?v=ylXk1LBvIqU" },
 ];
 
 
@@ -59,6 +61,7 @@ export default function MusicPlayerCard() {
   const [seeking, setSeeking] = useState(false);
   
   const [inputValue, setInputValue] = useState("");
+  const [isFetching, setIsFetching] = useState(false);
   const playerRef = useRef<ReactPlayer>(null);
 
   const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
@@ -85,17 +88,15 @@ export default function MusicPlayerCard() {
     playerRef.current?.seekTo(value[0]);
   };
   
-  const handleAddUrl = () => {
-    if (inputValue.trim() && isClient && ReactPlayer.canPlay(inputValue)) {
-      const newSong: PlaylistItem = {
-        id: Date.now(),
-        title: "YouTube Video",
-        artist: "From URL",
-        artId: "album-art-1",
-        url: inputValue,
-      };
-      
-      const newPlaylist = [newSong, ...playlist];
+  const handleAddUrl = async () => {
+    if (!inputValue.trim() || !isClient || isFetching) return;
+    
+    setIsFetching(true);
+    const newItems = await getYoutubeInfo(inputValue);
+    setIsFetching(false);
+
+    if (newItems && newItems.length > 0) {
+      const newPlaylist = [...newItems, ...playlist];
       setPlaylist(newPlaylist);
       playSong(0);
       setInputValue("");
@@ -129,7 +130,7 @@ export default function MusicPlayerCard() {
   return (
     <Card className="flex flex-col">
        <div className="hidden">
-      {isClient && (
+      {isClient && currentTrack && (
             <ReactPlayer
                 ref={playerRef}
                 url={currentTrack.url}
@@ -150,7 +151,7 @@ export default function MusicPlayerCard() {
             {albumArt &&
                 <Image
                     src={albumArt.imageUrl}
-                    alt={currentTrack.title}
+                    alt={currentTrack?.title || "Album Art"}
                     width={64}
                     height={64}
                     className="rounded-lg shadow-lg object-cover aspect-square"
@@ -161,7 +162,7 @@ export default function MusicPlayerCard() {
                 <CardTitle className="font-headline text-lg flex items-center gap-2">
                     <Music /> Now Playing
                 </CardTitle>
-                <p className="text-muted-foreground text-sm truncate">{currentTrack.title} - {currentTrack.artist}</p>
+                <p className="text-muted-foreground text-sm truncate">{currentTrack?.title || "..."} - {currentTrack?.artist || "..."}</p>
             </div>
         </div>
       </CardHeader>
@@ -213,7 +214,7 @@ export default function MusicPlayerCard() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-0 pb-0">
-                 <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack.id} />
+                 <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack?.id} />
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="add-music" className="border-b-0">
@@ -237,10 +238,13 @@ export default function MusicPlayerCard() {
                               handleAddUrl();
                             }
                           }}
+                          disabled={isFetching}
                         />
                     </div>
-                    <Button variant="outline" onClick={handleAddUrl}>Add</Button>
-                    <Button variant="outline" size="icon">
+                    <Button variant="outline" onClick={handleAddUrl} disabled={isFetching}>
+                      {isFetching ? <LoaderCircle className="animate-spin" /> : 'Add'}
+                    </Button>
+                    <Button variant="outline" size="icon" disabled>
                         <Upload className="h-5 w-5" />
                         <span className="sr-only">Upload Audio</span>
                     </Button>

@@ -5,14 +5,14 @@ import placeholderData from "@/lib/placeholder-images.json";
 import { cn } from "@/lib/utils";
 
 export type PlaylistItem = {
-  id: number;
+  id: string;
   title: string;
   artist: string;
   artId: string;
   url: string;
 };
 
-export default function Playlist({ playlist, onPlaySong, currentTrackId }: { playlist: PlaylistItem[], onPlaySong: (index: number) => void, currentTrackId: number }) {
+export default function Playlist({ playlist, onPlaySong, currentTrackId }: { playlist: PlaylistItem[], onPlaySong: (index: number) => void, currentTrackId: string }) {
   return (
     <ScrollArea className="h-64 w-full">
       <ul className="space-y-1 p-2">
