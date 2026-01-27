@@ -26,7 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { generateLiveKitToken } from '@/app/actions';
 
 function ConnectionStatusIndicator() {
@@ -160,18 +160,24 @@ function RoomPageContent() {
   }, [initialStateSet, isRoomLoading, isUserLoading, room, user]);
 
   useEffect(() => {
-    // We need to wait for user to be loaded, and for them to have a display name.
-    if (isUserLoading || !user?.uid || !user.displayName) {
+    if (isUserLoading || !user?.uid || !user.displayName || !firestore || !params.roomId) {
       return;
     }
 
-    const participantIdentity = user.uid;
-    const participantName = user.displayName;
-    const participantMetadata = JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` });
+    const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
+    const participantData = {
+        uid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+        isMuted: false, 
+        isSpeaking: false,
+    };
+    setDoc(userInRoomRef, participantData, { merge: true });
 
     (async () => {
       try {
-        const token = await generateLiveKitToken(params.roomId, participantIdentity, participantName, participantMetadata);
+        const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
+        const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
         setLivekitToken(token);
       } catch (e: any) {
         console.error('[RoomPage] Failed to get LiveKit token', e);
@@ -182,7 +188,11 @@ function RoomPageContent() {
         });
       }
     })();
-  }, [user, isUserLoading, params.roomId, toast]);
+    
+    return () => {
+      deleteDoc(userInRoomRef);
+    };
+  }, [user, isUserLoading, params.roomId, toast, firestore]);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const { isMobile } = useSidebar();
