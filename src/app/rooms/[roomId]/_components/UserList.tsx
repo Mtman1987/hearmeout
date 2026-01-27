@@ -6,10 +6,10 @@ import { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, useCollection } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, useCollection, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField, collection } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useTracks, AudioTrack } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice, type Participant } from 'livekit-client';
+import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
@@ -29,84 +29,13 @@ interface RoomData {
   currentTrackProgress?: number;
 }
 
-interface RoomParticipantData {
-  id: string;
-  uid: string;
-  displayName: string;
-  photoURL: string;
-  isSpeaking: boolean;
-  isMuted?: boolean;
-}
-
-const RoomParticipants = ({ 
-    isHost, 
-    roomId,
-    micDevices,
-    speakerDevices,
-    activeMicId,
-    activeSpeakerId,
-    onMicDeviceChange,
-    onSpeakerDeviceChange,
-}: { 
-    isHost: boolean; 
-    roomId: string;
-    micDevices: MediaDevice[];
-    speakerDevices: MediaDevice[];
-    activeMicId: string;
-    activeSpeakerId: string;
-    onMicDeviceChange: (deviceId: string) => void;
-    onSpeakerDeviceChange: (deviceId: string) => void;
-}) => {
-  const { firestore } = useFirebase();
-  const { localParticipant } = useLocalParticipant();
-  const remoteParticipants = useRemoteParticipants();
-
-  // Fetch participants' data from Firestore to get mute status
-  const usersInRoomRef = useMemoFirebase(() => {
-    if (!firestore || !roomId) return null;
-    return collection(firestore, 'rooms', roomId, 'users');
-  }, [firestore, roomId]);
-  const { data: firestoreUsers } = useCollection<RoomParticipantData>(usersInRoomRef);
-
-  // Find the firestore doc for the local participant
-  const localFirestoreUser = firestoreUsers?.find(u => u.uid === localParticipant?.identity);
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-       {localParticipant && (
-        <UserCard
-          key={localParticipant.sid}
-          participant={localParticipant}
-          isHost={isHost}
-          roomId={roomId}
-          micDevices={micDevices}
-          speakerDevices={speakerDevices}
-          activeMicId={activeMicId}
-          activeSpeakerId={activeSpeakerId}
-          onMicDeviceChange={onMicDeviceChange}
-          onSpeakerDeviceChange={onSpeakerDeviceChange}
-        />
-      )}
-      {remoteParticipants.map((participant) => {
-        return (
-            <UserCard 
-                key={participant.sid}
-                participant={participant}
-                isHost={isHost}
-                roomId={roomId}
-            />
-        )
-      })}
-    </div>
-  );
-};
-
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
   
   const { localParticipant } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
   
   // Jukebox state
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
@@ -318,8 +247,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
 
   useEffect(() => {
-    if (room && !room.playlist && isRoomOwner) {
-        updateDocumentNonBlocking(roomRef!, { 
+    if (room && !room.playlist && isRoomOwner && roomRef) {
+        updateDocumentNonBlocking(roomRef, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
             isPlaying: false,
@@ -494,16 +423,31 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           </div>
         )}
         
-        <RoomParticipants 
-          isHost={isRoomOwner} 
-          roomId={roomId}
-          micDevices={microphoneDeviceList}
-          speakerDevices={allAudioOutputDevices}
-          activeMicId={micDeviceId || ''}
-          activeSpeakerId={speakerDeviceId || ''}
-          onMicDeviceChange={handleMicDeviceChange}
-          onSpeakerDeviceChange={handleSpeakerDeviceChange}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {localParticipant && (
+            <UserCard
+              key={localParticipant.sid}
+              participant={localParticipant}
+              isHost={isRoomOwner}
+              roomId={roomId}
+              micDevices={microphoneDeviceList}
+              speakerDevices={allAudioOutputDevices}
+              activeMicId={micDeviceId || ''}
+              activeSpeakerId={speakerDeviceId || ''}
+              onMicDeviceChange={handleMicDeviceChange}
+              onSpeakerDeviceChange={handleSpeakerDeviceChange}
+            />
+          )}
+
+          {remoteParticipants.map((participant) => (
+            <UserCard
+              key={participant.sid}
+              participant={participant}
+              isHost={false}
+              roomId={roomId}
+            />
+          ))}
+        </div>
       </div>
     </>
   );
