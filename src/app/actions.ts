@@ -33,7 +33,7 @@ export async function getYoutubeInfo(url: string): Promise<PlaylistItem[] | null
 }
 
 export async function generateLiveKitToken(roomName: string, participantIdentity: string, participantName: string, participantMetadata: string) {
-  if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
+  if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.NEXT_PUBLIC_LIVEKIT_URL) {
     throw new Error('LiveKit server environment variables are not configured.');
   }
 
