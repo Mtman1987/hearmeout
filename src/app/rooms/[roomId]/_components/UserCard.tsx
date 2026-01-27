@@ -13,9 +13,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AudioTrack, useTracks } from '@livekit/components-react';
-import type { Participant } from 'livekit-client';
+import type { Participant, TrackPublication } from 'livekit-client';
 import { Track } from 'livekit-client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 
 export default function UserCard({
@@ -23,9 +23,15 @@ export default function UserCard({
 }: {
     participant: Participant;
 }) {
-  const [volume, setVolume] = useState(0.7);
+  const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
+  
   const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity } = participant;
+
+  const tracks = useTracks(
+    [Track.Source.Microphone],
+    { participant }
+  );
 
   const getParticipantPhotoURL = (meta: string | undefined): string => {
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
@@ -40,12 +46,7 @@ export default function UserCard({
 
   const photoURL = getParticipantPhotoURL(metadata);
   const displayName = name || identity;
-
-  const tracks = useTracks(
-    [{ source: Track.Source.Microphone, withPlaceholder: false }],
-    { participant }
-  );
-
+  
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
       setVolume(newVolume);
@@ -56,7 +57,7 @@ export default function UserCard({
 
   const toggleLocalMic = () => {
     if (isLocal) {
-        participant.setMicrophoneEnabled(!isMicrophoneMuted);
+        participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
     }
   };
 
