@@ -51,7 +51,7 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
         <UserCard 
           key={participant.sid}
           participant={participant}
-          isHost={false}
+          isHost={isHost}
           roomId={roomId}
         />
       ))}
@@ -75,7 +75,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
-   useEffect(() => {
+  useEffect(() => {
     if (isUserLoading || !user) {
       return;
     }
@@ -100,7 +100,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
       }
     })();
-  }, [user, isUserLoading, roomId, toast]);
+  }, [user?.uid, user?.displayName, user?.photoURL, isUserLoading, roomId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && user?.uid === room.ownerId) {

@@ -90,7 +90,6 @@ export default function UserCard({
       const parsed = JSON.parse(meta);
       return parsed.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
     } catch (e) {
-      console.error(`Failed to parse participant metadata for ${identity}:`, meta, e);
       return `https://picsum.photos/seed/${identity}/100/100`;
     }
   };
@@ -125,7 +124,6 @@ export default function UserCard({
         const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
-        // Force a full page reload to clear any broken client state from LiveKit/etc.
         window.location.assign('/');
     } catch (error) {
         console.error("Error deleting room:", error);
