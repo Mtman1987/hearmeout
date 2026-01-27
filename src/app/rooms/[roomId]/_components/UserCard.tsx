@@ -126,10 +126,7 @@ export default function UserCard({
 
   const toggleLocalMic = () => {
     if (isLocal) {
-        const micTrackRef = tracks.find(trackRef => trackRef.source === Track.Source.Microphone);
-        if (micTrackRef && micTrackRef.publication) {
-           micTrackRef.publication.setMuted(!isMicrophoneMuted);
-        }
+      participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
     }
   };
   
