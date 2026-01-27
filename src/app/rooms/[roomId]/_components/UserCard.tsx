@@ -117,12 +117,12 @@ export default function UserCard({
   useEffect(() => {
     // Only applies to the local participant's card on their own screen.
     if (isLocal && micTrackRef?.publication.track) {
-      const micTrack = micTrackRef.publication.track;
+      const micTrack = micTrackRef.publication.track as any;
       
       // SUPER-SAFE GUARD:
       // We check if the track object exists AND if it has a 'setMuted' method
       // before we even think about calling it. This is safer than `instanceof`.
-      if (micTrack && typeof (micTrack as any).setMuted === 'function') {
+      if (micTrack && typeof micTrack.setMuted === 'function') {
         const localTrack = micTrack as LocalAudioTrack; // We can now safely cast
         if (firestoreUser?.isMuted !== undefined && localTrack.isMuted !== firestoreUser.isMuted) {
           localTrack.setMuted(firestoreUser.isMuted);
