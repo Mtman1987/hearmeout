@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   MoreVertical,
   Trash2,
@@ -56,7 +55,6 @@ export default function UserCard({
     roomId: string;
 }) {
   const { firestore } = useFirebase();
-  const router = useRouter();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -67,14 +65,12 @@ export default function UserCard({
   
   const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity } = participant;
 
-  // This hook is the correct way to get the participant's tracks.
   const tracks = useTracks(
     [Track.Source.Microphone],
     { participant }
   );
 
   const getParticipantPhotoURL = (meta: string | undefined): string => {
-    // This function handles getting the photo URL from the metadata string
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
     try {
       const parsed = JSON.parse(meta);
@@ -88,7 +84,6 @@ export default function UserCard({
   const photoURL = getParticipantPhotoURL(metadata);
   const displayName = name || identity;
   
-  // For remote participants, we need to manage their volume locally
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
       setVolume(newVolume);
@@ -97,14 +92,12 @@ export default function UserCard({
       }
   };
 
-  // For the local participant, this toggles their microphone on/off for everyone
   const toggleLocalMic = () => {
     if (isLocal) {
         participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
     }
   };
 
-  // For the host, this deletes the entire room
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
         toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
@@ -115,7 +108,8 @@ export default function UserCard({
     try {
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
-        router.push('/');
+        // Force a full page reload to clear any broken client state from LiveKit/etc.
+        window.location.assign('/');
     } catch (error) {
         console.error("Error deleting room:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not delete the room.' });
@@ -123,12 +117,10 @@ export default function UserCard({
     }
   };
 
-  // The volume sent to the AudioTrack component
   const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
     <>
-      {/* This component handles playing the audio from the participant's track */}
       {tracks.map(trackRef => (
         <AudioTrack
             key={trackRef.publication.trackSid}
@@ -137,8 +129,29 @@ export default function UserCard({
         />
       ))}
 
-      {/* The main card UI */}
-      <Card className="flex flex-col h-full">
+      <Card className="flex flex-col h-full relative">
+        {isLocal && isHost && (
+          <div className="absolute top-2 right-2 z-10">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-5 w-5" />
+                  <span className="sr-only">Room Actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2" />
+                  Delete Room
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+        
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -153,35 +166,11 @@ export default function UserCard({
               )}
             </div>
             <CardTitle className="font-headline text-lg flex-1 truncate">{displayName}</CardTitle>
-
-            {/* The ... menu for the host to delete the room */}
-            {isLocal && isHost && (
-              <div className="ml-auto">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-5 w-5" />
-                      <span className="sr-only">Room Actions</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => setIsDeleteDialogOpen(true)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="mr-2" />
-                      Delete Room
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
           <SpeakingIndicator isSpeaking={isSpeaking} />
 
-           {/* Render controls for YOUR card (local participant) */}
            {isLocal ? (
              <Tooltip>
                 <TooltipTrigger asChild>
@@ -198,7 +187,6 @@ export default function UserCard({
                 <TooltipContent><p>{isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
               </Tooltip>
             ) : (
-                /* Render controls for OTHER users' cards (remote participants) */
                 <div className="flex items-center gap-2">
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -220,7 +208,6 @@ export default function UserCard({
         </CardContent>
       </Card>
       
-      {/* The confirmation dialog for deleting the room */}
       {isLocal && isHost && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
             <AlertDialogContent>
