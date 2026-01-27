@@ -1,11 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // These rules are simplified for development.
-    // They allow any authenticated user to read and write to the database.
-    // We will need to implement more granular security before going to production.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
   }
 }
