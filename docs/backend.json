@@ -66,6 +66,14 @@
           "type": "string",
           "description": "Reference to User. (Relationship: User 1:N Room). The user ID of the room owner."
         },
+        "djId": {
+          "type": "string",
+          "description": "The user ID of the current DJ controlling the music."
+        },
+        "djDisplayName": {
+          "type": "string",
+          "description": "The display name of the current DJ."
+        },
         "isPrivate": {
           "type": "boolean",
           "description": "Indicates whether the room is private or public."

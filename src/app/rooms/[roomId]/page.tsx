@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, MessageSquare, X, Music, LoaderCircle } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
+import type { RoomData } from './_components/UserList';
 import ChatBox from './_components/ChatBox';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -25,8 +26,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { generateLiveKitToken } from '@/app/actions';
 
 function ConnectionStatusIndicator() {
@@ -69,7 +70,17 @@ function ConnectionStatusIndicator() {
     );
 }
 
-function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName: string, onToggleChat: () => void, onToggleMusicPlayer: () => void }) {
+function RoomHeader({ 
+    roomName, 
+    onToggleChat, 
+    onMusicIconClick,
+    showMusicIcon 
+} : { 
+    roomName: string, 
+    onToggleChat: () => void, 
+    onMusicIconClick: () => void,
+    showMusicIcon: boolean
+}) {
     const { isMobile } = useSidebar();
     const params = useParams();
     const { toast } = useToast();
@@ -104,17 +115,19 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
                         <p>Copy Overlay URL</p>
                     </TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={onToggleMusicPlayer}>
-                            <Music className="h-5 w-5" />
-                            <span className="sr-only">Toggle Music Player</span>
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Toggle Music Player</p>
-                    </TooltipContent>
-                </Tooltip>
+                {showMusicIcon && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={onMusicIconClick}>
+                                <Music className="h-5 w-5" />
+                                <span className="sr-only">Toggle Music Player</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Toggle Music Player</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
                 <Tooltip>
                     <TooltipTrigger asChild>
                          <Button variant="outline" size="icon" onClick={() => onToggleChat()}>
@@ -138,7 +151,6 @@ function RoomPageContent() {
   const { toast } = useToast();
   const [chatOpen, setChatOpen] = useState(false);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
-  const [initialStateSet, setInitialStateSet] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
 
   const roomRef = useMemoFirebase(() => {
@@ -146,18 +158,46 @@ function RoomPageContent() {
       return doc(firestore, 'rooms', params.roomId);
   }, [firestore, params.roomId]);
 
-  const { data: room, isLoading: isRoomLoading } = useDoc<{ name: string, ownerId: string, isPlaying?: boolean }>(roomRef);
+  const { data: room, isLoading: isRoomLoading } = useDoc<RoomData>(roomRef);
 
+  const isDj = user?.uid === room?.djId;
+  const isDjSpotOpen = !room?.djId;
+
+  // Sync local music player state with DJ status
   useEffect(() => {
-    if (initialStateSet || isRoomLoading || isUserLoading || !room || !user) {
-      return;
-    }
-    const isHost = user.uid === room.ownerId;
-    if (!isHost && room.isPlaying) {
+    if (isDj && !musicPlayerOpen) {
       setMusicPlayerOpen(true);
     }
-    setInitialStateSet(true);
-  }, [initialStateSet, isRoomLoading, isUserLoading, room, user]);
+    if (!isDj && musicPlayerOpen) {
+      setMusicPlayerOpen(false);
+    }
+  }, [isDj, musicPlayerOpen]);
+
+  const handleMusicIconClick = () => {
+    if (!roomRef || !user || !user.displayName) return;
+
+    if (isDj) {
+        // Current DJ is closing the player, relinquishing the role.
+        setMusicPlayerOpen(false);
+        updateDocumentNonBlocking(roomRef, { 
+            djId: deleteField(),
+            djDisplayName: deleteField(),
+        });
+    } else if (isDjSpotOpen) {
+        // A listener is taking the open DJ spot.
+        setMusicPlayerOpen(true);
+        updateDocumentNonBlocking(roomRef, {
+            djId: user.uid,
+            djDisplayName: user.displayName,
+        });
+    } else {
+        // A listener is trying to take the spot, but it's already taken.
+        toast({ 
+            title: "DJ spot is taken", 
+            description: `${room?.djDisplayName || 'Someone'} is currently the DJ.` 
+        });
+    }
+  };
 
   useEffect(() => {
     if (isUserLoading || !user?.uid || !user.displayName || !firestore || !params.roomId) {
@@ -207,6 +247,7 @@ function RoomPageContent() {
   const { isMobile } = useSidebar();
 
   const isLoading = isUserLoading || isRoomLoading || !livekitToken || !livekitUrl;
+  const showMusicIcon = isDj || isDjSpotOpen;
 
   const renderLoadingState = () => (
       <div className="flex flex-col h-screen">
@@ -244,10 +285,11 @@ function RoomPageContent() {
         <RoomHeader
             roomName={room?.name || 'Loading room...'}
             onToggleChat={() => setChatOpen(!chatOpen)}
-            onToggleMusicPlayer={() => setMusicPlayerOpen(!musicPlayerOpen)}
+            onMusicIconClick={handleMusicIconClick}
+            showMusicIcon={showMusicIcon}
         />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} />
+            <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} isDj={isDj} />
         </main>
     </LiveKitRoom>
   );
@@ -289,3 +331,5 @@ export default function RoomPage() {
         </SidebarProvider>
     );
 }
+
+    

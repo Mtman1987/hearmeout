@@ -9,7 +9,7 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'live-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -20,16 +20,18 @@ const initialPlaylist: PlaylistItem[] = [
   { id: "3", title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
 ];
 
-interface RoomData {
+export interface RoomData {
   name: string;
   ownerId: string;
+  djId?: string;
+  djDisplayName?: string;
   playlist?: PlaylistItem[];
   currentTrackId?: string;
   isPlaying?: boolean;
   currentTrackProgress?: number;
 }
 
-export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
+export default function UserList({ musicPlayerOpen, roomId, isDj }: { musicPlayerOpen: boolean, roomId: string, isDj: boolean }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
@@ -56,8 +58,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
-  const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
-  const canControlMusic = isRoomOwner;
+  const canControlMusic = isDj;
 
   // Handler for changing user's primary microphone
   const handleMicDeviceChange = (deviceId: string) => {
@@ -153,7 +154,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [localParticipant, micDeviceId, toast]);
 
   useEffect(() => {
-    if (room && !room.playlist && isRoomOwner && roomRef) {
+    if (room && !room.playlist && canControlMusic && roomRef) {
         updateDocumentNonBlocking(roomRef, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
@@ -161,7 +162,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             currentTrackProgress: 0,
         });
     }
-  }, [room, isRoomOwner, roomRef]);
+  }, [room, canControlMusic, roomRef]);
 
 
   const handlePlaySong = (songId: string) => {
@@ -193,7 +194,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    if (!isRoomOwner || !roomRef || !room) return;
+    if (!canControlMusic || !roomRef || !room) return;
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
@@ -215,7 +216,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }
 
   const handleRemoveSong = (songId: string) => {
-    if (!isRoomOwner || !roomRef || !room?.playlist) return;
+    if (!canControlMusic || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
     let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
@@ -237,7 +238,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleClearPlaylist = () => {
-    if (!isRoomOwner || !roomRef) return;
+    if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { 
       playlist: [],
       currentTrackId: deleteField(),
@@ -292,7 +293,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                       <AddMusicPanel
                           onAddItems={handleAddItems}
                           onClose={() => handleTogglePanel('add')}
-                          canAddMusic={isRoomOwner}
+                          canAddMusic={canControlMusic}
                       />
                   </div>
               )}
@@ -301,10 +302,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         )}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {musicPlayerOpen && room?.currentTrackId && room && (
+          {room?.currentTrackId && (
             <MusicJukeboxCard 
               room={room} 
-              isHost={isRoomOwner}
+              isHost={canControlMusic}
               roomRef={roomRef}
               setDuration={setDuration}
             />
@@ -314,7 +315,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             <UserCard
               key={localParticipant.sid}
               participant={localParticipant}
-              isHost={isRoomOwner}
+              isHost={user?.uid === room?.ownerId}
               roomId={roomId}
               micDevices={allAudioInputDevices}
               speakerDevices={allAudioOutputDevices}
@@ -338,3 +339,5 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     </>
   );
 }
+
+    
