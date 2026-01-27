@@ -118,6 +118,7 @@ export default function LoginPage() {
                 displayName: discordInfo.username,
                 profileImageUrl: discordInfo.profilePicture,
                 discordId: discordInfo.discordId,
+                isAdmin: true,
             }, { merge: true });
         } catch (error: any) {
             console.error("Failed to update profile or Firestore:", error);
