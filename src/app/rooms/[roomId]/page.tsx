@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -15,9 +16,22 @@ import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
 import { rooms } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 function RoomHeader({ roomName, onToggleChat } : { roomName: string, onToggleChat: () => void }) {
     const { isMobile } = useSidebar();
+    const params = useParams();
+    const { toast } = useToast();
+
+    const copyOverlayUrl = () => {
+        const url = `${window.location.origin}/overlay/${params.roomId}`;
+        navigator.clipboard.writeText(url);
+        toast({
+            title: "Overlay URL Copied!",
+            description: "You can now paste this into your streaming software.",
+        });
+    }
+
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
             <SidebarTrigger className={isMobile ? "" : "hidden md:flex"} />
@@ -25,7 +39,7 @@ function RoomHeader({ roomName, onToggleChat } : { roomName: string, onToggleCha
             <h2 className="text-xl font-bold font-headline truncate flex-1">{roomName}</h2>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                <Button variant="outline" size="sm" className='hidden sm:flex'>
+                <Button variant="outline" size="sm" className='hidden sm:flex' onClick={copyOverlayUrl}>
                     <Copy className="mr-2 h-4 w-4" />
                     Copy Overlay URL
                 </Button>

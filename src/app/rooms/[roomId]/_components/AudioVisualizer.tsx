@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,15 +26,14 @@ export const AudioVisualizer = ({ isSpeaking }: { isSpeaking: boolean }) => {
         <div
           key={i}
           className={cn(
-            "w-1 rounded-full bg-primary/50"
+            "w-1 rounded-full bg-primary/50 transition-all duration-100",
+            { "bg-primary": isSpeaking }
           )}
           style={{
             height: isSpeaking ? `${heights[i] || 4}px` : '4px',
-            transition: 'height 0.1s ease-in-out',
           }}
         />
       ))}
     </div>
   );
 };
-    

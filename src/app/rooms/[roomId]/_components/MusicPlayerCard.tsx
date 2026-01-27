@@ -1,3 +1,4 @@
+
 'use client';
 
 import Image from "next/image";
@@ -92,9 +93,12 @@ export default function MusicPlayerCard() {
     setIsFetching(false);
 
     if (newItems && newItems.length > 0) {
-      const newPlaylist = [...newItems, ...playlist];
+      const newPlaylist = [...playlist, ...newItems];
       setPlaylist(newPlaylist);
-      playSong(0);
+      // If nothing was playing, start playing the first new song
+      if (!playing && playlist.length === initialPlaylist.length) {
+         playSong(initialPlaylist.length);
+      }
       setInputValue("");
     }
   };
@@ -113,7 +117,7 @@ export default function MusicPlayerCard() {
     if (isNaN(seconds) || seconds === Infinity) return '0:00';
     const date = new Date(seconds * 1000);
     const ss = date.getUTCSeconds().toString().padStart(2, '0');
-    const mm = date.getUTCMinutes().toString().padStart(2, '0');
+    const mm = date.getUTCMinutes().toString();
     const hh = Math.floor(seconds / 3600);
     if (hh > 0) {
       return `${hh}:${mm.toString().padStart(2, '0')}:${ss}`;
@@ -247,4 +251,3 @@ export default function MusicPlayerCard() {
     </Card>
   );
 }
-    

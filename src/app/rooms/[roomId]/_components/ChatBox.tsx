@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, Send, Info, ShieldAlert, Smile, Frown, Meh, LoaderCircle } from "lucide-react";
+import { Send, Info, ShieldAlert, Smile, Frown, Meh, LoaderCircle } from "lucide-react";
 import { runModeration } from "@/app/actions";
 import type { ModerateContentOutput } from "@/ai/flows/sentiment-based-moderation";
 import { useCollection, useFirebase, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
@@ -51,12 +52,12 @@ export default function ChatBox() {
   const { data: messages, isLoading: messagesLoading } = useCollection<ChatMessage>(messagesQuery);
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      // Simple scroll to bottom
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+    // Scroll to bottom when new messages arrive
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (viewport) {
+        setTimeout(() => {
+            viewport.scrollTop = viewport.scrollHeight;
+        }, 0);
     }
   }, [messages]);
 
@@ -64,15 +65,17 @@ export default function ChatBox() {
     e.preventDefault();
     if (!input.trim() || isPending || !user || !messagesRef) return;
 
+    const displayName = user.displayName || 'Anonymous';
+
     const newMessage = {
       text: input.trim(),
       userId: user.uid,
-      displayName: user.displayName || 'Guest User',
+      displayName: displayName,
       createdAt: serverTimestamp(),
     };
     
-    // This is non-blocking
     addDocumentNonBlocking(messagesRef, newMessage);
+    setInput("");
 
     const currentMessages = messages || [];
     const conversationHistory = [...currentMessages, { displayName: newMessage.displayName, text: newMessage.text }]
@@ -87,7 +90,6 @@ export default function ChatBox() {
         console.error("Moderation failed", error);
     } finally {
         setIsPending(false);
-        setInput("");
     }
   };
   
@@ -121,7 +123,7 @@ export default function ChatBox() {
             {!messagesLoading && messages && messages.map((msg) => (
               <p key={msg.id} className="text-sm">
                 <span className="font-bold text-primary mr-2">
-                  {msg.displayName === user?.displayName ? 'You' : msg.displayName}:
+                  {msg.userId === user?.uid ? 'You' : msg.displayName}:
                 </span>
                 {msg.text}
               </p>
@@ -172,4 +174,3 @@ export default function ChatBox() {
     </Card>
   );
 }
-    

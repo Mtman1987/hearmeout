@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,7 +26,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
 
   useEffect(() => {
     async function getMediaDevices() {
-        if (isLocal) {
+        if (isLocal && typeof navigator !== 'undefined' && navigator.mediaDevices) {
             try {
                 // Request permissions
                 await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -82,7 +83,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
             <div className="space-y-4 text-sm">
                 <div className="space-y-2">
                     <Label htmlFor="input-device">Input Device</Label>
-                    <Select value={selectedInput} onValueChange={setSelectedInput}>
+                    <Select value={selectedInput} onValueChange={setSelectedInput} disabled={inputDevices.length === 0}>
                         <SelectTrigger id="input-device">
                             <SelectValue placeholder="Select input device" />
                         </SelectTrigger>
@@ -95,7 +96,7 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="output-device">Output Device</Label>
-                    <Select value={selectedOutput} onValueChange={setSelectedOutput}>
+                    <Select value={selectedOutput} onValueChange={setSelectedOutput} disabled={outputDevices.length === 0}>
                         <SelectTrigger id="output-device">
                             <SelectValue placeholder="Select output device" />
                         </SelectTrigger>
@@ -125,5 +126,3 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
     </Card>
   );
 }
-
-    
