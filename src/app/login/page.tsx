@@ -209,8 +209,8 @@ export default function LoginPage() {
       if (user) {
         const userInfo = {
             username: "Madired29 | MOD",
-            discordId: "9876543210987654321", // Using a fake discordId for consistency
-            profilePicture: `https://picsum.photos/seed/${user.uid}/100/100`
+            discordId: "1177028432949940244",
+            profilePicture: "https://cdn.discordapp.com/avatars/1177028432949940244/c2d41bae9566783581415508de900f08.png"
         };
         try {
             await updateProfile(user, {
