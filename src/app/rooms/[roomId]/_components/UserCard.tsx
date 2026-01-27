@@ -15,7 +15,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, useParticipantContext } from '@livekit/components-react';
+import { useTracks } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -68,7 +68,7 @@ export default function UserCard({
     isHost?: boolean;
     roomId: string;
 }) {
-  const { firestore, user: firebaseUser } = useFirebase();
+  const { firestore } = useFirebase();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,10 +95,8 @@ export default function UserCard({
     }
   };
 
-  // For the local user, trust the Firebase user object as the source of truth.
-  // For remote users, use the info from the LiveKit participant object.
-  const displayName = isLocal ? (firebaseUser?.displayName || name || identity) : (name || identity);
-  const photoURL = isLocal ? (firebaseUser?.photoURL || getParticipantPhotoURL(metadata)) : getParticipantPhotoURL(metadata);
+  const displayName = name || identity;
+  const photoURL = getParticipantPhotoURL(metadata);
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -110,7 +108,10 @@ export default function UserCard({
 
   const toggleLocalMic = () => {
     if (isLocal) {
-        participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
+        const micTrack = tracks.find(trackRef => trackRef.source === Track.Source.Microphone);
+        if (micTrack && micTrack.publication) {
+           micTrack.publication.setMuted(!isMicrophoneMuted);
+        }
     }
   };
   
@@ -213,7 +214,7 @@ export default function UserCard({
                          </div>
                     ): (
                         isHost && (
-                            <div className='flex items-center gap-1'>
+                           <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-7 w-7"><UserX className="h-4 w-4" /></Button>

@@ -37,14 +37,6 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
-  if (!localParticipant && remoteParticipants.length === 0) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
-      </div>
-    );
-  }
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
        {localParticipant && (
@@ -59,9 +51,13 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
         <UserCard 
           key={participant.sid}
           participant={participant}
+          isHost={false}
           roomId={roomId}
         />
       ))}
+      {(!localParticipant && remoteParticipants.length === 0) &&
+         Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="w-3/4 space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-4 w-1/2" /></div></div></CardHeader><CardContent><div className="space-y-2"><Skeleton className="h-2 w-full" /><Skeleton className="h-10 w-full" /></div></CardContent></Card>)
+      }
     </div>
   );
 };
@@ -80,32 +76,20 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
    useEffect(() => {
-    console.log('[UserList] useEffect triggered for LiveKit token generation.');
-
-    if (isUserLoading) {
-      console.log('[UserList] Waiting for user authentication to complete...');
-      return;
-    }
-    
-    if (!user) {
-      console.log('[UserList] Aborting token generation: user not logged in.');
+    if (isUserLoading || !user) {
       return;
     }
 
     const displayName = user.displayName || (user.isAnonymous ? 'Guest' : 'Anonymous');
     if (!roomId || !displayName) {
-       console.log('[UserList] Aborting token generation: missing roomId or displayName.', { hasRoomId: !!roomId, hasDisplayName: !!displayName });
       return;
     }
 
     (async () => {
       try {
-        console.log('[UserList] Attempting to generate LiveKit token...');
         const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
         const metadata = JSON.stringify({ photoURL });
-
         const token = await generateLiveKitToken(roomId, user.uid, displayName, metadata);
-        console.log('[UserList] Successfully generated LiveKit token.');
         setLivekitToken(token);
       } catch (e) {
         console.error('[UserList] Failed to get LiveKit token', e);
@@ -204,7 +188,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-  console.log('[UserList] Preparing to render LiveKitRoom.', { hasToken: !!livekitToken, livekitUrl });
   
   return (
     <>
@@ -261,15 +244,12 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             connect={true}
             audio={true}
             video={false}
-            onConnected={() => console.log('[LiveKitRoom] Successfully connected!')}
-            onDisconnected={() => console.log('[LiveKitRoom] Disconnected.')}
-            onError={(e) => console.error('[LiveKitRoom] Connection error:', e)}
           >
             <RoomParticipants isHost={isRoomOwner} roomId={roomId}/>
           </LiveKitRoom>
         ) : (
            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-             {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
+             {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="w-3/4 space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-4 w-1/2" /></div></div></CardHeader><CardContent><div className="space-y-2"><Skeleton className="h-2 w-full" /><Skeleton className="h-10 w-full" /></div></CardContent></Card>)}
            </div>
         )}
       </div>
