@@ -13,9 +13,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AudioTrack, useTracks } from '@livekit/components-react';
-import type { Participant, TrackPublication } from 'livekit-client';
+import type { Participant } from 'livekit-client';
 import { Track } from 'livekit-client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 
 export default function UserCard({

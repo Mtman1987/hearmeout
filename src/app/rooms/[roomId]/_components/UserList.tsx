@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import { generateLiveKitToken } from '@/app/actions';
 import {
   LiveKitRoom,
-  useParticipants,
+  useLocalParticipant,
+  useRemoteParticipants,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 
@@ -33,9 +34,10 @@ interface RoomData {
 }
 
 const RoomParticipants = () => {
-  const participants = useParticipants();
+  const { localParticipant } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
 
-  if (participants.length === 0) {
+  if (!localParticipant && remoteParticipants.length === 0) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
@@ -45,11 +47,16 @@ const RoomParticipants = () => {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-      {participants.map((participant) => (
+       {localParticipant && (
+        <UserCard
+          key={localParticipant.sid}
+          participant={localParticipant}
+        />
+      )}
+      {remoteParticipants.map((participant) => (
         <UserCard 
           key={participant.sid}
           participant={participant}
-          isLocal={participant.isLocal}
         />
       ))}
     </div>
@@ -113,7 +120,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     }
   }, [room, user, roomRef]);
   
-  const canControlMusic = !!user;
+  const isRoomOwner = user?.uid === room?.ownerId;
+  const canControlMusic = isRoomOwner;
+
 
   const handlePlaySong = (songId: string) => {
     if (!canControlMusic || !roomRef) return;
@@ -143,7 +152,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    if (!canControlMusic || !roomRef || !room) return;
+    if (!isRoomOwner || !roomRef || !room) return;
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
@@ -157,7 +166,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }
 
   const handleRemoveSong = (songId: string) => {
-    if (!canControlMusic || !roomRef || !room?.playlist) return;
+    if (!isRoomOwner || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
     let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
@@ -177,7 +186,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleClearPlaylist = () => {
-    if (!canControlMusic || !roomRef) return;
+    if (!isRoomOwner || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { 
       playlist: [],
       currentTrackId: deleteField(),
@@ -229,7 +238,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                       <AddMusicPanel
                           onAddItems={handleAddItems}
                           onClose={() => handleTogglePanel('add')}
-                          canAddMusic={canControlMusic}
+                          canAddMusic={isRoomOwner}
                       />
                   </div>
               )}
