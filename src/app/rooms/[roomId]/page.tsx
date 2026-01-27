@@ -137,7 +137,8 @@ function RoomPageContent() {
   const { firestore, user, isUserLoading } = useFirebase();
   const { toast } = useToast();
   const [chatOpen, setChatOpen] = useState(false);
-  const [musicPlayerOpen, setMusicPlayerOpen] = useState(true);
+  const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
+  const [initialStateSet, setInitialStateSet] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
 
   const roomRef = useMemoFirebase(() => {
@@ -145,7 +146,18 @@ function RoomPageContent() {
       return doc(firestore, 'rooms', params.roomId);
   }, [firestore, params.roomId]);
 
-  const { data: room, isLoading: isRoomLoading } = useDoc<{ name: string, ownerId: string }>(roomRef);
+  const { data: room, isLoading: isRoomLoading } = useDoc<{ name: string, ownerId: string, isPlaying?: boolean }>(roomRef);
+
+  useEffect(() => {
+    if (initialStateSet || isRoomLoading || isUserLoading || !room || !user) {
+      return;
+    }
+    const isHost = user.uid === room.ownerId;
+    if (!isHost && room.isPlaying) {
+      setMusicPlayerOpen(true);
+    }
+    setInitialStateSet(true);
+  }, [initialStateSet, isRoomLoading, isUserLoading, room, user]);
 
   useEffect(() => {
     // We need to wait for user to be loaded, and for them to have a display name.
