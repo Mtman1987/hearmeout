@@ -15,7 +15,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack } from '@livekit/components-react';
+import { useTracks, AudioTrack, useMediaDeviceSelect } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -49,6 +49,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -56,6 +63,30 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SpeakingIndicator } from "./SpeakingIndicator";
+
+
+const AudioSettingsContent = ({ kind }: { kind: 'audioinput' | 'audiooutput' }) => {
+    const { devices, activeDeviceId, setMediaDevice } = useMediaDeviceSelect({ kind });
+    const label = kind === 'audioinput' ? 'Microphone' : 'Speaker';
+
+    return (
+        <div className="grid grid-cols-3 items-center gap-4">
+            <Label htmlFor={kind} className="col-span-1">{label}</Label>
+            <Select onValueChange={setMediaDevice} defaultValue={activeDeviceId} disabled={devices.length === 0}>
+                <SelectTrigger id={kind} className="col-span-2">
+                    <SelectValue placeholder={`Select a ${label.toLowerCase()}`} />
+                </SelectTrigger>
+                <SelectContent>
+                    {devices.map((device) => (
+                        <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    );
+};
 
 
 export default function UserCard({
@@ -76,29 +107,16 @@ export default function UserCard({
   const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
-  const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity, audioLevel } = participant;
+  const { isLocal, isMicrophoneMuted, isSpeaking, name, identity, audioLevel } = participant;
 
   const tracks = useTracks(
     [Track.Source.Microphone],
     { participant }
   );
   
-  const getRemoteParticipantPhotoURL = (meta: string | undefined): string => {
-    if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
-    try {
-      const parsed = JSON.parse(meta);
-      return parsed.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
-    } catch (e) {
-      return `https://picsum.photos/seed/${identity}/100/100`;
-    }
-  };
-
-  // If this is the local user's card, use the definitive data from Firebase.
-  // Otherwise, use the data from LiveKit for remote participants.
-  const displayName = isLocal ? firebaseUser?.displayName || name : name || identity;
-  const photoURL = isLocal 
-    ? firebaseUser?.photoURL || `https://picsum.photos/seed/${firebaseUser?.uid}/100/100` 
-    : getRemoteParticipantPhotoURL(metadata);
+  // Use Firebase data for local user, LiveKit data for remote
+  const displayName = isLocal ? firebaseUser?.displayName || name : name;
+  const photoURL = isLocal ? firebaseUser?.photoURL : participant.metadata ? JSON.parse(participant.metadata).photoURL : undefined;
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -133,6 +151,8 @@ export default function UserCard({
         console.error("Error deleting room:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not delete the room.' });
         setIsDeleting(false);
+    } finally {
+        setIsDeleting(false);
     }
   };
 
@@ -153,7 +173,7 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL} alt={displayName} data-ai-hint="person portrait" />
+                        <AvatarImage src={photoURL || `https://picsum.photos/seed/${identity}/100/100`} alt={displayName} data-ai-hint="person portrait" />
                         <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
                      {isMicrophoneMuted && (
@@ -176,14 +196,16 @@ export default function UserCard({
                                             <h4 className="font-medium leading-none">Audio Settings</h4>
                                             <p className="text-sm text-muted-foreground">Manage your input and output settings.</p>
                                         </div>
-                                         <div className="grid gap-2">
+                                         <div className="grid gap-4">
+                                            <AudioSettingsContent kind="audioinput" />
+                                            <AudioSettingsContent kind="audiooutput" />
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor="push-to-talk">Push to Talk</Label>
-                                                <Switch id="push-to-talk" disabled className="col-span-2" />
+                                                <Switch id="push-to-talk" className="col-span-2" />
                                             </div>
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor="monitoring">Monitoring</Label>
-                                                <Switch id="monitoring" disabled className="col-span-2" />
+                                                <Switch id="monitoring" className="col-span-2" />
                                             </div>
                                         </div>
                                     </div>
@@ -251,13 +273,12 @@ export default function UserCard({
                 <SpeakingIndicator audioLevel={audioLevel} />
                 {isLocal ? (
                     <div className="space-y-1 pt-2">
-                        <Label className="text-xs text-muted-foreground">My Mic Volume (Disabled)</Label>
+                        <Label className="text-xs text-muted-foreground">Mic Volume</Label>
                         <Slider
                             aria-label="My Mic Volume"
                             defaultValue={[1]}
                             max={1}
                             step={0.05}
-                            disabled
                         />
                     </div>
                 ) : (
