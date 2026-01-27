@@ -12,11 +12,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
 import { generateLiveKitToken } from '@/app/actions';
-import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   useParticipants,
-  useLocalParticipant,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 
@@ -36,7 +34,14 @@ interface RoomData {
 
 const RoomParticipants = () => {
   const participants = useParticipants();
-  const { localParticipant } = useLocalParticipant();
+
+  if (participants.length === 0) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -44,7 +49,6 @@ const RoomParticipants = () => {
         <UserCard 
           key={participant.sid}
           participant={participant}
-          isLocal={participant.sid === localParticipant.sid}
         />
       ))}
     </div>
@@ -56,7 +60,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
-  const router = useRouter();
 
   const displayName = user?.displayName || (user?.isAnonymous ? 'Guest' : 'Anonymous');
 
@@ -68,21 +71,27 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
    useEffect(() => {
-    if (!user || !roomId || !displayName) return;
+    console.log('[UserList] useEffect triggered for LiveKit token generation.');
+    if (!user || !roomId || !displayName) {
+      console.log('[UserList] Aborting token generation: missing user, roomId, or displayName.', { hasUser: !!user, hasRoomId: !!roomId, hasDisplayName: !!displayName });
+      return;
+    }
 
     (async () => {
       try {
+        console.log('[UserList] Attempting to generate LiveKit token...');
         const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
         const metadata = JSON.stringify({ photoURL });
 
         const token = await generateLiveKitToken(roomId, user.uid, displayName, metadata);
+        console.log('[UserList] Successfully generated LiveKit token.');
         setLivekitToken(token);
       } catch (e) {
-        console.error('Failed to get LiveKit token', e);
+        console.error('[UserList] Failed to get LiveKit token', e);
         toast({
           variant: 'destructive',
           title: 'Voice Connection Failed',
-          description: 'Could not connect to the voice server.',
+          description: 'Could not generate an authentication token for the voice server.',
         });
       }
     })();
@@ -171,6 +180,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
+  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+  console.log('[UserList] Preparing to render LiveKitRoom.', { hasToken: !!livekitToken, livekitUrl });
   
   return (
     <>
@@ -220,13 +231,16 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           </div>
         )}
         
-        {livekitToken && process.env.NEXT_PUBLIC_LIVEKIT_URL ? (
+        {livekitToken && livekitUrl ? (
           <LiveKitRoom
-            serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
+            serverUrl={livekitUrl}
             token={livekitToken}
             connect={true}
             audio={true}
             video={false}
+            onConnected={() => console.log('[LiveKitRoom] Successfully connected!')}
+            onDisconnected={() => console.log('[LiveKitRoom] Disconnected.')}
+            onError={(e) => console.error('[LiveKitRoom] Connection error:', e)}
           >
             <RoomParticipants />
           </LiveKitRoom>
