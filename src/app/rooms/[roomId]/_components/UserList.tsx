@@ -30,6 +30,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [playing, setPlaying] = useState(false);
+  const isHost = users.some(u => u.name === "You");
 
   const playSong = (index: number) => {
     setCurrentTrackIndex(index);
@@ -76,7 +77,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
             />
           </div>
 
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
             {activePanels.playlist && (
                 <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
                     <PlaylistPanel
@@ -100,7 +101,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {users.map((user) => (
-          <UserCard key={user.id} user={user} isLocal={user.name === "You"} />
+          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} />
         ))}
       </div>
     </div>

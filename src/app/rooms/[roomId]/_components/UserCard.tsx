@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Volume2, VolumeX, MicOff, Headphones, MoreVertical } from "lucide-react";
+import { Volume2, VolumeX, MicOff, Headphones, MoreVertical, Ban, LogOut, ArrowRightLeft } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 import { cn } from '@/lib/utils';
@@ -32,15 +32,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { rooms } from "@/lib/rooms";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
-export default function UserCard({ user, isLocal }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; }) {
+export default function UserCard({ user, isLocal, isHost }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; }) {
   const params = useParams();
   const roomId = params.roomId as string;
 
   const [volume, setVolume] = useState(isLocal ? 1 : 0.7);
   const [isMuted, setIsMuted] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false); // New state to track loading
+  const [isLoaded, setIsLoaded] = useState(false);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedInput, setSelectedInput] = useState<string>('default');
@@ -132,8 +135,8 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
           </div>
           <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
         </div>
-         <div className="flex justify-center mt-2 gap-2 h-9">
-            {isLocal && (
+         <div className="flex justify-center items-center mt-2 gap-2 h-9">
+            {isLocal ? (
                 <>
                 <Dialog>
                     <Tooltip>
@@ -216,7 +219,59 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
                     </DropdownMenuContent>
                 </DropdownMenu>
                 </>
-            )}
+            ) : isHost ? (
+                <DropdownMenu>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <MoreVertical className="h-5 w-5" />
+                                    <span className="sr-only">Moderate User</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Moderate User</p>
+                        </TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem>
+                            <MicOff />
+                            <span>Mute (Room)</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                            <LogOut />
+                            <span>Kick</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">
+                            <Ban />
+                            <span>Ban</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                         <Popover>
+                            <PopoverTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} >
+                                    <ArrowRightLeft />
+                                    <span>Move</span>
+                                </DropdownMenuItem>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-1 w-56">
+                                <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
+                                <ScrollArea className="h-40">
+                                {rooms
+                                    .filter(r => r.id !== roomId)
+                                    .map(r => (
+                                        <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2">
+                                            {r.name}
+                                        </Button>
+                                    ))
+                                }
+                                </ScrollArea>
+                            </PopoverContent>
+                        </Popover>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : null}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow justify-end">
