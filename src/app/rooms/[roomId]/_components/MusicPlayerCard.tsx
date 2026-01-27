@@ -50,6 +50,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   audioDevices: MediaDevice[];
   selectedMusicDeviceId?: string;
   onMusicDeviceSelect: (deviceId: string) => void;
+  progress: number;
+  onSeek: (progress: number) => void;
 }>(({
   roomId,
   currentTrack,
@@ -65,12 +67,22 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   audioDevices,
   selectedMusicDeviceId,
   onMusicDeviceSelect,
+  progress,
+  onSeek,
 }, ref) => {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
   const [volume, setVolume] = useState(0.5);
   const [isMuted, setIsMuted] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(progress);
+
+  useEffect(() => {
+    if (!isSeeking) {
+      setSeekValue(progress);
+    }
+  }, [progress, isSeeking]);
   
   // Load volume from localStorage on mount
   useEffect(() => {
@@ -109,6 +121,20 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
       }
   }
 
+  const handleSeekChange = (value: number[]) => {
+    if (!isSeeking) setIsSeeking(true);
+    setSeekValue(value[0]);
+  }
+  
+  const handleSeekCommit = (value: number[]) => {
+    if (isPlayerControlAllowed) {
+        onSeek(value[0]);
+    }
+    setIsSeeking(false);
+  }
+
+  const devices = audioDevices || [];
+
   return (
     <Card className="flex flex-col h-full">
        <div className="hidden">
@@ -124,6 +150,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 onPlay={() => onPlayPause(true)}
                 width="1px"
                 height="1px"
+                progressInterval={1000} // Get progress updates every second
             />
       )}
       </div>
@@ -158,13 +185,13 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 <Select
                     onValueChange={onMusicDeviceSelect}
                     defaultValue={selectedMusicDeviceId}
-                    disabled={audioDevices.length === 0}
+                    disabled={devices.length === 0}
                 >
                     <SelectTrigger id="music-bot-device" className="col-span-2">
                         <SelectValue placeholder="Select audio source" />
                     </SelectTrigger>
                     <SelectContent>
-                        {audioDevices.map((device) => (
+                        {devices.map((device) => (
                             <SelectItem key={device.deviceId} value={device.deviceId}>
                                 {device.label}
                             </SelectItem>
@@ -198,8 +225,19 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
               </Tooltip>
           </div>
         </div>
+
+        <div className="pt-2">
+            <Slider
+                value={[seekValue]}
+                onValueChange={handleSeekChange}
+                onValueCommit={handleSeekCommit}
+                max={1}
+                step={0.001}
+                disabled={!isPlayerControlAllowed}
+            />
+        </div>
        
-        <div className="flex items-center justify-between gap-2 flex-wrap pt-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center justify-center gap-1">
                 <Tooltip>
                     <TooltipTrigger asChild>

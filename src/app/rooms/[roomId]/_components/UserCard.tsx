@@ -164,7 +164,7 @@ export default function UserCard({
         <AudioTrack
             key={trackRef.publication.trackSid}
             trackRef={trackRef}
-            volume={effectiveVolume}
+            volume={!isLocal ? effectiveVolume : undefined}
         />
       ))}
 
@@ -201,11 +201,11 @@ export default function UserCard({
                                             <AudioSettingsContent kind="audiooutput" />
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor="push-to-talk">Push to Talk</Label>
-                                                <Switch id="push-to-talk" className="col-span-2" />
+                                                <Switch id="push-to-talk" className="col-span-2" disabled />
                                             </div>
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor="monitoring">Monitoring</Label>
-                                                <Switch id="monitoring" className="col-span-2" />
+                                                <Switch id="monitoring" className="col-span-2" disabled />
                                             </div>
                                         </div>
                                     </div>
@@ -279,6 +279,7 @@ export default function UserCard({
                             defaultValue={[1]}
                             max={1}
                             step={0.05}
+                            disabled
                         />
                     </div>
                 ) : (
