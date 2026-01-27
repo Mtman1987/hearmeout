@@ -26,9 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, MessageSquare, Home, Music, PlusCircle, LogOut, Settings, User } from 'lucide-react';
 import { Logo } from '@/app/components/Logo';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import MusicPlayer from './_components/MusicPlayer';
 import UserList from './_components/UserList';
-import Playlist from './_components/Playlist';
 import ChatBox from './_components/ChatBox';
 
 const rooms = [
@@ -184,18 +182,8 @@ export default function RoomPage() {
             <SidebarInset>
                 <div className="flex flex-col h-screen">
                     <RoomHeader roomName={room.name} onToggleChat={() => setChatOpen(true)} />
-                    <main className="flex-1 flex flex-col gap-6 p-4 md:p-6 overflow-hidden">
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 flex-shrink-0">
-                            <div className="xl:col-span-2">
-                                <MusicPlayer />
-                            </div>
-                            <div className="row-start-2 xl:row-start-auto">
-                                <Playlist />
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto pr-2 -mr-2 rounded-lg">
-                            <UserList />
-                        </div>
+                    <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+                        <UserList />
                     </main>
                 </div>
             </SidebarInset>
