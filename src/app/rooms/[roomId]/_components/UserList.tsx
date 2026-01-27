@@ -2,18 +2,32 @@
 
 import UserCard from "./UserCard";
 import MusicPlayerCard from "./MusicPlayerCard";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 
-const initialUsers = [
-  { id: 3, name: "You", avatarId: "avatar-3", isSpeaking: false },
+const allMockUsers = [
   { id: 2, name: "Mike", avatarId: "avatar-2", isSpeaking: false },
   { id: 4, name: "David", avatarId: "avatar-4", isSpeaking: false },
   { id: 5, name: "Chloe", avatarId: "avatar-1", isSpeaking: false },
   { id: 6, name: "Alex", avatarId: "avatar-2", isSpeaking: false },
+  { id: 7, name: "Sarah", avatarId: "avatar-1", isSpeaking: false },
+  { id: 8, name: "Ben", avatarId: "avatar-4", isSpeaking: false },
+  { id: 9, name: "Emily", avatarId: "avatar-3", isSpeaking: false },
 ];
+
+const usersByRoom: { [key: string]: typeof allMockUsers } = {
+    "1": [allMockUsers[0], allMockUsers[2], allMockUsers[3]], // Lofi: Mike, Chloe, Alex
+    "2": [allMockUsers[1], allMockUsers[4]], // Indie: David, Sarah
+    "3": [allMockUsers[0], allMockUsers[1], allMockUsers[5], allMockUsers[6]], // Throwback: Mike, David, Ben, Emily
+    "4": [allMockUsers[3], allMockUsers[4]], // Gaming: Alex, Sarah
+    "5": [allMockUsers[5]], // Jazz: Ben
+    "6": [allMockUsers[0], allMockUsers[1]], // Rock: Mike, David
+};
+
+const youUser = { id: 3, name: "You", avatarId: "avatar-3", isSpeaking: false };
+
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -24,12 +38,24 @@ const initialPlaylist: PlaylistItem[] = [
 ];
 
 
-export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean }) {
+export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [playlist, setPlaylist] = useState<PlaylistItem[]>(initialPlaylist);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [playing, setPlaying] = useState(false);
-  const [users, setUsers] = useState(initialUsers);
+  
+  const getInitialUsers = () => {
+    const roomUsers = usersByRoom[roomId] || [];
+    return [youUser, ...roomUsers];
+  }
+
+  const [users, setUsers] = useState(getInitialUsers());
+
+  // Update users when room changes
+  useEffect(() => {
+    setUsers(getInitialUsers());
+  }, [roomId]);
+
   const isHost = users.some(u => u.name === "You");
 
   const removeUser = (userId: number) => {

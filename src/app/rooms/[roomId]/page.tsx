@@ -104,7 +104,7 @@ export default function RoomPage() {
                         onToggleMusicPlayer={() => setMusicPlayerOpen(!musicPlayerOpen)}
                     />
                     <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                        <UserList musicPlayerOpen={musicPlayerOpen} />
+                        <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} />
                     </main>
                 </div>
             </SidebarInset>
