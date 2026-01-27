@@ -1,81 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isOwner(roomId) {
-      let roomData = get(/databases/$(database)/documents/rooms/$(roomId)).data;
-      return request.auth != null && request.auth.uid == roomData.ownerId;
-    }
-
-    function isDj(roomId) {
-      let roomData = get(/databases/$(database)/documents/rooms/$(roomId)).data;
-      return request.auth != null && roomData.djId != null && request.auth.uid == roomData.djId;
-    }
-
-    function canReadRoom(roomId) {
-      let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
-      // Anyone can read a public room. Owners can read their private rooms.
-      return room.isPrivate == false || isOwner(roomId);
-    }
-    
-    match /rooms/{roomId} {
-      // Allow any authenticated user to see the list of public rooms.
-      // Individual room reads are handled by the 'read' rule below.
-      allow list: if request.auth != null;
-
-      allow read: if canReadRoom(roomId);
-      allow create: if request.auth != null;
-      allow delete: if isOwner(roomId);
-
-      allow update: if 
-        // The owner of the room can update any field.
-        isOwner(roomId) ||
-
-        // The current DJ can update only the music-related fields.
-        (isDj(roomId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying', 'currentTrackProgress'])) ||
-
-        // Any authenticated user can add songs to the playlist.
-        // They can only modify the 'playlist' field, and only by adding to it.
-        (request.auth != null &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist']) &&
-         request.resource.data.playlist.size() > resource.data.playlist.size()) ||
-
-        // Any authenticated user can become the DJ if the spot is currently open.
-        (
-          (resource.data.djId == null || !('djId' in resource.data)) && // DJ spot is empty
-          request.auth != null &&
-          request.resource.data.djId == request.auth.uid && // The new djId must be the user's own uid
-          request.resource.data.diff(resource.data).affectedKeys().hasAll(['djId', 'djDisplayName']) &&
-          request.resource.data.diff(resource.data).affectedKeys().size() == 2
-        ) ||
-        
-        // The current DJ can relinquish their spot, removing djId and djDisplayName.
-        (
-          isDj(roomId) &&
-          !('djId' in request.resource.data) && // The end result is that djId is removed
-          !('djDisplayName' in request.resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasAll(['djId', 'djDisplayName']) &&
-          request.resource.data.diff(resource.data).affectedKeys().size() == 2
-        );
-
-      // Subcollection rules
-      match /users/{userId} {
-        allow read: if canReadRoom(roomId);
-        // User can join/leave a room if they can read it.
-        allow write: if canReadRoom(roomId) && request.auth.uid == userId;
-      }
-
-      match /messages/{messageId} {
-        allow read: if canReadRoom(roomId);
-        // User can send/delete their own messages if they can read the room.
-        allow create: if canReadRoom(roomId) && request.auth != null && request.resource.data.userId == request.auth.uid;
-        allow delete: if canReadRoom(roomId) && request.auth != null && resource.data.userId == request.auth.uid;
-      }
-    }
-
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    match /{document=**} {
+      // Allow read/write access to any authenticated user
+      allow read, write: if request.auth != null;
     }
   }
 }
