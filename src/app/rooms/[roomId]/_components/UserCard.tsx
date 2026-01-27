@@ -109,21 +109,27 @@ export default function UserCard({
 
   const tracks = useTracks([Track.Source.Microphone], { participant });
   const micTrackRef = tracks.find((t) => t.source === Track.Source.Microphone);
-  const micTrack = micTrackRef?.publication.track as LocalAudioTrack | undefined;
   
   // The UI is now driven by the database state.
   const isMuted = firestoreUser?.isMuted ?? false;
 
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
-    if (isLocal && micTrack && firestoreUser?.isMuted !== undefined) {
-      if (micTrack.isMuted !== firestoreUser.isMuted) {
-        micTrack.setMuted(firestoreUser.isMuted);
+    // Only applies to the local participant's card on their own screen.
+    if (isLocal && micTrackRef?.publication.track) {
+      const micTrack = micTrackRef.publication.track;
+      // Use a type guard to ensure we have a LocalAudioTrack
+      if (micTrack instanceof LocalAudioTrack) {
+        if (firestoreUser?.isMuted !== undefined && micTrack.isMuted !== firestoreUser.isMuted) {
+          // This should now work without crashing.
+          micTrack.setMuted(firestoreUser.isMuted);
+        }
       }
     }
-  }, [isLocal, micTrack, firestoreUser?.isMuted]);
+  }, [isLocal, micTrackRef, firestoreUser?.isMuted]);
   
   const handleToggleMic = () => {
+    // This function only works for the local user on their own card.
     if (isLocal && firestore && roomId && identity && firestoreUser) {
       const userInRoomRef = doc(firestore, 'rooms', roomId, 'users', identity);
       updateDocumentNonBlocking(userInRoomRef, { isMuted: !firestoreUser.isMuted });
@@ -343,5 +349,3 @@ export default function UserCard({
     </>
   );
 }
-
-    
