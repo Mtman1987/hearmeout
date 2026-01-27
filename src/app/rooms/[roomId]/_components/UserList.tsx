@@ -8,15 +8,7 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { useToast } from '@/hooks/use-toast';
-import { generateLiveKitToken } from '@/app/actions';
-import {
-  LiveKitRoom,
-  useLocalParticipant,
-  useRemoteParticipants,
-} from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
 import '@livekit/components-styles';
 
 const initialPlaylist: PlaylistItem[] = [
@@ -55,18 +47,13 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
           roomId={roomId}
         />
       ))}
-      {(!localParticipant && remoteParticipants.length === 0) &&
-         Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="w-3/4 space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-4 w-1/2" /></div></div></CardHeader><CardContent><div className="space-y-2"><Skeleton className="h-2 w-full" /><Skeleton className="h-10 w-full" /></div></CardContent></Card>)
-      }
     </div>
   );
 };
 
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
-  const [livekitToken, setLivekitToken] = useState<string | null>(null);
-  const { firestore, user, isUserLoading } = useFirebase();
-  const { toast } = useToast();
+  const { firestore, user } = useFirebase();
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -74,30 +61,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [firestore, roomId]);
 
   const { data: room } = useDoc<RoomData>(roomRef);
-
-  useEffect(() => {
-    if (isUserLoading || !user?.uid) {
-      return;
-    }
-
-    const participantIdentity = user.uid;
-    const participantName = user.displayName || 'Guest';
-    const participantMetadata = JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` });
-
-    (async () => {
-      try {
-        const token = await generateLiveKitToken(roomId, participantIdentity, participantName, participantMetadata);
-        setLivekitToken(token);
-      } catch (e) {
-        console.error('[UserList] Failed to get LiveKit token', e);
-        toast({
-          variant: 'destructive',
-          title: 'Voice Connection Failed',
-          description: 'Could not generate an authentication token for the voice server.',
-        });
-      }
-    })();
-  }, [user, isUserLoading, roomId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && user?.uid === room.ownerId) {
@@ -184,7 +147,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   
   return (
     <>
@@ -234,21 +196,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           </div>
         )}
         
-        {livekitToken && livekitUrl ? (
-          <LiveKitRoom
-            serverUrl={livekitUrl}
-            token={livekitToken}
-            connect={true}
-            audio={true}
-            video={false}
-          >
-            <RoomParticipants isHost={isRoomOwner} roomId={roomId}/>
-          </LiveKitRoom>
-        ) : (
-           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-             {Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="w-3/4 space-y-2"><Skeleton className="h-5 w-full" /><Skeleton className="h-4 w-1/2" /></div></div></CardHeader><CardContent><div className="space-y-2"><Skeleton className="h-2 w-full" /><Skeleton className="h-10 w-full" /></div></CardContent></Card>)}
-           </div>
-        )}
+        <RoomParticipants isHost={isRoomOwner} roomId={roomId}/>
       </div>
     </>
   );
