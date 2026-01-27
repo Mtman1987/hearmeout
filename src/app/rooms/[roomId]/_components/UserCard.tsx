@@ -20,7 +20,7 @@ import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
 import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-import { useFirebase } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -84,7 +84,6 @@ export default function UserCard({
     activeSpeakerId,
     onMicDeviceChange,
     onSpeakerDeviceChange,
-    firestoreUser,
 }: {
     participant: Participant;
     isHost?: boolean;
@@ -95,7 +94,6 @@ export default function UserCard({
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
     onSpeakerDeviceChange?: (deviceId: string) => void;
-    firestoreUser?: RoomParticipantData;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -108,6 +106,13 @@ export default function UserCard({
   
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
 
+  const userInRoomRef = useMemoFirebase(() => {
+    if (!firestore || !roomId || !identity) return null;
+    return doc(firestore, 'rooms', roomId, 'users', identity);
+  }, [firestore, roomId, identity]);
+
+  const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
+
   const micTrackRef = useTracks([Track.Source.Microphone], { participant }).find((t) => t.source === Track.Source.Microphone);
   
   const isMuted = firestoreUser?.isMuted ?? false;
@@ -118,18 +123,16 @@ export default function UserCard({
       const micTrack = micTrackRef.publication.track;
       
       // SUPER-SAFE GUARD: Check for the function's existence before calling it.
-      if (micTrack && typeof (micTrack as any).setMuted === 'function') {
-        const localTrack = micTrack as LocalAudioTrack;
-        if (localTrack.isMuted !== isMuted) {
-          localTrack.setMuted(isMuted);
+      if (micTrack instanceof LocalAudioTrack) {
+        if (micTrack.isMuted !== isMuted) {
+          micTrack.setMuted(isMuted);
         }
       }
     }
   }, [isLocal, micTrackRef, isMuted]);
   
   const handleToggleMic = async () => {
-    if (isLocal && firestore && roomId && identity && firestoreUser) {
-      const userInRoomRef = doc(firestore, 'rooms', roomId, 'users', identity);
+    if (isLocal && userInRoomRef) {
       try {
         await updateDoc(userInRoomRef, { isMuted: !isMuted });
       } catch (error) {
