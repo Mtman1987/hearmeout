@@ -12,7 +12,8 @@ import { Logo } from "@/app/components/Logo";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useFirebase } from '@/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { signInAnonymously, OAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
 
@@ -29,7 +30,7 @@ const TwitchIcon = () => (
 );
 
 export default function LoginPage() {
-  const { auth } = useFirebase();
+  const { auth, firestore } = useFirebase();
   const router = useRouter();
 
   const handleGuestLogin = () => {
@@ -45,15 +46,32 @@ export default function LoginPage() {
   };
 
   const handleDiscordLogin = () => {
-    // In a real app, this would initiate the Discord OAuth2 flow.
-    // For now, we will simulate a login by just redirecting.
-    // A full implementation would involve:
-    // 1. Redirecting to Discord's authorization URL.
-    // 2. Handling the redirect back to your app with an auth code.
-    // 3. Exchanging the code for a token on your backend.
-    // 4. Creating a custom Firebase token and signing in.
-    alert("This would start the Discord login process. For now, you will stay a guest.");
-    handleGuestLogin();
+    if (auth && firestore) {
+      const provider = new OAuthProvider('discord.com');
+      // Optionally add scopes like 'identify' or 'email'
+      // provider.addScope('identify');
+      
+      signInWithPopup(auth, provider)
+        .then((result) => {
+          const user = result.user;
+          // Create or update the user document in Firestore
+          const userRef = doc(firestore, 'users', user.uid);
+          setDoc(userRef, {
+            id: user.uid,
+            username: user.displayName, // Using displayName as a default username
+            email: user.email,
+            displayName: user.displayName,
+            profileImageUrl: user.photoURL,
+            discordId: user.providerData.find(p => p.providerId === 'discord.com')?.uid
+          }, { merge: true }); // merge: true prevents overwriting data on re-login
+
+          router.push('/');
+        })
+        .catch((error) => {
+          console.error("Discord sign-in failed:", error);
+          alert(`Discord login failed. Please try again. Error: ${error.message}`);
+        });
+    }
   };
 
   return (
