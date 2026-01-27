@@ -1,3 +1,4 @@
+
 'use client';
 
 import Image from "next/image";
@@ -24,6 +25,11 @@ import {
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
 import { AudioVisualizer } from "./AudioVisualizer";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 export default function MusicPlayerCard({
@@ -130,15 +136,29 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
-        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-between">
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
           <AudioVisualizer isSpeaking={playing} />
-          <div className="flex items-center gap-2">
-              <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
-                  <ListMusic className="h-4 w-4" />
-              </Button>
-              <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music" className="h-8 w-8">
-                  <Youtube className="h-4 w-4" />
-              </Button>
+          <div className="flex items-center gap-2 ml-auto">
+              <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
+                          <ListMusic className="h-4 w-4" />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                      <p>Up Next</p>
+                  </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music" className="h-8 w-8">
+                          <Youtube className="h-4 w-4" />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                      <p>Add Music</p>
+                  </TooltipContent>
+              </Tooltip>
           </div>
         </div>
         <div className="space-y-1">
@@ -155,19 +175,40 @@ export default function MusicPlayerCard({
               <span>{formatTime(duration)}</span>
             </div>
         </div>
-        <div className="flex items-center justify-center sm:justify-between gap-x-2 gap-y-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center justify-center gap-1">
-                <Button variant="ghost" size="icon" onClick={onPlayPrev} className="h-9 w-9">
-                  <SkipBack className="h-4 w-4" />
-                </Button>
-                <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause}>
-                  {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                </Button>
-                <Button variant="ghost" size="icon" onClick={onPlayNext} className="h-9 w-9">
-                  <SkipForward className="h-4 w-4" />
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={onPlayPrev} className="h-9 w-9">
+                          <SkipBack className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Previous</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause}>
+                          {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{playing ? 'Pause' : 'Play'}</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={onPlayNext} className="h-9 w-9">
+                          <SkipForward className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Next</p>
+                    </TooltipContent>
+                </Tooltip>
             </div>
-            <div className="flex items-center gap-2 w-full max-w-24 flex-1 sm:flex-initial sm:w-24">
+            <div className="flex items-center gap-2 flex-1 min-w-24">
                 <Volume2 className="h-5 w-5 text-muted-foreground" />
                 <Slider 
                     value={[volume]} 

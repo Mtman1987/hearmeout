@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -16,6 +17,11 @@ import ChatBox from './_components/ChatBox';
 import { rooms } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName: string, onToggleChat: () => void, onToggleMusicPlayer: () => void }) {
@@ -39,18 +45,39 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
             <h2 className="text-xl font-bold font-headline truncate flex-1">{roomName}</h2>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                <Button variant="outline" size="sm" className='hidden sm:flex' onClick={copyOverlayUrl}>
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy Overlay URL
-                </Button>
-                <Button variant="outline" size="icon" onClick={onToggleMusicPlayer}>
-                    <Music className="h-5 w-5" />
-                    <span className="sr-only">Toggle Music Player</span>
-                </Button>
-                <Button variant="outline" size="icon" onClick={onToggleChat}>
-                    <MessageSquare className="h-5 w-5" />
-                    <span className="sr-only">Toggle Chat</span>
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={copyOverlayUrl}>
+                            <Copy className="h-4 w-4" />
+                            <span className="sr-only">Copy Overlay URL</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Copy Overlay URL</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={onToggleMusicPlayer}>
+                            <Music className="h-5 w-5" />
+                            <span className="sr-only">Toggle Music Player</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Toggle Music Player</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                         <Button variant="outline" size="icon" onClick={onToggleChat}>
+                            <MessageSquare className="h-5 w-5" />
+                            <span className="sr-only">Toggle Chat</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Toggle Chat</p>
+                    </TooltipContent>
+                </Tooltip>
             </div>
         </header>
     );

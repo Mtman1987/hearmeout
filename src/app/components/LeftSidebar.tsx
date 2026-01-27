@@ -19,6 +19,11 @@ import { Home, Music, PlusCircle, LogOut, Settings, User } from 'lucide-react';
 import { Logo } from '@/app/components/Logo';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { rooms } from '@/lib/rooms';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function LeftSidebar({ roomId }: { roomId?: string }) {
   const pathname = usePathname();
@@ -75,22 +80,43 @@ export default function LeftSidebar({ roomId }: { roomId?: string }) {
             </div>
         </div>
         <div className='flex gap-2'>
-            <Button variant="outline" size="icon" className='flex-1'>
-                <User/>
-                <span className='sr-only'>Profile</span>
-            </Button>
-             <Button variant="outline" size="icon" asChild className='flex-1'>
-                <Link href="/settings">
-                    <Settings/>
-                    <span className='sr-only'>Settings</span>
-                </Link>
-            </Button>
-            <Button variant="outline" size="icon" asChild className='flex-1'>
-                <Link href="/login" >
-                    <LogOut />
-                    <span className='sr-only'>Log in</span>
-                </Link>
-            </Button>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" className='flex-1'>
+                        <User/>
+                        <span className='sr-only'>Profile</span>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                    <p>Profile</p>
+                </TooltipContent>
+            </Tooltip>
+             <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" asChild className='flex-1'>
+                        <Link href="/settings">
+                            <Settings/>
+                            <span className='sr-only'>Settings</span>
+                        </Link>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                    <p>Settings</p>
+                </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" asChild className='flex-1'>
+                        <Link href="/login" >
+                            <LogOut />
+                            <span className='sr-only'>Log in</span>
+                        </Link>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                    <p>Log in</p>
+                </TooltipContent>
+            </Tooltip>
         </div>
       </SidebarFooter>
     </Sidebar>

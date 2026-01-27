@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,6 +27,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 export default function UserCard({ user, isLocal }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; }) {
@@ -77,11 +83,18 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
          {isLocal && (
             <div className="flex justify-center mt-2 gap-2">
               <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Audio Settings">
-                    <Headphones className="h-5 w-5" />
-                  </Button>
-                </DialogTrigger>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="icon" aria-label="Audio Settings">
+                            <Headphones className="h-5 w-5" />
+                          </Button>
+                        </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Audio Settings</p>
+                    </TooltipContent>
+                </Tooltip>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Audio Settings</DialogTitle>
@@ -129,12 +142,19 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
                 </DialogContent>
               </Dialog>
               <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-5 w-5" />
-                            <span className="sr-only">Room Settings</span>
-                        </Button>
-                    </DropdownMenuTrigger>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <MoreVertical className="h-5 w-5" />
+                                    <span className="sr-only">Room Settings</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Room Settings</p>
+                        </TooltipContent>
+                    </Tooltip>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem>Edit Room Name</DropdownMenuItem>
                         <DropdownMenuItem>Make Private</DropdownMenuItem>
@@ -149,9 +169,16 @@ export default function UserCard({ user, isLocal }: { user: { id: number; name: 
         <SpeakingIndicator isSpeaking={user.isSpeaking && !isMuted} />
         
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Unmute" : "Mute"}>
-            {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-          </Button>
+          <Tooltip>
+              <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Unmute" : "Mute"}>
+                    {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                  </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                  <p>{isMuted ? 'Unmute' : 'Mute'}</p>
+              </TooltipContent>
+          </Tooltip>
           <Slider
             aria-label="Volume"
             value={[isMuted ? 0 : volume]}
