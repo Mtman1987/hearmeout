@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -9,16 +8,13 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
-import {
-  Sheet,
-  SheetContent,
-} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Copy, MessageSquare } from 'lucide-react';
+import { Copy, MessageSquare, X } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
 import { rooms } from '@/lib/rooms';
+import { cn } from '@/lib/utils';
 
 function RoomHeader({ roomName, onToggleChat } : { roomName: string, onToggleChat: () => void }) {
     const { isMobile } = useSidebar();
@@ -50,10 +46,13 @@ export default function RoomPage() {
   return (
     <SidebarProvider>
         <LeftSidebar roomId={params.roomId} />
-        <div className="bg-secondary/30 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width-icon)_+_1rem)] md:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width)_+_1rem)] duration-200 transition-[margin-left]">
+        <div className={cn(
+          "bg-secondary/30 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width-icon)_+_1rem)] md:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width)_+_1rem)] duration-200 transition-[margin-left,margin-right]",
+          chatOpen && "md:mr-[28rem]"
+        )}>
             <SidebarInset>
                 <div className="flex flex-col h-screen">
-                    <RoomHeader roomName={room.name} onToggleChat={() => setChatOpen(true)} />
+                    <RoomHeader roomName={room.name} onToggleChat={() => setChatOpen(!chatOpen)} />
                     <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                         <UserList />
                     </main>
@@ -61,11 +60,18 @@ export default function RoomPage() {
             </SidebarInset>
         </div>
 
-        <Sheet open={chatOpen} onOpenChange={setChatOpen}>
-            <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col border-l">
+        <div className={cn(
+            "fixed inset-y-0 right-0 z-40 w-full sm:max-w-md transform transition-transform duration-300 ease-in-out bg-card border-l",
+            chatOpen ? "translate-x-0" : "translate-x-full"
+        )}>
+            <div className="relative h-full">
+                <Button variant="ghost" size="icon" onClick={() => setChatOpen(false)} className="absolute top-4 right-4 z-50 md:hidden">
+                    <X className="h-5 w-5" />
+                    <span className="sr-only">Close Chat</span>
+                </Button>
                 <ChatBox />
-            </SheetContent>
-        </Sheet>
+            </div>
+        </div>
     </SidebarProvider>
   );
 }
