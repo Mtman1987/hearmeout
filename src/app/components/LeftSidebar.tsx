@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -15,7 +14,7 @@ import {
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Home, Music, PlusCircle, LogOut, Settings, User } from 'lucide-react';
+import { Home, Music, PlusCircle, LogOut, Settings, User, LogIn } from 'lucide-react';
 import { Logo } from '@/app/components/Logo';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { rooms } from '@/lib/rooms';
@@ -24,10 +23,19 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFirebase } from '@/firebase';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function LeftSidebar({ roomId }: { roomId?: string }) {
   const pathname = usePathname();
   const publicRooms = rooms.filter(room => room.isPublic);
+  const { user, auth, isUserLoading } = useFirebase();
+
+  const handleLogout = () => {
+    if (auth) {
+      auth.signOut();
+    }
+  };
 
   return (
     <Sidebar>
@@ -67,57 +75,81 @@ export default function LeftSidebar({ roomId }: { roomId?: string }) {
           Create Room
         </Button>
         <div className="border-t -mx-2"></div>
-        <div className="flex items-center gap-3 p-2 rounded-md">
-            <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/seed/301/100/100" alt="User Avatar" data-ai-hint="person portrait" />
-                <AvatarFallback>U</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col flex-1 overflow-hidden">
-                <p className="text-sm font-medium leading-none truncate">Guest User</p>
-                <p className="text-xs leading-none text-muted-foreground truncate">
-                    guest@hearmeout.com
-                </p>
-            </div>
-        </div>
-        <div className='flex gap-2'>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" className='flex-1'>
-                        <User/>
-                        <span className='sr-only'>Profile</span>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                    <p>Profile</p>
-                </TooltipContent>
-            </Tooltip>
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" asChild className='flex-1'>
-                        <Link href="/settings">
-                            <Settings/>
-                            <span className='sr-only'>Settings</span>
-                        </Link>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                    <p>Settings</p>
-                </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" asChild className='flex-1'>
-                        <Link href="/login" >
-                            <LogOut />
-                            <span className='sr-only'>Log in</span>
-                        </Link>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                    <p>Log in</p>
-                </TooltipContent>
-            </Tooltip>
-        </div>
+        
+        {isUserLoading ? (
+            <>
+              <div className="flex items-center gap-3 p-2 rounded-md">
+                  <Skeleton className="h-9 w-9 rounded-full" />
+                  <div className="flex flex-col flex-1 overflow-hidden gap-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-full" />
+                  </div>
+              </div>
+              <div className='flex gap-2'>
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 flex-1" />
+              </div>
+            </>
+        ) : user ? (
+            <>
+                <div className="flex items-center gap-3 p-2 rounded-md">
+                    <Avatar className="h-9 w-9">
+                        <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`} alt="User Avatar" data-ai-hint="person portrait" />
+                        <AvatarFallback>{user.isAnonymous ? 'G' : user.displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                        <p className="text-sm font-medium leading-none truncate">{user.isAnonymous ? 'Guest User' : user.displayName || 'User'}</p>
+                        <p className="text-xs leading-none text-muted-foreground truncate">
+                            {user.email || (user.isAnonymous ? 'guest@hearmeout.com' : 'Anonymous User')}
+                        </p>
+                    </div>
+                </div>
+                <div className='flex gap-2'>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" className='flex-1' disabled={user.isAnonymous}>
+                                <User/>
+                                <span className='sr-only'>Profile</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            <p>Profile</p>
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" asChild className='flex-1'>
+                                <Link href="/settings">
+                                    <Settings/>
+                                    <span className='sr-only'>Settings</span>
+                                </Link>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            <p>Settings</p>
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={handleLogout} className='flex-1'>
+                                <LogOut />
+                                <span className='sr-only'>Log out</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            <p>Log out</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            </>
+        ) : (
+            <Button asChild>
+                <Link href="/login" className="w-full">
+                    <LogIn className="mr-2 h-4 w-4" /> Log In or Sign Up
+                </Link>
+            </Button>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

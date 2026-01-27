@@ -1,3 +1,5 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,6 +11,10 @@ import {
 import { Logo } from "@/app/components/Logo";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { useFirebase } from '@/firebase';
+import { signInAnonymously } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+
 
 const DiscordIcon = () => (
     <svg role="img" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -23,6 +29,33 @@ const TwitchIcon = () => (
 );
 
 export default function LoginPage() {
+  const { auth } = useFirebase();
+  const router = useRouter();
+
+  const handleGuestLogin = () => {
+    if (auth) {
+      signInAnonymously(auth)
+        .then(() => {
+          router.push('/');
+        })
+        .catch((error) => {
+          console.error("Anonymous sign-in failed", error);
+        });
+    }
+  };
+
+  const handleDiscordLogin = () => {
+    // In a real app, this would initiate the Discord OAuth2 flow.
+    // For now, we will simulate a login by just redirecting.
+    // A full implementation would involve:
+    // 1. Redirecting to Discord's authorization URL.
+    // 2. Handling the redirect back to your app with an auth code.
+    // 3. Exchanging the code for a token on your backend.
+    // 4. Creating a custom Firebase token and signing in.
+    alert("This would start the Discord login process. For now, you will stay a guest.");
+    handleGuestLogin();
+  };
+
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-secondary p-4 relative">
         <Button variant="ghost" asChild className="absolute top-4 left-4">
@@ -42,7 +75,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <Button variant="outline" className="w-full">
+          <Button variant="outline" className="w-full" onClick={handleDiscordLogin}>
             <DiscordIcon />
             <span className="ml-2">Continue with Discord</span>
           </Button>
@@ -50,6 +83,19 @@ export default function LoginPage() {
             <TwitchIcon />
             <span className="ml-2">Continue with Twitch</span>
           </Button>
+           <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                Or
+                </span>
+            </div>
+        </div>
+        <Button variant="secondary" className="w-full" onClick={handleGuestLogin}>
+            Continue as Guest
+        </Button>
         </CardContent>
       </Card>
     </div>
