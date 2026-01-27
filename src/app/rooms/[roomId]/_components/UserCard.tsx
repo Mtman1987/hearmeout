@@ -2,18 +2,20 @@
 
 import { useState } from 'react';
 import {
+  Headphones,
+  Mic,
+  MicOff,
   MoreVertical,
+  Move,
+  Pen,
+  ShieldOff,
   Trash2,
-  LoaderCircle,
+  UserX,
   Volume2,
   VolumeX,
-  MicOff,
-  Mic,
+  LoaderCircle
 } from 'lucide-react';
-import {
-  useTracks,
-  AudioTrack,
-} from '@livekit/components-react';
+import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -35,15 +37,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { SpeakingIndicator } from "./SpeakingIndicator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
 
 export default function UserCard({
     participant,
@@ -63,7 +71,7 @@ export default function UserCard({
   const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
-  const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity } = participant;
+  const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity, audioLevel } = participant;
 
   const tracks = useTracks(
     [Track.Source.Microphone],
@@ -97,7 +105,7 @@ export default function UserCard({
         participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
     }
   };
-
+  
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
         toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
@@ -117,6 +125,7 @@ export default function UserCard({
     }
   };
 
+
   const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
@@ -129,103 +138,137 @@ export default function UserCard({
         />
       ))}
 
-      <Card className="flex flex-col h-full relative">
-        {isLocal && isHost && (
-          <div className="absolute top-2 right-2 z-10">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
-                  <span className="sr-only">Room Actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => setIsDeleteDialogOpen(true)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2" />
-                  Delete Room
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-        
-        <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Avatar className={cn("h-12 w-12 transition-all", isSpeaking && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
-                <AvatarImage src={photoURL} alt={displayName} data-ai-hint="person portrait" />
-                <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
-              </Avatar>
-              {isMicrophoneMuted && (
-                  <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
-                      <MicOff className="w-3 h-3 text-destructive-foreground" />
-                  </div>
-              )}
-            </div>
-            <CardTitle className="font-headline text-lg flex-1 truncate">{displayName}</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 flex-grow justify-end">
-          <SpeakingIndicator isSpeaking={isSpeaking} />
-
-           {isLocal ? (
-             <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={isMicrophoneMuted ? 'destructive' : 'secondary'}
-                    onClick={toggleLocalMic}
-                    aria-label="Toggle Mic Broadcast"
-                    className="w-full"
-                  >
-                      <Mic className="h-5 w-5 mr-2" />
-                      {isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent><p>{isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
-              </Tooltip>
-            ) : (
-                <div className="flex items-center gap-2">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
-                                {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>{isMutedForUser ? 'Unmute' : 'Mute'}</p></TooltipContent>
-                    </Tooltip>
-                    <Slider
-                        aria-label="Volume"
-                        value={[isMutedForUser ? 0 : volume]}
-                        onValueChange={handleVolumeChange}
-                        max={1}
-                        step={0.05}
-                    />
+      <Card className="flex flex-col h-full">
+        <CardContent className="p-4 flex flex-col gap-4 flex-grow">
+            <div className="flex items-center gap-4">
+                <div className="relative">
+                    <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
+                        <AvatarImage src={photoURL} alt={displayName} data-ai-hint="person portrait" />
+                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                    </Avatar>
+                     {isMicrophoneMuted && (
+                        <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
+                            <MicOff className="w-3 h-3 text-destructive-foreground" />
+                        </div>
+                    )}
                 </div>
-            )}
+                <div className="flex-1 min-w-0">
+                    <p className="font-bold text-lg truncate">{displayName}</p>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                        {isLocal && (
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><Headphones className="h-4 w-4" /></Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80">
+                                    <div className="grid gap-4">
+                                        <div className="space-y-2">
+                                            <h4 className="font-medium leading-none">Audio Settings</h4>
+                                            <p className="text-sm text-muted-foreground">Manage your input and output settings.</p>
+                                        </div>
+                                         <div className="grid gap-2">
+                                            <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor="push-to-talk">Push to Talk</Label>
+                                                <Switch id="push-to-talk" disabled className="col-span-2" />
+                                            </div>
+                                            <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor="monitoring">Monitoring</Label>
+                                                <Switch id="monitoring" disabled className="col-span-2" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        )}
+                        {isLocal && isHost && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem disabled><Pen className="mr-2 h-4 w-4" /> Rename Room</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive">
+                                        <Trash2 className="mr-2 h-4 w-4" /> Delete Room
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                        {!isLocal && isHost && (
+                             <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem><UserX className="mr-2 h-4 w-4" /> Kick</DropdownMenuItem>
+                                    <DropdownMenuItem disabled><ShieldOff className="mr-2 h-4 w-4" /> Ban</DropdownMenuItem>
+                                    <DropdownMenuItem disabled><MicOff className="mr-2 h-4 w-4" /> Mute for Room</DropdownMenuItem>
+                                    <DropdownMenuItem disabled><Move className="mr-2 h-4 w-4" /> Move to Room</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                    </div>
+                </div>
+            </div>
+          
+            <div className="space-y-2 flex-grow flex flex-col justify-end">
+                <SpeakingIndicator audioLevel={audioLevel} />
+                {isLocal ? (
+                    <>
+                        <div className="space-y-1 pt-2">
+                             <Label className="text-xs text-muted-foreground">My Mic Volume (Disabled)</Label>
+                            <Slider
+                                aria-label="My Mic Volume"
+                                defaultValue={[1]}
+                                max={1}
+                                step={0.05}
+                                disabled
+                            />
+                        </div>
+                        <Button
+                            variant={isMicrophoneMuted ? 'destructive' : 'secondary'}
+                            onClick={toggleLocalMic}
+                            aria-label="Toggle Mic Broadcast"
+                            className="w-full"
+                          >
+                            {isMicrophoneMuted ? <MicOff className="h-5 w-5 mr-2" /> : <Mic className="h-5 w-5 mr-2" />}
+                            {isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+                        </Button>
+                    </>
+                ) : (
+                    <div className="flex items-center gap-2 pt-2">
+                        <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
+                            {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                        </Button>
+                        <Slider
+                            aria-label="Volume"
+                            value={[isMutedForUser ? 0 : volume]}
+                            onValueChange={handleVolumeChange}
+                            max={1}
+                            step={0.05}
+                        />
+                    </div>
+                )}
+            </div>
         </CardContent>
       </Card>
       
-      {isLocal && isHost && (
-        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this room and all of its associated data.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteRoom} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
-                        {isDeleting ? <LoaderCircle className="animate-spin" /> : "Delete"}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-      )}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete this room and all of its associated data.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteRoom} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                    {isDeleting ? <LoaderCircle className="animate-spin" /> : "Delete"}
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
