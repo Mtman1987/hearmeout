@@ -6,7 +6,6 @@ import ReactPlayer from "react-player/youtube";
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -131,7 +130,17 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-4">
-        <AudioVisualizer isSpeaking={playing} />
+        <div className="flex items-center gap-4">
+          <AudioVisualizer isSpeaking={playing} />
+          <div className="flex items-center gap-2">
+              <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist">
+                  <ListMusic className="h-5 w-5" />
+              </Button>
+              <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music">
+                  <Youtube className="h-5 w-5" />
+              </Button>
+          </div>
+        </div>
         <div className="space-y-2">
             <Slider 
               value={[played]} 
@@ -169,16 +178,6 @@ export default function MusicPlayerCard({
             </div>
         </div>
       </CardContent>
-      <CardFooter className="p-4 border-t">
-        <div className="flex items-center justify-center w-full gap-2">
-            <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist">
-                <ListMusic className="h-5 w-5" />
-            </Button>
-            <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music">
-                <Youtube className="h-5 w-5" />
-            </Button>
-        </div>
-      </CardFooter>
     </Card>
   );
 }
