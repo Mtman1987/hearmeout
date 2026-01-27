@@ -91,7 +91,7 @@ export default function MusicPlayerCard({
   const playedSeconds = duration * played;
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col h-full">
        <div className="hidden">
       {isClient && currentTrack && (
             <ReactPlayer

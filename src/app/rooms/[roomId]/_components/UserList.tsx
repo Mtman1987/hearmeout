@@ -63,7 +63,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
   return (
     <div className="flex flex-col gap-6">
       {musicPlayerOpen && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           <div className="lg:col-span-1">
             <MusicPlayerCard
               currentTrack={currentTrack}
@@ -76,7 +76,7 @@ export default function UserList({ musicPlayerOpen }: { musicPlayerOpen: boolean
             />
           </div>
 
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {activePanels.playlist && (
                 <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
                     <PlaylistPanel
