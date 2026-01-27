@@ -25,7 +25,7 @@ import {
 import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateRoomDialog } from '@/app/rooms/_components/CreateRoomDialog';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 
 interface Room {
     id: string;
@@ -41,8 +41,7 @@ export default function LeftSidebar({ roomId }: { roomId?: string }) {
     if (!firestore) return null;
     return query(
         collection(firestore, 'rooms'), 
-        where('isPrivate', '==', false),
-        orderBy('createdAt', 'desc')
+        where('isPrivate', '==', false)
     );
   }, [firestore]);
 

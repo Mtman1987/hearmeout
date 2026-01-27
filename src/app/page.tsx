@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/sidebar';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 
@@ -46,8 +46,7 @@ export default function Home() {
     if (!firestore) return null;
     return query(
         collection(firestore, 'rooms'),
-        where('isPrivate', '==', false),
-        orderBy('createdAt', 'desc')
+        where('isPrivate', '==', false)
     );
   }, [firestore]);
 
