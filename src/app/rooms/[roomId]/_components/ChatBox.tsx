@@ -63,8 +63,8 @@ export default function ChatBox() {
   }
 
   return (
-    <Card className="flex flex-col flex-1 min-h-0">
-      <CardHeader>
+    <Card className="flex flex-col h-full w-full border-0 shadow-none rounded-none bg-transparent">
+      <CardHeader className="p-4 md:p-6">
         <CardTitle className="font-headline flex items-center gap-2">
           Chat & Moderation
         </CardTitle>
@@ -72,8 +72,8 @@ export default function ChatBox() {
           Conversation is monitored for safety.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden">
-        <ScrollArea className="flex-1 pr-4" ref={scrollAreaRef}>
+      <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden p-4 md:p-6 pt-0">
+        <ScrollArea className="flex-1 pr-4 -mr-4">
           <div className="space-y-4">
             {messages.map((msg, index) => (
               <p key={index} className="text-sm">
@@ -100,7 +100,7 @@ export default function ChatBox() {
             </Alert>
         )}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="p-4 md:p-6 pt-0">
         <form onSubmit={handleSubmit} className="flex w-full items-center space-x-2">
           <Textarea
             placeholder="Type your message here..."
