@@ -10,12 +10,15 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/rooms/$(roomId)/users/$(userId));
     }
 
+    function isBanned(roomId) {
+      return request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.get('bannedUsers', []);
+    }
+
     match /rooms/{roomId} {
       allow read: if request.auth != null;
-      // Allow create for any authenticated user
       allow create: if request.auth != null;
       
-      // Allow owner to update any room details
+      // Allow owner to update any room details (including 'bannedUsers')
       allow update: if request.auth != null && isOwner(roomId);
       
       // Also allow any participant to update ONLY the music-related fields
@@ -23,23 +26,21 @@ service cloud.firestore {
                  isParticipant(roomId, request.auth.uid) &&
                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playlist', 'currentTrackId', 'isPlaying']);
 
-      // Allow owner to delete
       allow delete: if request.auth != null && isOwner(roomId);
 
       match /users/{userId} {
-        // Anyone can join a room (create their user doc)
-        allow create: if request.auth != null && request.auth.uid == userId;
-        // Users can only read the list of participants
-        allow list: if request.auth != null;
-        // Users can only read specific participant data
-        allow get: if request.auth != null;
-        // Users can update their own speaking status, but nothing else
+        // Allow user to join a room if they are not banned
+        allow create: if request.auth != null && request.auth.uid == userId && !isBanned(roomId);
+        
+        allow list, get: if request.auth != null;
+        
+        // Users can update their own speaking status
         allow update: if request.auth != null && request.auth.uid == userId && request.resource.data.keys().hasOnly(['id', 'displayName', 'photoURL', 'isSpeaking']);
-        // Users can delete their own presence document (leaving the room)
-        allow delete: if request.auth != null && request.auth.uid == userId;
+
+        // Owner can kick (delete), or user can leave (delete)
+        allow delete: if request.auth != null && (request.auth.uid == userId || isOwner(roomId));
       }
       
-      // Disallow writes to other subcollections for now
       match /messages/{messageId} {
         allow read, create: if request.auth != null;
       }

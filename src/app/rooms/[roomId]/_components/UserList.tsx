@@ -7,10 +7,11 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, serverTimestamp } from 'firebase/firestore';
+import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, doc, arrayUnion, updateDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { useToast } from '@/hooks/use-toast';
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -36,6 +37,7 @@ interface RoomData {
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
+  const { toast } = useToast();
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -66,9 +68,27 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const canAddMusic = !!user;
   const canControlMusic = !!user; // Any logged-in user can control music
 
-  const handleMoveUser = (userId: string, destinationRoomId: string) => {
-    // This was mock functionality. For now, I'll disable it.
-    console.log(`Move user ${userId} to room ${destinationRoomId}`);
+  const handleKickUser = (userId: string) => {
+    if (!isHost || !firestore) return;
+    const userToKickRef = doc(firestore, 'rooms', roomId, 'users', userId);
+    deleteDocumentNonBlocking(userToKickRef);
+    toast({ title: "User Kicked", description: "The user has been removed from the room." });
+  };
+
+  const handleBanUser = (userId: string) => {
+    if (!isHost || !firestore) return;
+    const roomDocRef = doc(firestore, 'rooms', roomId);
+    
+    // Ban first, then kick.
+    updateDoc(roomDocRef, {
+        bannedUsers: arrayUnion(userId)
+    }).then(() => {
+        handleKickUser(userId); // Kick them after they are successfully banned.
+        toast({ title: "User Banned", description: "The user has been banned and removed from the room." });
+    }).catch(error => {
+        console.error("Failed to ban user:", error);
+        toast({ variant: 'destructive', title: "Error", description: "Could not ban the user." });
+    });
   };
 
   const handlePlaySong = (songId: string) => {
@@ -162,7 +182,14 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
         {users && users.map((roomUser) => (
-          <UserCard key={roomUser.id} user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} isLocal={roomUser.id === user?.uid} isHost={isHost && roomUser.id !== user?.uid} onMoveUser={handleMoveUser} />
+          <UserCard 
+            key={roomUser.id} 
+            user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} 
+            isLocal={roomUser.id === user?.uid} 
+            isHost={isHost && roomUser.id !== user?.uid} 
+            onKick={handleKickUser}
+            onBan={handleBanUser}
+          />
         ))}
       </div>
     </div>

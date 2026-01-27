@@ -89,6 +89,13 @@
         "isPlaying": {
           "type": "boolean",
           "description": "Indicates if music is currently playing in the room."
+        },
+        "bannedUsers": {
+          "type": "array",
+          "description": "A list of user IDs that are banned from this room.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

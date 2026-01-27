@@ -31,13 +31,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useCollection, useMemoFirebase, useFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc } from 'firebase/firestore';
+import { useFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 
-export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: string; name: string; photoURL: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: string, destinationRoomId: string) => void; }) {
+export default function UserCard({ user, isLocal, isHost, onKick, onBan }: { 
+    user: { id: string; name: string; photoURL: string; isSpeaking: boolean; }; 
+    isLocal?: boolean; 
+    isHost?: boolean; 
+    onKick?: (userId: string) => void;
+    onBan?: (userId: string) => void;
+}) {
   const params = useParams<{ roomId: string }>();
   const { firestore } = useFirebase();
 
@@ -50,16 +54,6 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
   const [selectedOutput, setSelectedOutput] = useState<string>('default');
   const [pushToTalk, setPushToTalk] = useState(false);
   const [monitoring, setMonitoring] = useState(true);
-
-  const publicRoomsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-        collection(firestore, 'rooms'), 
-        where('isPrivate', '==', false)
-    );
-  }, [firestore]);
-
-  const { data: publicRooms } = useCollection<{id: string, name: string}>(publicRoomsQuery);
 
   const userInRoomRef = useMemoFirebase(() => {
       if (!firestore || !params.roomId || !user.id) return null;
@@ -251,15 +245,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
                 <>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <MicOff className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Mute (Room)</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" onClick={() => onKick?.(user.id)}>
                             <LogOut className="h-5 w-5" />
                         </Button>
                     </TooltipTrigger>
@@ -267,37 +253,12 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onBan?.(user.id)}>
                             <Ban className="h-5 w-5" />
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent>Ban</TooltipContent>
                 </Tooltip>
-                <Popover>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                    <ArrowRightLeft className="h-5 w-5" />
-                                </Button>
-                            </PopoverTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent>Move</TooltipContent>
-                    </Tooltip>
-                    <PopoverContent className="p-1 w-56">
-                        <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
-                        <ScrollArea className="h-40">
-                        {publicRooms && publicRooms
-                            .filter(r => r.id !== params.roomId)
-                            .map(r => (
-                                <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id, r.id)}>
-                                    {r.name}
-                                </Button>
-                            ))
-                        }
-                        </ScrollArea>
-                    </PopoverContent>
-                </Popover>
                 </>
             ) : null}
         </div>
