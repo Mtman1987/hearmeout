@@ -33,9 +33,24 @@ export async function getYoutubeInfo(input: GetYoutubeInfoInput): Promise<GetYou
   return getYoutubeInfoFlow(input);
 }
 
-function selectRandomArtId(): string {
+// A simple deterministic hash function to select album art
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+function selectArtId(videoId: string): string {
     const artIds = ["album-art-1", "album-art-2", "album-art-3"];
-    return artIds[Math.floor(Math.random() * artIds.length)];
+    if (!videoId) {
+        return artIds[0];
+    }
+    const hash = simpleHash(videoId);
+    return artIds[hash % artIds.length];
 }
 
 const getYoutubeInfoFlow = ai.defineFlow(
@@ -55,19 +70,19 @@ const getYoutubeInfoFlow = ai.defineFlow(
           title: video.title || 'Untitled',
           artist: video.channel?.name || 'Unknown Artist',
           url: video.url,
-          artId: selectRandomArtId(),
+          artId: selectArtId(video.id!),
         }));
 
       } else {
         const video = await YouTube.getVideo(input.url);
-        if (!video) return [];
+        if (!video || !video.id) return [];
 
         return [{
-          id: video.id!,
+          id: video.id,
           title: video.title || 'Untitled',
           artist: video.channel?.name || 'Unknown Artist',
           url: video.url,
-          artId: selectRandomArtId(),
+          artId: selectArtId(video.id),
         }];
       }
     } catch (error) {

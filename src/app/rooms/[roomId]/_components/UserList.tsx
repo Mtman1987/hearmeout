@@ -248,7 +248,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
-    if (!room.isPlaying && room.playlist?.length === (room.playlist?.length - newItems.length)) {
+    // If music isn't playing and this is the first song, start playing it
+    if (!room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
        handlePlaySong(newItems[0].id);
     }
   };
@@ -256,6 +257,40 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const handleTogglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   }
+
+  const handleRemoveSong = (songId: string) => {
+    if (!canControlMusic || !roomRef || !room?.playlist) return;
+    const newPlaylist = room.playlist.filter(song => song.id !== songId);
+
+    let newTrackId = room.currentTrackId;
+    let isPlaying = room.isPlaying;
+    
+    if (room.currentTrackId === songId) {
+      if (newPlaylist.length > 0) {
+        const deletedIndex = room.playlist.findIndex(t => t.id === songId);
+        const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
+        newTrackId = newPlaylist[nextIndex]?.id;
+      } else {
+        newTrackId = undefined;
+        isPlaying = false;
+      }
+    }
+    
+    updateDocumentNonBlocking(roomRef, { 
+      playlist: newPlaylist,
+      currentTrackId: newTrackId,
+      isPlaying: isPlaying,
+    });
+  };
+
+  const handleClearPlaylist = () => {
+    if (!canControlMusic || !roomRef) return;
+    updateDocumentNonBlocking(roomRef, { 
+      playlist: [],
+      currentTrackId: undefined,
+      isPlaying: false,
+    });
+  };
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
@@ -288,6 +323,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                           onPlaySong={handlePlaySong}
                           currentTrackId={room?.currentTrackId || ""}
                           isPlayerControlAllowed={canControlMusic}
+                          onRemoveSong={handleRemoveSong}
+                          onClearPlaylist={handleClearPlaylist}
                       />
                   </div>
               )}

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Youtube, Upload, LoaderCircle } from "lucide-react";
 import type { PlaylistItem } from "./Playlist";
 import { getYoutubeInfo } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
 
 type AddMusicPanelProps = {
     onAddItems: (items: PlaylistItem[]) => void;
@@ -17,6 +18,7 @@ type AddMusicPanelProps = {
 export default function AddMusicPanel({ onAddItems, onClose, canAddMusic }: AddMusicPanelProps) {
     const [inputValue, setInputValue] = useState("");
     const [isFetching, setIsFetching] = useState(false);
+    const { toast } = useToast();
 
     const handleAddUrl = async () => {
         if (!inputValue.trim() || isFetching || !canAddMusic) return;
@@ -29,6 +31,12 @@ export default function AddMusicPanel({ onAddItems, onClose, canAddMusic }: AddM
             onAddItems(newItems);
             setInputValue("");
             onClose();
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Failed to fetch video',
+                description: 'Could not get information from the provided YouTube URL. Please check the URL and try again.',
+            });
         }
     };
 

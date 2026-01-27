@@ -1,8 +1,9 @@
 import Image from "next/image";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { GripVertical, Music } from "lucide-react";
+import { Music, Trash2 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export type PlaylistItem = {
   id: string;
@@ -12,7 +13,13 @@ export type PlaylistItem = {
   url: string;
 };
 
-export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed }: { playlist: PlaylistItem[], onPlaySong: (songId: string) => void, currentTrackId: string, isPlayerControlAllowed: boolean }) {
+export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed, onRemoveSong }: { 
+    playlist: PlaylistItem[], 
+    onPlaySong: (songId: string) => void, 
+    currentTrackId: string, 
+    isPlayerControlAllowed: boolean,
+    onRemoveSong: (songId: string) => void
+}) {
   
   if (!playlist || playlist.length === 0) {
     return (
@@ -33,13 +40,12 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlaye
             <li
               key={item.id}
               className={cn(
-                "flex items-center gap-2 p-2 rounded-md transition-colors",
+                "flex items-center gap-2 p-2 rounded-md transition-colors group",
                 isPlayerControlAllowed && "cursor-pointer hover:bg-secondary",
                 isPlaying && "bg-secondary font-semibold"
               )}
               onClick={() => isPlayerControlAllowed && onPlaySong(item.id)}
             >
-              {isPlayerControlAllowed && <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />}
               {art && 
                 <Image
                     src={art.imageUrl}
@@ -56,7 +62,22 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlaye
                   {item.artist}
                 </p>
               </div>
-              {isPlaying && <Music className="h-5 w-5 text-primary" />}
+              {isPlaying && <Music className="h-5 w-5 text-primary shrink-0" />}
+              
+              {isPlayerControlAllowed && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation(); // prevent playing the song when clicking delete
+                    onRemoveSong(item.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                   <span className="sr-only">Remove song</span>
+                </Button>
+              )}
             </li>
           );
         })}
