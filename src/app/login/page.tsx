@@ -57,51 +57,48 @@ export default function LoginPage() {
   const [isProcessing, setIsProcessing] = useState(true);
 
   useEffect(() => {
-    // If user is already logged in (e.g., from a previous session or after the redirect is processed),
-    // redirect them to the home page.
-    if (user) {
+    // If the user is authenticated, redirect them to the home page.
+    if (!isUserLoading && user) {
       router.push('/');
       return;
     }
 
-    // If we're still waiting for Firebase to determine the initial auth state, just wait.
-    if (isUserLoading || !auth || !firestore) {
-      return;
-    }
-    
-    // At this point, we know there's no logged-in user, and Firebase services are ready.
-    // Check if this page load is the result of a sign-in redirect.
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result) {
-          // Yes, the user is coming back from the Google Sign-In page.
-          // The spinner is still active because isProcessing is true.
-          const loggedInUser = result.user;
-          const userRef = doc(firestore, 'users', loggedInUser.uid);
-          
-          // Create or update their profile in Firestore.
-          await setDoc(userRef, {
-            id: loggedInUser.uid,
-            username: loggedInUser.displayName,
-            email: loggedInUser.email,
-            displayName: loggedInUser.displayName,
-            profileImageUrl: loggedInUser.photoURL,
-          }, { merge: true });
+    // Only check for redirect result if Firebase is ready and we know there's no user.
+    if (!isUserLoading && !user && auth && firestore) {
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result) {
+            // A user has successfully signed in via redirect.
+            // The `user` object will be populated in the next render cycle by the `onAuthStateChanged` listener.
+            // We just need to create their profile doc.
+            // `isProcessing` remains true, so the user will see a spinner until the redirect from the `user` object being set.
+            const loggedInUser = result.user;
+            const userRef = doc(firestore, 'users', loggedInUser.uid);
+            
+            await setDoc(userRef, {
+              id: loggedInUser.uid,
+              username: loggedInUser.displayName,
+              email: loggedInUser.email,
+              displayName: loggedInUser.displayName,
+              profileImageUrl: loggedInUser.photoURL,
+            }, { merge: true });
 
-          // Now that the profile is saved, explicitly redirect to the home page.
-          router.push('/');
+            // IMPORTANT: No manual redirect here. The effect will re-run when `user` is populated,
+            // and the `if (!isUserLoading && user)` block will handle the redirect.
 
-        } else {
-          // No, this is a fresh visit to the login page (not a redirect).
-          // Stop the spinner and show the login buttons.
+          } else {
+            // No redirect result means the user landed here directly.
+            // Stop the spinner and show the login buttons.
+            setIsProcessing(false);
+          }
+        })
+        .catch((error) => {
+          console.error("Authentication failed during redirect:", error);
+          // If something went wrong, stop the spinner and show the login page.
           setIsProcessing(false);
-        }
-      })
-      .catch((error) => {
-        console.error("Authentication failed during redirect:", error);
-        // If something went wrong, stop the spinner and show the login page.
-        setIsProcessing(false);
-      });
+        });
+    }
+    // The dependency array ensures this effect runs when auth state or loading status changes.
   }, [user, isUserLoading, auth, firestore, router]);
 
 
@@ -231,3 +228,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
