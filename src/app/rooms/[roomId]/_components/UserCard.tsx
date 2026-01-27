@@ -1,28 +1,66 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  MoreVertical,
+  Trash2,
+  LoaderCircle,
+  Volume2,
+  VolumeX,
+  MicOff,
+  Mic,
+} from 'lucide-react';
+import {
+  useTracks,
+  AudioTrack,
+} from '@livekit/components-react';
+import { Track, type Participant } from 'livekit-client';
+import { doc, deleteDoc } from 'firebase/firestore';
+
+import { useFirebase } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Volume2, VolumeX, MicOff, Mic } from "lucide-react";
 import { SpeakingIndicator } from "./SpeakingIndicator";
-import { cn } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { AudioTrack, useTracks } from '@livekit/components-react';
-import type { Participant } from 'livekit-client';
-import { Track } from 'livekit-client';
-import { useState } from 'react';
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 export default function UserCard({
     participant,
+    isHost,
+    roomId,
 }: {
     participant: Participant;
+    isHost?: boolean;
+    roomId: string;
 }) {
+  const { firestore } = useFirebase();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [volume, setVolume] = useState(1);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   
@@ -61,11 +99,28 @@ export default function UserCard({
     }
   };
 
+  const handleDeleteRoom = async () => {
+    if (!isHost || !firestore || !roomId) {
+        toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
+        return;
+    };
+    setIsDeleting(true);
+    const roomRef = doc(firestore, 'rooms', roomId);
+    try {
+        await deleteDoc(roomRef);
+        toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
+        router.push('/');
+    } catch (error) {
+        console.error("Error deleting room:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not delete the room.' });
+        setIsDeleting(false);
+    }
+  };
+
   const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
     <>
-      {/* This renders the audio from remote participants so we can hear them */}
       {tracks.map(trackRef => (
         <AudioTrack
             key={trackRef.publication.trackSid}
@@ -88,49 +143,88 @@ export default function UserCard({
               )}
             </div>
             <CardTitle className="font-headline text-lg flex-1 truncate">{displayName}</CardTitle>
-          </div>
-          <div className="flex justify-center items-center mt-2 gap-1 h-9">
-              {isLocal && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={isMicrophoneMuted ? 'destructive' : 'secondary'}
-                        size="icon"
-                        onClick={toggleLocalMic}
-                        aria-label="Toggle Mic Broadcast"
-                      >
-                          <Mic className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>{isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
-                  </Tooltip>
-              )}
+
+            {isLocal && isHost && (
+              <div className="ml-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-5 w-5" />
+                      <span className="sr-only">Room Actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2" />
+                      Delete Room
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
           <SpeakingIndicator isSpeaking={isSpeaking} />
 
-          {!isLocal && (
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
-                        {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>{isMutedForUser ? 'Unmute' : 'Mute'}</p></TooltipContent>
+           {isLocal ? (
+             <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isMicrophoneMuted ? 'destructive' : 'secondary'}
+                    onClick={toggleLocalMic}
+                    aria-label="Toggle Mic Broadcast"
+                    className="w-full"
+                  >
+                      <Mic className="h-5 w-5 mr-2" />
+                      {isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>{isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
               </Tooltip>
-              <Slider
-                aria-label="Volume"
-                value={[isMutedForUser ? 0 : volume]}
-                onValueChange={handleVolumeChange}
-                max={1}
-                step={0.05}
-              />
-            </div>
-          )}
+            ) : (
+                <div className="flex items-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
+                                {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isMutedForUser ? 'Unmute' : 'Mute'}</p></TooltipContent>
+                    </Tooltip>
+                    <Slider
+                        aria-label="Volume"
+                        value={[isMutedForUser ? 0 : volume]}
+                        onValueChange={handleVolumeChange}
+                        max={1}
+                        step={0.05}
+                    />
+                </div>
+            )}
         </CardContent>
       </Card>
+      
+      {isLocal && isHost && (
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete this room and all of its associated data.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteRoom} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                        {isDeleting ? <LoaderCircle className="animate-spin" /> : "Delete"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

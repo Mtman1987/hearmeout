@@ -33,7 +33,7 @@ interface RoomData {
   isPlaying?: boolean;
 }
 
-const RoomParticipants = () => {
+const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string; }) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
@@ -51,12 +51,15 @@ const RoomParticipants = () => {
         <UserCard
           key={localParticipant.sid}
           participant={localParticipant}
+          isHost={isHost}
+          roomId={roomId}
         />
       )}
       {remoteParticipants.map((participant) => (
         <UserCard 
           key={participant.sid}
           participant={participant}
+          roomId={roomId}
         />
       ))}
     </div>
@@ -78,15 +81,20 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
    useEffect(() => {
     console.log('[UserList] useEffect triggered for LiveKit token generation.');
-    const displayName = user?.displayName || (user?.isAnonymous ? 'Guest' : 'Anonymous');
 
     if (isUserLoading) {
       console.log('[UserList] Waiting for user authentication to complete...');
       return;
     }
     
-    if (!user || !roomId || !displayName) {
-      console.log('[UserList] Aborting token generation: missing user, roomId, or displayName.', { hasUser: !!user, hasRoomId: !!roomId, hasDisplayName: !!displayName });
+    if (!user) {
+      console.log('[UserList] Aborting token generation: user not logged in.');
+      return;
+    }
+
+    const displayName = user.displayName || (user.isAnonymous ? 'Guest' : 'Anonymous');
+    if (!roomId || !displayName) {
+       console.log('[UserList] Aborting token generation: missing roomId or displayName.', { hasRoomId: !!roomId, hasDisplayName: !!displayName });
       return;
     }
 
@@ -120,7 +128,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     }
   }, [room, user, roomRef]);
   
-  const isRoomOwner = user?.uid === room?.ownerId;
+  const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
   const canControlMusic = isRoomOwner;
 
 
@@ -257,7 +265,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             onDisconnected={() => console.log('[LiveKitRoom] Disconnected.')}
             onError={(e) => console.error('[LiveKitRoom] Connection error:', e)}
           >
-            <RoomParticipants />
+            <RoomParticipants isHost={isRoomOwner} roomId={roomId}/>
           </LiveKitRoom>
         ) : (
            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
