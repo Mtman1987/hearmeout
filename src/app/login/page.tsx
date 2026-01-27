@@ -12,7 +12,7 @@ import { Logo } from "@/app/components/Logo";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useFirebase } from '@/firebase';
-import { signInAnonymously, updateProfile } from 'firebase/auth';
+import { signInAnonymously, updateProfile, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 
@@ -47,41 +47,66 @@ export default function LoginPage() {
 
   const handleDiscordLogin = async () => {
     if (auth && firestore) {
-      try {
-        // 1. Sign in anonymously to get a user object and a stable UID
-        const userCredential = await signInAnonymously(auth);
-        const user = userCredential.user;
+      // Hardcoded credentials for simulation. This creates a persistent user.
+      const email = "mtman1987@example.com";
+      const password = "very-secure-simulation-password-123!";
 
-        // 2. The user's Discord data
+      try {
+        // Try to sign in first, in case the user already exists from a previous session.
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error: any) {
+        // If the user does not exist, create a new one.
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+          try {
+            await createUserWithEmailAndPassword(auth, email, password);
+          } catch (createError: any) {
+            console.error("Simulated user creation failed:", createError);
+            alert(`Failed to create simulated user: ${createError.message}`);
+            return;
+          }
+        } else {
+          // For other errors (e.g., network issue), just show an alert.
+          console.error("Simulated sign-in failed:", error);
+          alert(`Simulated login failed: ${error.message}`);
+          return;
+        }
+      }
+
+      const user = auth.currentUser;
+
+      if (user) {
+        // The user's Discord data provided for simulation
         const discordInfo = {
             username: "Mtman1987",
             discordId: "767875979561009173",
             profilePicture: "https://cdn.discordapp.com/avatars/767875979561009173/a_e1adf881255d96dfca6a5e11c46b1f6b.png"
         };
+        
+        try {
+            // Update the Firebase Auth user's profile
+            await updateProfile(user, {
+                displayName: discordInfo.username,
+                photoURL: discordInfo.profilePicture
+            });
 
-        // 3. Update the Firebase Auth user's profile
-        await updateProfile(user, {
-            displayName: discordInfo.username,
-            photoURL: discordInfo.profilePicture
-        });
+            // Create the user document in Firestore with the Discord info
+            const userRef = doc(firestore, 'users', user.uid);
+            await setDoc(userRef, {
+                id: user.uid,
+                username: discordInfo.username,
+                email: user.email,
+                displayName: discordInfo.username,
+                profileImageUrl: discordInfo.profilePicture,
+                discordId: discordInfo.discordId,
+            }, { merge: true });
 
-        // 4. Create the user document in Firestore with the Discord info
-        const userRef = doc(firestore, 'users', user.uid);
-        await setDoc(userRef, {
-            id: user.uid,
-            username: discordInfo.username,
-            email: `${discordInfo.username.toLowerCase()}@example.com`, // Placeholder email
-            displayName: discordInfo.username,
-            profileImageUrl: discordInfo.profilePicture,
-            discordId: discordInfo.discordId,
-        }, { merge: true });
+            // Redirect to homepage on success
+            router.push('/');
 
-        // 5. Redirect to homepage
-        router.push('/');
-
-      } catch (error: any) {
-          console.error("Simulated Discord sign-in failed:", error);
-          alert(`Simulated Discord login failed. Please try again. Error: ${error.message}`);
+        } catch (error: any) {
+            console.error("Failed to update profile or Firestore:", error);
+            alert(`Failed to save user data: ${error.message}`);
+        }
       }
     }
   };
