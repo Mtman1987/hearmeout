@@ -18,9 +18,9 @@ import {
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
 import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc } from 'firebase/firestore';
 
-import { useFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { useFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -110,32 +110,32 @@ export default function UserCard({
 
   const micTrackRef = useTracks([Track.Source.Microphone], { participant }).find((t) => t.source === Track.Source.Microphone);
   
-  // The UI is now driven by the database state.
   const isMuted = firestoreUser?.isMuted ?? false;
 
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
-    // Only applies to the local participant's card on their own screen.
     if (isLocal && micTrackRef?.publication.track) {
-      const micTrack = micTrackRef.publication.track as any;
+      const micTrack = micTrackRef.publication.track;
       
-      // SUPER-SAFE GUARD:
-      // We check if the track object exists AND if it has a 'setMuted' method
-      // before we even think about calling it. This is safer than `instanceof`.
-      if (micTrack && typeof micTrack.setMuted === 'function') {
-        const localTrack = micTrack as LocalAudioTrack; // We can now safely cast
-        if (firestoreUser?.isMuted !== undefined && localTrack.isMuted !== firestoreUser.isMuted) {
-          localTrack.setMuted(firestoreUser.isMuted);
+      // SUPER-SAFE GUARD: Check for the function's existence before calling it.
+      if (micTrack && typeof (micTrack as any).setMuted === 'function') {
+        const localTrack = micTrack as LocalAudioTrack;
+        if (localTrack.isMuted !== isMuted) {
+          localTrack.setMuted(isMuted);
         }
       }
     }
-  }, [isLocal, micTrackRef, firestoreUser?.isMuted]);
+  }, [isLocal, micTrackRef, isMuted]);
   
-  const handleToggleMic = () => {
-    // This function only works for the local user on their own card.
+  const handleToggleMic = async () => {
     if (isLocal && firestore && roomId && identity && firestoreUser) {
       const userInRoomRef = doc(firestore, 'rooms', roomId, 'users', identity);
-      updateDocumentNonBlocking(userInRoomRef, { isMuted: !firestoreUser.isMuted });
+      try {
+        await updateDoc(userInRoomRef, { isMuted: !isMuted });
+      } catch (error) {
+        console.error("Failed to update mute state in Firestore:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not update mute status.' });
+      }
     }
   };
   

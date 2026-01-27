@@ -25,8 +25,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase, useDoc, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { generateLiveKitToken } from '@/app/actions';
 
 function ConnectionStatusIndicator() {
@@ -117,7 +117,7 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                         <Button variant="outline" size="icon" onClick={onToggleChat}>
+                         <Button variant="outline" size="icon" onClick={() => onToggleChat()}>
                             <MessageSquare className="h-5 w-5" />
                             <span className="sr-only">Toggle Chat</span>
                         </Button>
@@ -165,34 +165,43 @@ function RoomPageContent() {
     }
 
     const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
-    const participantData = {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-        isMuted: false, 
-        isSpeaking: false,
-    };
-    setDocumentNonBlocking(userInRoomRef, participantData, { merge: true });
+    let isCancelled = false;
 
-    (async () => {
-      try {
-        const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
-        const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
-        setLivekitToken(token);
-      } catch (e: any) {
-        console.error('[RoomPage] Failed to get LiveKit token', e);
-        toast({
-          variant: 'destructive',
-          title: 'Voice Connection Failed',
-          description: e.message || 'Could not generate an authentication token.',
-        });
-      }
-    })();
+    const setupUserInRoom = async () => {
+        try {
+            const participantData = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                isMuted: false, 
+                isSpeaking: false,
+            };
+            await setDoc(userInRoomRef, participantData, { merge: true });
+
+            const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
+            const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
+            if (!isCancelled) {
+                setLivekitToken(token);
+            }
+        } catch (e: any) {
+            console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
+            toast({
+                variant: 'destructive',
+                title: 'Connection Failed',
+                description: e.message || 'Could not join the room.',
+            });
+        }
+    };
+    
+    setupUserInRoom();
     
     return () => {
-      deleteDocumentNonBlocking(userInRoomRef);
+      isCancelled = true;
+      deleteDoc(userInRoomRef).catch(err => {
+          console.error("Failed to clean up user document in room:", err);
+      });
     };
-  }, [user, isUserLoading, params.roomId, toast, firestore]);
+  }, [user, isUserLoading, params.roomId, firestore, toast]);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const { isMobile } = useSidebar();
