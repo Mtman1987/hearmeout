@@ -35,10 +35,6 @@
         "twitchId": {
           "type": "string",
           "description": "The user's Twitch ID, if linked."
-        },
-        "isAdmin": {
-          "type": "boolean",
-          "description": "Indicates if the user has administrative privileges."
         }
       },
       "required": [
@@ -78,6 +74,21 @@
           "type": "string",
           "description": "Timestamp of when the room was created.",
           "format": "date-time"
+        },
+        "playlist": {
+          "type": "array",
+          "description": "The ordered list of media items in the room's playlist.",
+          "items": {
+            "$ref": "#/entities/PlaylistItem"
+          }
+        },
+        "currentTrackId": {
+          "type": "string",
+          "description": "The ID of the currently playing track in the playlist."
+        },
+        "isPlaying": {
+          "type": "boolean",
+          "description": "Indicates if music is currently playing in the room."
         }
       },
       "required": [
@@ -86,6 +97,36 @@
         "ownerId",
         "isPrivate",
         "createdAt"
+      ]
+    },
+    "PlaylistItem": {
+      "title": "Playlist Item",
+      "description": "Represents a single item in a room's playlist.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "artist": {
+          "type": "string"
+        },
+        "artId": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "artist",
+        "artId",
+        "url"
       ]
     },
     "RoomParticipant": {

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Volume2, VolumeX, MicOff, Headphones, MoreVertical, Ban, LogOut, ArrowRightLeft } from "lucide-react";
+import { Volume2, VolumeX, MicOff, Headphones, MoreVertical, Ban, LogOut, ArrowRightLeft, Mic } from "lucide-react";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 import { cn } from '@/lib/utils';
 import {
@@ -33,13 +33,12 @@ import {
 } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useCollection, useMemoFirebase, useFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useCollection, useMemoFirebase, useFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, doc } from 'firebase/firestore';
 
 
 export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: string; name: string; photoURL: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: string, destinationRoomId: string) => void; }) {
-  const params = useParams();
-  const roomId = params.roomId as string;
+  const params = useParams<{ roomId: string }>();
   const { firestore } = useFirebase();
 
   const [volume, setVolume] = useState(isLocal ? 1 : 0.7);
@@ -52,7 +51,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
   const [pushToTalk, setPushToTalk] = useState(false);
   const [monitoring, setMonitoring] = useState(true);
 
-   const publicRoomsQuery = useMemoFirebase(() => {
+  const publicRoomsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
         collection(firestore, 'rooms'), 
@@ -62,11 +61,22 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
 
   const { data: publicRooms } = useCollection<{id: string, name: string}>(publicRoomsQuery);
 
+  const userInRoomRef = useMemoFirebase(() => {
+      if (!firestore || !params.roomId || !user.id) return null;
+      return doc(firestore, 'rooms', params.roomId, 'users', user.id);
+  }, [firestore, params.roomId, user.id]);
+
+  const handleToggleSpeaking = () => {
+    if (isLocal && userInRoomRef) {
+        updateDocumentNonBlocking(userInRoomRef, { isSpeaking: !user.isSpeaking });
+    }
+  }
+
   // Effect to load settings from localStorage on mount
   useEffect(() => {
     setIsLoaded(false); // Reset loaded state on user/room change
     if (!isLocal) { 
-        const storageKey = `hearmeout-user-prefs-${roomId}`;
+        const storageKey = `hearmeout-user-prefs-${params.roomId}`;
         try {
             const allPrefs = JSON.parse(localStorage.getItem(storageKey) || '{}');
             const userPrefs = allPrefs[user.id];
@@ -86,13 +96,13 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
     } else {
         setIsLoaded(true); // For local user, we're "loaded" immediately
     }
-  }, [user.id, roomId, isLocal]);
+  }, [user.id, params.roomId, isLocal]);
 
   // Effect to save settings to localStorage on change
   useEffect(() => {
     // Only save if loading is complete and it's not the local user
     if (!isLocal && isLoaded) {
-        const storageKey = `hearmeout-user-prefs-${roomId}`;
+        const storageKey = `hearmeout-user-prefs-${params.roomId}`;
         try {
             const allPrefs = JSON.parse(localStorage.getItem(storageKey) || '{}');
             if (!allPrefs[user.id]) {
@@ -105,7 +115,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
              console.error("Failed to save user preferences to localStorage", e);
         }
     }
-  }, [volume, isMuted, user.id, roomId, isLocal, isLoaded]);
+  }, [volume, isMuted, user.id, params.roomId, isLocal, isLoaded]);
 
   useEffect(() => {
     async function getMediaDevices() {
@@ -148,6 +158,14 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
          <div className="flex justify-center items-center mt-2 gap-1 h-9">
             {isLocal ? (
                 <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant={user.isSpeaking ? 'secondary' : 'ghost'} size="icon" onClick={handleToggleSpeaking} aria-label="Toggle Mic">
+                        <Mic className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Toggle Mic</TooltipContent>
+                </Tooltip>
                 <Dialog>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -270,7 +288,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
                         <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
                         <ScrollArea className="h-40">
                         {publicRooms && publicRooms
-                            .filter(r => r.id !== roomId)
+                            .filter(r => r.id !== params.roomId)
                             .map(r => (
                                 <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id, r.id)}>
                                     {r.name}

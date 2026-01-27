@@ -1,11 +1,47 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // Allow read and write access only for authenticated users.
-      // This is a temporary, broad rule to fix the current issue.
-      // We will refine this later for more granular security.
-      allow read, write: if request.auth != null;
+
+    function isOwner(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerId == request.auth.uid;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if request.auth != null;
+      // Allow create for any authenticated user
+      allow create: if request.auth != null;
+      // Allow owner to update music state and room details
+      allow update: if request.auth != null && isOwner(roomId);
+      // Allow owner to delete
+      allow delete: if request.auth != null && isOwner(roomId);
+
+      match /users/{userId} {
+        // Anyone can join a room (create their user doc)
+        allow create: if request.auth != null && request.auth.uid == userId;
+        // Users can only read the list of participants
+        allow list: if request.auth != null;
+        // Users can only read specific participant data
+        allow get: if request.auth != null;
+        // Users can update their own speaking status, but nothing else
+        allow update: if request.auth != null && request.auth.uid == userId && request.resource.data.keys().hasOnly(['id', 'displayName', 'photoURL', 'isSpeaking']);
+        // Users can delete their own presence document (leaving the room)
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Disallow writes to other subcollections for now
+      match /messages/{messageId} {
+        allow read, create: if request.auth != null;
+      }
+
+      // Deny all other subcollection writes by default
+      match /{allother=**} {
+        allow write: if false;
+      }
+    }
+
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
     }
   }
 }

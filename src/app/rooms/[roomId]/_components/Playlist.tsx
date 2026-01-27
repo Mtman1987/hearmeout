@@ -12,11 +12,20 @@ export type PlaylistItem = {
   url: string;
 };
 
-export default function Playlist({ playlist, onPlaySong, currentTrackId }: { playlist: PlaylistItem[], onPlaySong: (index: number) => void, currentTrackId: string }) {
+export default function Playlist({ playlist, onPlaySong, currentTrackId, isHost }: { playlist: PlaylistItem[], onPlaySong: (songId: string) => void, currentTrackId: string, isHost: boolean }) {
+  
+  if (!playlist || playlist.length === 0) {
+    return (
+        <div className="h-64 w-full flex items-center justify-center">
+            <p className="text-muted-foreground text-sm">Playlist is empty.</p>
+        </div>
+    )
+  }
+
   return (
     <ScrollArea className="h-64 w-full">
       <ul className="space-y-1 p-2">
-        {playlist.map((item, index) => {
+        {playlist.map((item) => {
           const art = placeholderData.placeholderImages.find(p => p.id === item.artId);
           const isPlaying = item.id === currentTrackId;
 
@@ -24,12 +33,13 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId }: { pla
             <li
               key={item.id}
               className={cn(
-                "flex items-center gap-2 p-2 rounded-md hover:bg-secondary transition-colors cursor-pointer",
+                "flex items-center gap-2 p-2 rounded-md transition-colors",
+                isHost && "cursor-pointer hover:bg-secondary",
                 isPlaying && "bg-secondary font-semibold"
               )}
-              onClick={() => onPlaySong(index)}
+              onClick={() => isHost && onPlaySong(item.id)}
             >
-              <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />
+              {isHost && <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing" />}
               {art && 
                 <Image
                     src={art.imageUrl}

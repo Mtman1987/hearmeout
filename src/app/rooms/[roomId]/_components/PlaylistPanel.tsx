@@ -6,11 +6,12 @@ import { ListMusic } from "lucide-react";
 
 type PlaylistPanelProps = {
     playlist: PlaylistItem[];
-    onPlaySong: (index: number) => void;
+    onPlaySong: (songId: string) => void;
     currentTrackId: string;
+    isHost: boolean;
 }
 
-export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId }: PlaylistPanelProps) {
+export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId, isHost }: PlaylistPanelProps) {
     return (
         <Card>
             <CardHeader>
@@ -19,7 +20,7 @@ export default function PlaylistPanel({ playlist, onPlaySong, currentTrackId }: 
                 </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-                <Playlist playlist={playlist} onPlaySong={onPlaySong} currentTrackId={currentTrackId} />
+                <Playlist playlist={playlist} onPlaySong={onPlaySong} currentTrackId={currentTrackId} isHost={isHost} />
             </CardContent>
         </Card>
     )

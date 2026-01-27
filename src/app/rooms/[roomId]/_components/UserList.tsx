@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking } from '@/firebase';
+import { collection, doc, serverTimestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 
@@ -15,8 +15,6 @@ const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
   { id: "2", title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
   { id: "3", title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
-  { id: "4", title: "Don't Stop The Music", artist: "Rihanna", artId: "album-art-1", url: "https://www.youtube.com/watch?v=yd8jh9QYfSM" },
-  { id: "5", title: "So What", artist: "Miles Davis", artId: "album-art-2", url: "https://www.youtube.com/watch?v=ylXk1LBvIqU" },
 ];
 
 interface RoomUser {
@@ -26,13 +24,35 @@ interface RoomUser {
   isSpeaking: boolean;
 }
 
-export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlayerOpen: boolean, roomId: string, room: { ownerId: string } | null }) {
-  const [playlist, setPlaylist] = useState<PlaylistItem[]>(initialPlaylist);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+interface RoomData {
+  name: string;
+  ownerId: string;
+  playlist?: PlaylistItem[];
+  currentTrackId?: string;
+  isPlaying?: boolean;
+}
+
+export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
-  const [playing, setPlaying] = useState(false);
-  
   const { firestore, user } = useFirebase();
+
+  const roomRef = useMemoFirebase(() => {
+    if (!firestore || !roomId) return null;
+    return doc(firestore, 'rooms', roomId);
+  }, [firestore, roomId]);
+
+  const { data: room } = useDoc<RoomData>(roomRef);
+
+  useEffect(() => {
+    // Initialize room with a default playlist if it's new
+    if (room && !room.playlist && user?.uid === room.ownerId) {
+        updateDocumentNonBlocking(roomRef!, { 
+            playlist: initialPlaylist,
+            currentTrackId: initialPlaylist[0].id,
+            isPlaying: false
+        });
+    }
+  }, [room, user, roomRef]);
 
   const usersInRoomQuery = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -48,27 +68,41 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
     console.log(`Move user ${userId} to room ${destinationRoomId}`);
   };
 
+  const handlePlaySong = (songId: string) => {
+    if (!isHost || !roomRef) return;
+    updateDocumentNonBlocking(roomRef, {
+        currentTrackId: songId,
+        isPlaying: true,
+    });
+  }
 
-  const playSong = (index: number) => {
-    setCurrentTrackIndex(index);
-    setPlaying(true);
+  const handlePlayPause = (playing: boolean) => {
+    if (!isHost || !roomRef) return;
+    updateDocumentNonBlocking(roomRef, { isPlaying: playing });
   }
 
   const handlePlayNext = () => {
-    const nextIndex = (currentTrackIndex + 1) % playlist.length;
-    playSong(nextIndex);
+    if (!isHost || !roomRef || !room?.playlist || !room.currentTrackId) return;
+    const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
+    const nextIndex = (currentIndex + 1) % room.playlist.length;
+    handlePlaySong(room.playlist[nextIndex].id);
   };
 
   const handlePlayPrev = () => {
-    const prevIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
-    playSong(prevIndex);
+     if (!isHost || !roomRef || !room?.playlist || !room.currentTrackId) return;
+    const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
+    const prevIndex = (currentIndex - 1 + room.playlist.length) % room.playlist.length;
+    handlePlaySong(room.playlist[prevIndex].id);
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    const newPlaylist = [...playlist, ...newItems];
-    setPlaylist(newPlaylist);
-    if (!playing && playlist.length === initialPlaylist.length) {
-       playSong(playlist.length);
+    if (!isHost || !roomRef || !room) return;
+    const newPlaylist = [...(room.playlist || []), ...newItems];
+    updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
+
+    // If nothing is playing, start playing the first new song
+    if (!room.isPlaying && room.playlist?.length === (room.playlist?.length - newItems.length)) {
+       handlePlaySong(newItems[0].id);
     }
   };
 
@@ -76,7 +110,7 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   }
 
-  const currentTrack = playlist[currentTrackIndex] || initialPlaylist[0];
+  const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
   return (
     <div className="flex flex-col gap-6">
@@ -85,10 +119,13 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
           <div className="lg:col-span-1 h-full">
              <MusicPlayerCard
               currentTrack={currentTrack}
-              playing={playing}
-              setPlaying={setPlaying}
+              playlist={room?.playlist || []}
+              playing={room?.isPlaying || false}
+              isHost={isHost}
+              onPlayPause={handlePlayPause}
               onPlayNext={handlePlayNext}
               onPlayPrev={handlePlayPrev}
+              onSeek={() => {}} // Placeholder for seek
               activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
             />
@@ -98,9 +135,10 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
             {activePanels.playlist && (
                 <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
                     <PlaylistPanel
-                        playlist={playlist}
-                        onPlaySong={playSong}
-                        currentTrackId={currentTrack.id}
+                        playlist={room?.playlist || []}
+                        onPlaySong={handlePlaySong}
+                        currentTrackId={room?.currentTrackId || ""}
+                        isHost={isHost}
                     />
                 </div>
             )}
@@ -110,6 +148,7 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
                     <AddMusicPanel
                         onAddItems={handleAddItems}
                         onClose={() => handleTogglePanel('add')}
+                        isHost={isHost}
                     />
                 </div>
             )}
@@ -119,7 +158,7 @@ export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlaye
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
         {users && users.map((roomUser) => (
-          <UserCard key={roomUser.id} user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} isLocal={roomUser.id === user?.uid} isHost={isHost} onMoveUser={handleMoveUser} />
+          <UserCard key={roomUser.id} user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} isLocal={roomUser.id === user?.uid} isHost={isHost && roomUser.id !== user?.uid} onMoveUser={handleMoveUser} />
         ))}
       </div>
     </div>

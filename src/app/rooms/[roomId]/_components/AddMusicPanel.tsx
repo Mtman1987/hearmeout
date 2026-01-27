@@ -11,14 +11,15 @@ import { getYoutubeInfo } from '@/app/actions';
 type AddMusicPanelProps = {
     onAddItems: (items: PlaylistItem[]) => void;
     onClose: () => void;
+    isHost: boolean;
 };
 
-export default function AddMusicPanel({ onAddItems, onClose }: AddMusicPanelProps) {
+export default function AddMusicPanel({ onAddItems, onClose, isHost }: AddMusicPanelProps) {
     const [inputValue, setInputValue] = useState("");
     const [isFetching, setIsFetching] = useState(false);
 
     const handleAddUrl = async () => {
-        if (!inputValue.trim() || isFetching) return;
+        if (!inputValue.trim() || isFetching || !isHost) return;
 
         setIsFetching(true);
         const newItems = await getYoutubeInfo(inputValue);
@@ -30,6 +31,21 @@ export default function AddMusicPanel({ onAddItems, onClose }: AddMusicPanelProp
             onClose();
         }
     };
+
+    if (!isHost) {
+        return (
+             <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline flex items-center gap-2">
+                        <Youtube /> Add Music
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className='p-4 text-sm text-muted-foreground'>Only the room host can add music to the playlist.</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <Card>

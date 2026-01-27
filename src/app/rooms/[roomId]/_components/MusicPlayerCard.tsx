@@ -34,18 +34,24 @@ import {
 
 export default function MusicPlayerCard({
   currentTrack,
+  playlist,
   playing,
-  setPlaying,
+  isHost,
+  onPlayPause,
   onPlayNext,
   onPlayPrev,
+  onSeek,
   activePanels,
   onTogglePanel,
 }: {
-  currentTrack: PlaylistItem;
+  currentTrack: PlaylistItem | undefined;
+  playlist: PlaylistItem[];
   playing: boolean;
-  setPlaying: (playing: boolean) => void;
+  isHost: boolean;
+  onPlayPause: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
+  onSeek: (played: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
 }) {
@@ -60,26 +66,70 @@ export default function MusicPlayerCard({
   const playerRef = useRef<ReactPlayer>(null);
 
   useEffect(() => {
-    setPlayed(0);
+    setPlayed(0); // Reset progress when track changes
   }, [currentTrack]);
+  
+  useEffect(() => {
+    // If user is not the host, just listen for changes
+    if (!isHost && playerRef.current) {
+        playerRef.current.seekTo(played);
+    }
+  }, [played, isHost]);
 
+
+  if (!currentTrack) {
+    // Render a placeholder or loading state if no track is available
+    return (
+        <Card className="flex flex-col h-full">
+            <CardHeader>
+                 <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-lg shadow-lg bg-muted flex items-center justify-center">
+                        <Music className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <CardTitle className="font-headline text-lg flex items-center gap-2">
+                            <Music /> Now Playing
+                        </CardTitle>
+                        <p className="text-muted-foreground text-sm truncate">No song selected</p>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
+                 <div className="space-y-1">
+                    <Slider disabled value={[0]} max={1} step={0.01} />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>0:00</span>
+                        <span>0:00</span>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+  }
 
   const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
 
-  const handlePlayPause = () => setPlaying(!playing);
+  const handlePlayPause = () => isHost && onPlayPause(!playing);
   const handleVolumeChange = (value: number[]) => setVolume(value[0]);
   
   const handleProgress = (state: { played: number }) => {
     if (!seeking) {
       setPlayed(state.played);
+      // Host broadcasts progress
+      if(isHost) onSeek(state.played);
     }
   };
 
   const handleDuration = (duration: number) => setDuration(duration);
-  const handleSeekChange = (value: number[]) => { setPlayed(value[0]); };
+  const handleSeekChange = (value: number[]) => { 
+    if (!isHost) return;
+    setPlayed(value[0]); 
+  };
   const handleSeekCommit = (value: number[]) => {
+    if (!isHost) return;
     setSeeking(false);
     playerRef.current?.seekTo(value[0]);
+    onSeek(value[0]);
   };
   
   function formatTime(seconds: number) {
@@ -108,8 +158,8 @@ export default function MusicPlayerCard({
                 onProgress={handleProgress}
                 onDuration={handleDuration}
                 onEnded={onPlayNext}
-                onPause={() => setPlaying(false)}
-                onPlay={() => setPlaying(true)}
+                onPause={() => isHost && onPlayPause(false)}
+                onPlay={() => isHost && onPlayPause(true)}
                 width="1px"
                 height="1px"
             />
@@ -163,12 +213,13 @@ export default function MusicPlayerCard({
         </div>
         <div className="space-y-1">
             <Slider 
-              value={[played]} 
+              value={[played]}
               onValueChange={handleSeekChange}
               onValueCommit={handleSeekCommit}
-              onPointerDown={() => setSeeking(true)}
+              onPointerDown={() => isHost && setSeeking(true)}
               max={1} 
-              step={0.01} 
+              step={0.01}
+              disabled={!isHost}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{formatTime(playedSeconds)}</span>
@@ -179,7 +230,7 @@ export default function MusicPlayerCard({
             <div className="flex items-center justify-center gap-1">
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayPrev} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={onPlayPrev} disabled={!isHost} className="h-9 w-9">
                           <SkipBack className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
@@ -189,7 +240,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause}>
+                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isHost}>
                           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                         </Button>
                     </TooltipTrigger>
@@ -199,7 +250,7 @@ export default function MusicPlayerCard({
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={onPlayNext} className="h-9 w-9">
+                        <Button variant="ghost" size="icon" onClick={onPlayNext} disabled={!isHost} className="h-9 w-9">
                           <SkipForward className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>

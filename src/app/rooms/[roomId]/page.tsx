@@ -108,7 +108,15 @@ export default function RoomPage() {
       isSpeaking: false,
     }, { merge: true });
 
+    // Set up presence management
+    const handleBeforeUnload = () => {
+        deleteDocumentNonBlocking(userInRoomRef);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // This will be called on component unmount (e.g. navigating away)
       deleteDocumentNonBlocking(userInRoomRef);
     };
   }, [user, firestore, params.roomId]);
@@ -128,7 +136,7 @@ export default function RoomPage() {
                         onToggleMusicPlayer={() => setMusicPlayerOpen(!musicPlayerOpen)}
                     />
                     <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                        <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} room={room} />
+                        <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} />
                     </main>
                 </div>
             </SidebarInset>
