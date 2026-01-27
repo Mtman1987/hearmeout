@@ -14,22 +14,40 @@ import {
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Home, Music, PlusCircle, LogOut, Settings, User, LogIn } from 'lucide-react';
+import { Home, Music, LogOut, Settings, User, LogIn } from 'lucide-react';
 import { Logo } from '@/app/components/Logo';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { rooms } from '@/lib/rooms';
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useFirebase } from '@/firebase';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CreateRoomDialog } from '@/app/rooms/_components/CreateRoomDialog';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+
+interface Room {
+    id: string;
+    name: string;
+    isPrivate: boolean;
+}
 
 export default function LeftSidebar({ roomId }: { roomId?: string }) {
   const pathname = usePathname();
-  const publicRooms = rooms.filter(room => room.isPublic);
-  const { user, auth, isUserLoading } = useFirebase();
+  const { user, auth, isUserLoading, firestore } = useFirebase();
+
+  const publicRoomsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
+        collection(firestore, 'rooms'), 
+        where('isPrivate', '==', false),
+        orderBy('createdAt', 'desc')
+    );
+  }, [firestore]);
+
+  const { data: publicRooms, isLoading: roomsLoading } = useCollection<Room>(publicRoomsQuery);
+
 
   const handleLogout = () => {
     if (auth) {
@@ -56,7 +74,14 @@ export default function LeftSidebar({ roomId }: { roomId?: string }) {
         <SidebarGroup>
           <SidebarGroupLabel>Public Rooms</SidebarGroupLabel>
           <SidebarMenu>
-            {publicRooms.map(room => (
+            {roomsLoading && (
+                <>
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                </>
+            )}
+            {publicRooms && publicRooms.map(room => (
               <SidebarMenuItem key={room.id}>
                 <SidebarMenuButton asChild isActive={room.id === roomId}>
                   <Link href={`/rooms/${room.id}`}>
@@ -66,14 +91,14 @@ export default function LeftSidebar({ roomId }: { roomId?: string }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+             {!roomsLoading && (!publicRooms || publicRooms.length === 0) && (
+              <p className="px-2 text-sm text-muted-foreground">No public rooms yet.</p>
+            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className='gap-4'>
-        <Button className='w-full'>
-          <PlusCircle />
-          Create Room
-        </Button>
+        <CreateRoomDialog />
         <div className="border-t -mx-2"></div>
         
         {isUserLoading ? (

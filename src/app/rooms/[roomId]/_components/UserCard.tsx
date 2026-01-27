@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Volume2, VolumeX, MicOff, Headphones, MoreVertical, Ban, LogOut, ArrowRightLeft } from "lucide-react";
-import placeholderData from "@/lib/placeholder-images.json";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 import { cn } from '@/lib/utils';
 import {
@@ -33,13 +32,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { rooms } from "@/lib/rooms";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useCollection, useMemoFirebase, useFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 
 
-export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: number; name: string; avatarId: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: number, destinationRoomId: string) => void; }) {
+export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: { id: string; name: string; photoURL: string; isSpeaking: boolean; }; isLocal?: boolean; isHost?: boolean; onMoveUser?: (userId: string, destinationRoomId: string) => void; }) {
   const params = useParams();
   const roomId = params.roomId as string;
+  const { firestore } = useFirebase();
 
   const [volume, setVolume] = useState(isLocal ? 1 : 0.7);
   const [isMuted, setIsMuted] = useState(false);
@@ -50,6 +51,16 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
   const [selectedOutput, setSelectedOutput] = useState<string>('default');
   const [pushToTalk, setPushToTalk] = useState(false);
   const [monitoring, setMonitoring] = useState(true);
+
+   const publicRoomsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
+        collection(firestore, 'rooms'), 
+        where('isPrivate', '==', false)
+    );
+  }, [firestore]);
+
+  const { data: publicRooms } = useCollection<{id: string, name: string}>(publicRoomsQuery);
 
   // Effect to load settings from localStorage on mount
   useEffect(() => {
@@ -115,8 +126,6 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
     getMediaDevices();
   }, [isLocal]);
 
-  const avatar = placeholderData.placeholderImages.find(p => p.id === user.avatarId);
-
   const handleVolumeChange = (value: number[]) => {
       setVolume(value[0]);
       if (value[0] > 0 && isMuted) {
@@ -130,7 +139,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
         <div className="flex items-center gap-4">
           <div className="relative">
             <Avatar className={cn("h-12 w-12 transition-all", user.isSpeaking && !isMuted && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
-              {avatar && <AvatarImage src={avatar.imageUrl} alt={user.name} data-ai-hint={avatar.imageHint} />}
+              <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.id}/100/100`} alt={user.name} data-ai-hint="person portrait" />
               <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
@@ -260,7 +269,7 @@ export default function UserCard({ user, isLocal, isHost, onMoveUser }: { user: 
                     <PopoverContent className="p-1 w-56">
                         <p className="p-2 text-sm font-medium text-muted-foreground">Move to room</p>
                         <ScrollArea className="h-40">
-                        {rooms
+                        {publicRooms && publicRooms
                             .filter(r => r.id !== roomId)
                             .map(r => (
                                 <Button key={r.id} variant="ghost" className="w-full justify-start font-normal h-8 px-2" onClick={() => onMoveUser?.(user.id, r.id)}>

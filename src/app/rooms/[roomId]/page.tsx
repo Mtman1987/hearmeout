@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import {
   SidebarProvider,
@@ -14,7 +13,6 @@ import { Copy, MessageSquare, X, Music } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
-import { rooms } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -22,6 +20,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFirebase, useDoc, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 
 function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName: string, onToggleChat: () => void, onToggleMusicPlayer: () => void }) {
@@ -85,9 +85,33 @@ function RoomHeader({ roomName, onToggleChat, onToggleMusicPlayer } : { roomName
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
+  const { user, firestore } = useFirebase();
   const [chatOpen, setChatOpen] = useState(false);
   const [musicPlayerOpen, setMusicPlayerOpen] = useState(true);
-  const room = rooms.find(r => r.id === params.roomId) || rooms[0];
+  
+  const roomRef = useMemoFirebase(() => {
+      if (!firestore || !params.roomId) return null;
+      return doc(firestore, 'rooms', params.roomId);
+  }, [firestore, params.roomId]);
+
+  const { data: room } = useDoc<{ name: string, ownerId: string }>(roomRef);
+
+  useEffect(() => {
+    if (!user || !firestore || !params.roomId) return;
+
+    const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
+
+    setDocumentNonBlocking(userInRoomRef, {
+      id: user.uid,
+      displayName: user.displayName || 'Anonymous',
+      photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+      isSpeaking: false,
+    }, { merge: true });
+
+    return () => {
+      deleteDocumentNonBlocking(userInRoomRef);
+    };
+  }, [user, firestore, params.roomId]);
 
   return (
     <SidebarProvider>
@@ -99,12 +123,12 @@ export default function RoomPage() {
             <SidebarInset>
                 <div className="flex flex-col h-screen">
                     <RoomHeader 
-                        roomName={room.name} 
+                        roomName={room?.name || 'Loading room...'} 
                         onToggleChat={() => setChatOpen(!chatOpen)}
                         onToggleMusicPlayer={() => setMusicPlayerOpen(!musicPlayerOpen)}
                     />
                     <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                        <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} />
+                        <UserList musicPlayerOpen={musicPlayerOpen} roomId={params.roomId} room={room} />
                     </main>
                 </div>
             </SidebarInset>

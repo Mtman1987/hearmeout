@@ -6,28 +6,10 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-
-const allMockUsers = [
-  { id: 2, name: "Mike", avatarId: "avatar-2", isSpeaking: false },
-  { id: 4, name: "David", avatarId: "avatar-4", isSpeaking: false },
-  { id: 5, name: "Chloe", avatarId: "avatar-1", isSpeaking: false },
-  { id: 6, name: "Alex", avatarId: "avatar-2", isSpeaking: false },
-  { id: 7, name: "Sarah", avatarId: "avatar-1", isSpeaking: false },
-  { id: 8, name: "Ben", avatarId: "avatar-4", isSpeaking: false },
-  { id: 9, name: "Emily", avatarId: "avatar-3", isSpeaking: false },
-];
-
-let usersByRoom: { [key: string]: typeof allMockUsers } = {
-    "1": [allMockUsers[0], allMockUsers[2]], // Lofi: Mike, Chloe
-    "2": [allMockUsers[1], allMockUsers[4]], // Indie: David, Sarah
-    "3": [allMockUsers[0], allMockUsers[1], allMockUsers[5], allMockUsers[6]], // Throwback: Mike, David, Ben, Emily
-    "4": [allMockUsers[3], allMockUsers[4]], // Gaming: Alex, Sarah
-    "5": [allMockUsers[5]], // Jazz: Ben
-    "6": [allMockUsers[0], allMockUsers[1]], // Rock: Mike, David
-};
-
-const youUser = { id: 3, name: "You", avatarId: "avatar-3", isSpeaking: false };
-
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -37,41 +19,33 @@ const initialPlaylist: PlaylistItem[] = [
   { id: "5", title: "So What", artist: "Miles Davis", artId: "album-art-2", url: "https://www.youtube.com/watch?v=ylXk1LBvIqU" },
 ];
 
+interface RoomUser {
+  id: string; 
+  displayName: string;
+  photoURL: string;
+  isSpeaking: boolean;
+}
 
-export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
+export default function UserList({ musicPlayerOpen, roomId, room }: { musicPlayerOpen: boolean, roomId: string, room: { ownerId: string } | null }) {
   const [playlist, setPlaylist] = useState<PlaylistItem[]>(initialPlaylist);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [playing, setPlaying] = useState(false);
   
-  const getInitialUsers = () => {
-    const roomUsers = usersByRoom[roomId] || [];
-    return [youUser, ...roomUsers];
-  }
+  const { firestore, user } = useFirebase();
 
-  const [users, setUsers] = useState(getInitialUsers());
+  const usersInRoomQuery = useMemoFirebase(() => {
+    if (!firestore || !roomId) return null;
+    return collection(firestore, 'rooms', roomId, 'users');
+  }, [firestore, roomId]);
 
-  // Update users when room changes
-  useEffect(() => {
-    setUsers(getInitialUsers());
-  }, [roomId]);
+  const { data: users, isLoading: usersLoading } = useCollection<RoomUser>(usersInRoomQuery);
+  
+  const isHost = !!(room && user && room.ownerId === user.uid);
 
-  const isHost = users.some(u => u.name === "You");
-
-  const handleMoveUser = (userId: number, destinationRoomId: string) => {
-    const userToMove = allMockUsers.find(u => u.id === userId);
-    if (!userToMove) return;
-
-    // Remove from current room in our mock data store
-    usersByRoom[roomId] = usersByRoom[roomId]?.filter(u => u.id !== userId) || [];
-    
-    // Add to destination room if not already there
-    if (!usersByRoom[destinationRoomId]?.some(u => u.id === userId)) {
-        usersByRoom[destinationRoomId] = [...(usersByRoom[destinationRoomId] || []), userToMove];
-    }
-    
-    // Update local state for the current room to reflect the removal
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+  const handleMoveUser = (userId: string, destinationRoomId: string) => {
+    // This was mock functionality. For now, I'll disable it.
+    console.log(`Move user ${userId} to room ${destinationRoomId}`);
   };
 
 
@@ -143,8 +117,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {users.map((user) => (
-          <UserCard key={user.id} user={user} isLocal={user.name === "You"} isHost={isHost} onMoveUser={handleMoveUser} />
+        {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
+        {users && users.map((roomUser) => (
+          <UserCard key={roomUser.id} user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking}} isLocal={roomUser.id === user?.uid} isHost={isHost} onMoveUser={handleMoveUser} />
         ))}
       </div>
     </div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -20,7 +19,9 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import LeftSidebar from '@/app/components/LeftSidebar';
-import { rooms } from '@/lib/rooms';
+import { useFirebase, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 function DashboardHeader() {
@@ -33,8 +34,24 @@ function DashboardHeader() {
     );
 }
 
+interface Room {
+    id: string;
+    name: string;
+}
+
 export default function Home() {
-  const publicRooms = rooms.filter(room => room.isPublic);
+  const { firestore } = useFirebase();
+
+  const publicRoomsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
+        collection(firestore, 'rooms'),
+        where('isPrivate', '==', false),
+        orderBy('createdAt', 'desc')
+    );
+  }, [firestore]);
+
+  const { data: publicRooms, isLoading: roomsLoading } = useCollection<Room>(publicRoomsQuery);
 
   return (
     <SidebarProvider>
@@ -47,30 +64,37 @@ export default function Home() {
                         <h2 className="text-3xl font-bold font-headline mb-6 text-foreground">
                         Public Rooms
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {publicRooms.map((room) => (
-                            <Card key={room.id} className="flex flex-col hover:shadow-lg transition-shadow duration-300">
-                            <CardHeader>
-                                <CardTitle className="font-headline">{room.name}</CardTitle>
-                                <CardDescription className="flex items-center gap-2 pt-2">
-                                <Users className="h-4 w-4" />
-                                <span>{room.users} listeners</span>
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-grow">
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Music className="h-4 w-4" />
-                                <span>Now Playing: {room.nowPlaying}</span>
-                                </div>
-                            </CardContent>
-                            <CardFooter>
-                                <Button asChild className="w-full">
-                                <Link href={`/rooms/${room.id}`}>Join Room</Link>
-                                </Button>
-                            </CardFooter>
-                            </Card>
-                        ))}
-                        </div>
+                        {roomsLoading && (
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><div className='h-4'></div></CardContent><CardFooter><Skeleton className="h-10 w-full" /></CardFooter></Card>
+                                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><div className='h-4'></div></CardContent><CardFooter><Skeleton className="h-10 w-full" /></CardFooter></Card>
+                                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><div className='h-4'></div></CardContent><CardFooter><Skeleton className="h-10 w-full" /></CardFooter></Card>
+                             </div>
+                        )}
+                        {!roomsLoading && publicRooms && publicRooms.length > 0 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {publicRooms.map((room) => (
+                                <Card key={room.id} className="flex flex-col hover:shadow-lg transition-shadow duration-300">
+                                <CardHeader>
+                                    <CardTitle className="font-headline">{room.name}</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-grow">
+                                </CardContent>
+                                <CardFooter>
+                                    <Button asChild className="w-full">
+                                    <Link href={`/rooms/${room.id}`}>Join Room</Link>
+                                    </Button>
+                                </CardFooter>
+                                </Card>
+                            ))}
+                            </div>
+                        )}
+                        {!roomsLoading && (!publicRooms || publicRooms.length === 0) && (
+                            <div className="text-center text-muted-foreground py-16">
+                                <h3 className="text-xl font-semibold">No public rooms yet</h3>
+                                <p className="mt-2">Be the first to create one!</p>
+                            </div>
+                        )}
                     </main>
                     <footer className="py-4 text-center text-sm text-muted-foreground">
                         © {new Date().getFullYear()} HearMeOut. All rights reserved.

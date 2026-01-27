@@ -88,35 +88,31 @@
         "createdAt"
       ]
     },
-    "RoomUser": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "RoomUser",
+    "RoomParticipant": {
+      "title": "Room Participant",
+      "description": "Represents a user currently in a voice chat room. A subset of the main User profile.",
       "type": "object",
-      "description": "Represents the many-to-many relationship between users and rooms.",
       "properties": {
-        "id": {
+        "uid": {
           "type": "string",
-          "description": "Unique identifier for the RoomUser entity."
+          "description": "The user's unique ID."
         },
-        "roomId": {
+        "displayName": {
           "type": "string",
-          "description": "Reference to Room. (Relationship: Room 1:N RoomUser). The ID of the room."
+          "description": "The user's display name."
         },
-        "userId": {
+        "photoURL": {
           "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N RoomUser). The ID of the user."
+          "description": "URL to the user's profile image."
         },
-        "joinedAt": {
-          "type": "string",
-          "description": "Timestamp of when the user joined the room.",
-          "format": "date-time"
+        "isSpeaking": {
+          "type": "boolean",
+          "description": "Indicates if the user is currently speaking."
         }
       },
       "required": [
-        "id",
-        "roomId",
-        "userId",
-        "joinedAt"
+        "uid",
+        "displayName"
       ]
     },
     "Media": {
@@ -280,17 +276,21 @@
         }
       },
       {
-        "path": "/room_users/{roomUserId}",
+        "path": "/rooms/{roomId}/users/{userId}",
         "definition": {
-          "entityName": "RoomUser",
+          "entityName": "RoomParticipant",
           "schema": {
-            "$ref": "#/backend/entities/RoomUser"
+            "$ref": "#/backend/entities/RoomParticipant"
           },
-          "description": "Stores the relationships between users and rooms.",
+          "description": "Stores users who are currently in a room. The userId is the same as the auth UID.",
           "params": [
             {
-              "name": "roomUserId",
-              "description": "The unique ID of the RoomUser entry."
+              "name": "roomId",
+              "description": "The unique ID of the room."
+            },
+            {
+              "name": "userId",
+              "description": "The unique ID of the user."
             }
           ]
         }
@@ -356,6 +356,6 @@
         }
       }
     ],
-    "reasoning": "The Firestore structure is designed to ensure security, scalability, and ease of debugging, adhering to the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs. Authorization Independence is achieved through denormalization. For example, the `rooms` collection denormalizes the `ownerId` property within each room document, allowing security rules to validate ownership without requiring expensive `get()` operations. Similar denormalization occurs with the membership model for collaborative access. Structural Segregation is applied by using separate collections for different data types (users, rooms, media, moderation logs). Access Modeling is standardized using path-based ownership for user-related data (`/users/{userId}/rooms/{roomId}`) and a membership map (`members`) for collaborative access, although in this design, the path-based ownership pattern is preferred where possible. The structure supports QAPs by ensuring that list operations can be secured without complex filtering within rules, due to the segregation of data based on access needs.\n\nSpecifically:\n\n*   **Users:** User profiles are stored in `/users/{userId}` using path-based ownership, granting each user full control over their profile data.\n*   **Rooms:** Rooms are stored in `/rooms/{roomId}`, with the `ownerId` field denormalized in each document, ensuring that rules can enforce ownership without additional reads.\n*   **RoomUser:** This relationship is managed through `/room_users/{roomUserId}`, simplifying queries to find users in a room or rooms a user has joined.\n*   **Media:** Media files are stored in `/rooms/{roomId}/media/{mediaId}`, linking them directly to rooms and allowing for easy retrieval of media associated with a room.\n*   **Moderation Logs:** Moderation logs are stored in `/rooms/{roomId}/moderation_logs/{moderationLogId}`, associating them directly with rooms for auditing and analysis."
+    "reasoning": "The Firestore structure is designed to ensure security, scalability, and ease of debugging. A subcollection for `users` within each `room` (`/rooms/{roomId}/users/{userId}`) is used for efficient querying of participants in real-time. This denormalized approach is better for this app's use case than a separate top-level collection for room-user relationships. Other collections like `media`, `moderation_logs`, and `messages` are also subcollections of rooms, keeping all room-related data logically grouped."
   }
 }
