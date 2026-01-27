@@ -1,4 +1,3 @@
-
 'use client';
 
 import Image from "next/image";
@@ -14,7 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Play,
   Pause,
@@ -205,22 +208,27 @@ export default function MusicPlayerCard() {
             </div>
         </div>
       </CardContent>
-      <CardFooter className="p-0 border-t">
-          <Tabs defaultValue="playlist" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 rounded-none -mb-px">
-                <TabsTrigger value="playlist" className="rounded-tl-none">
-                    <ListMusic className="mr-2" />
-                    Up Next
-                </TabsTrigger>
-                <TabsTrigger value="add-music" className="rounded-tr-none">
-                    <Youtube className="mr-2" />
-                    Add Music
-                </TabsTrigger>
-            </TabsList>
-            <TabsContent value="playlist" className="p-0">
-                 <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack?.id} />
-            </TabsContent>
-            <TabsContent value="add-music">
+      <CardFooter className="p-0 flex-col items-start border-t">
+          <Collapsible className="w-full">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-start rounded-b-none p-4">
+                <ListMusic className="mr-2" />
+                Up Next
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack?.id} />
+            </CollapsibleContent>
+          </Collapsible>
+          <div className="border-t w-full"></div>
+           <Collapsible className="w-full">
+            <CollapsibleTrigger asChild>
+               <Button variant="ghost" className="w-full justify-start rounded-t-none p-4">
+                <Youtube className="mr-2" />
+                Add Music
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
                 <div className="p-4 flex gap-2">
                     <div className="relative flex-grow">
                         <Input 
@@ -245,8 +253,8 @@ export default function MusicPlayerCard() {
                         <span className="sr-only">Upload Audio</span>
                     </Button>
                 </div>
-              </TabsContent>
-          </Tabs>
+              </CollapsibleContent>
+          </Collapsible>
       </CardFooter>
     </Card>
   );
