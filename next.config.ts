@@ -28,13 +28,17 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
-  devServer: {
-    allowedDevOrigins: [
-        "https://6000-firebase-studio-1769512226244.cluster-j6d3cbsvdbe5uxnhqrfzzeyj7i.cloudworkstations.dev"
-    ]
-  }
+  allowedDevOrigins: [
+      "https://6000-firebase-studio-1769512226244.cluster-j6d3cbsvdbe5uxnhqrfzzeyj7i.cloudworkstations.dev"
+  ]
 };
 
 export default nextConfig;
