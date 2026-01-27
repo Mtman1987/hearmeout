@@ -8,9 +8,6 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  env: {
-    NEXT_PUBLIC_LIVEKIT_URL: process.env.LIVEKIT_URL,
-  },
   images: {
     remotePatterns: [
       {

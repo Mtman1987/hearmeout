@@ -49,6 +49,7 @@ const RoomParticipants = () => {
         <UserCard 
           key={participant.sid}
           participant={participant}
+          isLocal={participant.isLocal}
         />
       ))}
     </div>
@@ -58,10 +59,8 @@ const RoomParticipants = () => {
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
-  const { firestore, user } = useFirebase();
+  const { firestore, user, isUserLoading } = useFirebase();
   const { toast } = useToast();
-
-  const displayName = user?.displayName || (user?.isAnonymous ? 'Guest' : 'Anonymous');
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -72,6 +71,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
    useEffect(() => {
     console.log('[UserList] useEffect triggered for LiveKit token generation.');
+    const displayName = user?.displayName || (user?.isAnonymous ? 'Guest' : 'Anonymous');
+
+    if (isUserLoading) {
+      console.log('[UserList] Waiting for user authentication to complete...');
+      return;
+    }
+    
     if (!user || !roomId || !displayName) {
       console.log('[UserList] Aborting token generation: missing user, roomId, or displayName.', { hasUser: !!user, hasRoomId: !!roomId, hasDisplayName: !!displayName });
       return;
@@ -95,7 +101,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
       }
     })();
-  }, [user, roomId, toast, displayName]);
+  }, [user, isUserLoading, roomId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && user?.uid === room.ownerId) {
