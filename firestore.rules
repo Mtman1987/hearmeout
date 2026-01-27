@@ -42,10 +42,20 @@ service cloud.firestore {
          request.resource.data.playlist.size() > resource.data.playlist.size()) ||
 
         // Any user can become the DJ if the spot is currently open.
-        (resource.data.djId == null && request.resource.data.djId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djId', 'djDisplayName'])) ||
+        // They can only set djId to their own UID and update djDisplayName.
+        (resource.data.djId == null && 
+         request.resource.data.djId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasAll(['djId', 'djDisplayName']) &&
+         request.resource.data.diff(resource.data).affectedKeys().size() == 2
+        ) ||
         
-        // The current DJ can relinquish their spot.
-        (isDj(roomId) && request.resource.data.djId == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djId', 'djDisplayName']));
+        // The current DJ can relinquish their spot, removing djId and djDisplayName.
+        (isDj(roomId) && 
+         request.resource.data.djId == null && 
+         request.resource.data.djDisplayName == null &&
+         request.resource.data.diff(resource.data).affectedKeys().hasAll(['djId', 'djDisplayName']) &&
+         request.resource.data.diff(resource.data).affectedKeys().size() == 2
+        );
 
       // Subcollection rules
       match /users/{userId} {
