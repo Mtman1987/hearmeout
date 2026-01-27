@@ -30,8 +30,8 @@ service cloud.firestore {
       allow delete: if request.auth != null && isOwner(roomId);
 
       match /users/{userId} {
-        // Allow user to join a room if they are not banned
-        allow create: if request.auth != null && request.auth.uid == userId && !isBanned(roomId);
+        // Allow user to join a room if not banned, OR if the room owner adds them.
+        allow create: if request.auth != null && !isBanned(roomId) && (request.auth.uid == userId || isOwner(roomId));
         
         allow list, get: if request.auth != null;
         
@@ -67,5 +67,3 @@ service cloud.firestore {
     }
   }
 }
-
-    

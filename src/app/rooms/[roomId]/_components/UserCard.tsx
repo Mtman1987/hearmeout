@@ -35,13 +35,14 @@ import { useFirebase, updateDocumentNonBlocking, useMemoFirebase } from '@/fireb
 import { doc } from 'firebase/firestore';
 
 
-export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute }: { 
+export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute, onMove }: { 
     user: { id: string; name: string; photoURL: string; isSpeaking: boolean; isMutedByHost?: boolean; }; 
     isLocal?: boolean; 
     isHost?: boolean; 
     onKick?: (userId: string) => void;
     onBan?: (userId: string) => void;
     onMute?: (userId: string, shouldMute: boolean) => void;
+    onMove?: (user: { id: string; name: string; }) => void;
 }) {
   const params = useParams<{ roomId: string }>();
   const { firestore } = useFirebase();
@@ -251,6 +252,14 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute 
                 <>
                 <Tooltip>
                     <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => onMove?.({id: user.id, name: user.name})}>
+                            <ArrowRightLeft className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Move to another room</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
                         <Button variant="ghost" size="icon" onClick={() => onMute?.(user.id, !user.isMutedByHost)}>
                             <MicOff className="h-5 w-5" />
                         </Button>
@@ -304,5 +313,3 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMute 
     </Card>
   );
 }
-
-    

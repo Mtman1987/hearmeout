@@ -6,11 +6,12 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { collection, doc, arrayUnion, updateDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
+import { MoveUserDialog } from './MoveUserDialog';
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -34,8 +35,14 @@ interface RoomData {
   isPlaying?: boolean;
 }
 
+interface UserToMove {
+    id: string;
+    name: string;
+}
+
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
+  const [userToMove, setUserToMove] = useState<UserToMove | null>(null);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
 
@@ -97,6 +104,39 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     updateDocumentNonBlocking(userToMuteRef, { isMutedByHost: shouldMute });
     toast({ title: `User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
   };
+  
+  const handleMoveInitiate = (user: UserToMove) => {
+    setUserToMove(user);
+  };
+  
+  const handleMoveUser = async (targetRoomId: string) => {
+    if (!userToMove || !firestore || !users) return;
+
+    const sourceRoomId = roomId;
+    const userIdToMove = userToMove.id;
+
+    // Find the full user data from the current room's user list
+    const userToMoveData = users.find(u => u.id === userIdToMove);
+
+    if (!userToMoveData) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not find user data to move.' });
+        return;
+    }
+
+    const sourceUserDocRef = doc(firestore, 'rooms', sourceRoomId, 'users', userIdToMove);
+    const targetUserDocRef = doc(firestore, 'rooms', targetRoomId, 'users', userIdToMove);
+
+    // Delete from old room
+    deleteDocumentNonBlocking(sourceUserDocRef);
+
+    // Add to new room
+    // The `id` is part of the `userToMoveData` because of `useCollection`. We need to remove it before writing.
+    const { id, ...restOfUserData } = userToMoveData;
+    setDocumentNonBlocking(targetUserDocRef, restOfUserData, { merge: false });
+
+    toast({ title: "User Moved", description: `${userToMove.name} has been moved to a new room.` });
+    setUserToMove(null); // Close dialog
+  };
 
   const handlePlaySong = (songId: string) => {
     if (!canControlMusic || !roomRef) return;
@@ -143,65 +183,74 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
   return (
-    <div className="flex flex-col gap-6">
-      {musicPlayerOpen && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-1 h-full">
-             <MusicPlayerCard
-              roomId={roomId}
-              currentTrack={currentTrack}
-              playlist={room?.playlist || []}
-              playing={room?.isPlaying || false}
-              isPlayerControlAllowed={canControlMusic}
-              onPlayPause={handlePlayPause}
-              onPlayNext={handlePlayNext}
-              onPlayPrev={handlePlayPrev}
-              onSeek={() => {}} // Placeholder for seek
-              activePanels={activePanels}
-              onTogglePanel={handleTogglePanel}
+    <>
+      <div className="flex flex-col gap-6">
+        {musicPlayerOpen && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-1 h-full">
+               <MusicPlayerCard
+                roomId={roomId}
+                currentTrack={currentTrack}
+                playlist={room?.playlist || []}
+                playing={room?.isPlaying || false}
+                isPlayerControlAllowed={canControlMusic}
+                onPlayPause={handlePlayPause}
+                onPlayNext={handlePlayNext}
+                onPlayPrev={handlePlayPrev}
+                onSeek={() => {}} // Placeholder for seek
+                activePanels={activePanels}
+                onTogglePanel={handleTogglePanel}
+              />
+            </div>
+
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {activePanels.playlist && (
+                  <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
+                      <PlaylistPanel
+                          playlist={room?.playlist || []}
+                          onPlaySong={handlePlaySong}
+                          currentTrackId={room?.currentTrackId || ""}
+                          isPlayerControlAllowed={canControlMusic}
+                      />
+                  </div>
+              )}
+
+              {activePanels.add && (
+                  <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
+                      <AddMusicPanel
+                          onAddItems={handleAddItems}
+                          onClose={() => handleTogglePanel('add')}
+                          canAddMusic={canAddMusic}
+                      />
+                  </div>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
+          {users && users.map((roomUser) => (
+            <UserCard 
+              key={roomUser.id} 
+              user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking, isMutedByHost: roomUser.isMutedByHost}} 
+              isLocal={roomUser.id === user?.uid} 
+              isHost={isHost && roomUser.id !== user?.uid} 
+              onKick={handleKickUser}
+              onBan={handleBanUser}
+              onMute={handleMuteUser}
+              onMove={handleMoveInitiate}
             />
-          </div>
-
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {activePanels.playlist && (
-                <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
-                    <PlaylistPanel
-                        playlist={room?.playlist || []}
-                        onPlaySong={handlePlaySong}
-                        currentTrackId={room?.currentTrackId || ""}
-                        isPlayerControlAllowed={canControlMusic}
-                    />
-                </div>
-            )}
-
-            {activePanels.add && (
-                <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
-                    <AddMusicPanel
-                        onAddItems={handleAddItems}
-                        onClose={() => handleTogglePanel('add')}
-                        canAddMusic={canAddMusic}
-                    />
-                </div>
-            )}
-          </div>
+          ))}
         </div>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {usersLoading && Array.from({length: 4}).map((_, i) => <Card key={i}><CardHeader><div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-5 w-3/4" /></div></CardHeader><CardContent><Skeleton className="h-10 w-full" /></CardContent></Card>)}
-        {users && users.map((roomUser) => (
-          <UserCard 
-            key={roomUser.id} 
-            user={{id: roomUser.id, name: roomUser.displayName, photoURL: roomUser.photoURL, isSpeaking: roomUser.isSpeaking, isMutedByHost: roomUser.isMutedByHost}} 
-            isLocal={roomUser.id === user?.uid} 
-            isHost={isHost && roomUser.id !== user?.uid} 
-            onKick={handleKickUser}
-            onBan={handleBanUser}
-            onMute={handleMuteUser}
-          />
-        ))}
       </div>
-    </div>
+       {userToMove && (
+          <MoveUserDialog
+              userToMove={userToMove}
+              currentRoomId={roomId}
+              onMoveUser={handleMoveUser}
+              onOpenChange={(open) => !open && setUserToMove(null)}
+          />
+      )}
+    </>
   );
 }
-
-    
