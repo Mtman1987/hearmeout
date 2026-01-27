@@ -108,13 +108,12 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { localParticipant } = useLocalParticipant();
   
   // Jukebox state
-  const { devices: audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
   const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
 
-  // User microphone state
+  // User microphone state & all audio devices
   const { 
-      devices: micDevices, 
+      devices: allAudioDevices, 
       activeDeviceId: activeMicId, 
       setMediaDevice: setMicDevice 
   } = useMediaDeviceSelect({ kind: 'audioinput' });
@@ -144,19 +143,25 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           toast({
               variant: "destructive",
               title: "Error switching microphone",
-              description: "Could not switch to the selected microphone."
+              description: "Could not switch to the selected microphone. The device may already be in use.",
           });
       }
   };
 
   // Effect to load ALL saved settings from local storage on mount
   useEffect(() => {
+    if (!localParticipant) return; // Wait for participant to be available.
     try {
         const savedJukeboxDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
         if (savedJukeboxDeviceId) setMusicDeviceId(savedJukeboxDeviceId);
 
         const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-        if (savedUserMicId) setMicDevice(savedUserMicId);
+        if (savedUserMicId) {
+             setMicDevice(savedUserMicId).catch(e => {
+                console.error("Failed to set initial mic device from local storage:", e);
+                // Don't show a toast here, it's too aggressive on page load.
+            });
+        }
         
         const savedPanels = localStorage.getItem('hearmeout-active-panels');
         if (savedPanels) setActivePanels(JSON.parse(savedPanels));
@@ -165,7 +170,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         console.error("Failed to load saved state from localStorage", e);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [localParticipant]); // Run when localParticipant becomes available.
 
   // Effect to publish/unpublish the jukebox track
   useEffect(() => {
@@ -353,6 +358,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleMusicDeviceSelect = (deviceId: string) => {
+    if (deviceId === activeMicId) {
+        toast({ variant: 'destructive', title: 'Device in Use', description: 'This device is already being used as your microphone.' });
+        return;
+    }
     setMusicDeviceId(deviceId);
     try {
         localStorage.setItem('hearmeout-jukebox-device-id', deviceId);
@@ -363,6 +372,11 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   const playerProgressInSeconds = room?.currentTrackProgress || 0;
+
+  // Filter device lists to prevent conflicts
+  const jukeboxDeviceList = allAudioDevices.filter(d => d.deviceId !== activeMicId);
+  const microphoneDeviceList = allAudioDevices.filter(d => d.deviceId !== musicDeviceId);
+
 
   return (
     <>
@@ -386,7 +400,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
                 isRoomOwner={isRoomOwner}
-                audioDevices={audioDevices}
+                audioDevices={jukeboxDeviceList}
                 selectedMusicDeviceId={musicDeviceId}
                 onMusicDeviceSelect={handleMusicDeviceSelect}
               />
@@ -422,7 +436,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         <RoomParticipants 
           isHost={isRoomOwner} 
           roomId={roomId}
-          micDevices={micDevices}
+          micDevices={microphoneDeviceList}
           activeMicId={activeMicId || ''}
           onMicDeviceChange={handleMicDeviceChange}
         />
