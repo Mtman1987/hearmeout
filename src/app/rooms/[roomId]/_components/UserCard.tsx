@@ -27,13 +27,14 @@ export default function UserCard({
   const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
 
+  // Safely parse metadata to get photoURL
   const getParticipantPhotoURL = (metadata: string | undefined): string => {
     if (!metadata) return `https://picsum.photos/seed/${participant.identity}/100/100`;
     try {
       const parsed = JSON.parse(metadata);
       return parsed.photoURL || `https://picsum.photos/seed/${participant.identity}/100/100`;
     } catch (e) {
-      console.error('Failed to parse participant metadata:', metadata, e);
+      // Don't log an error here as it can be noisy if metadata is not set
       return `https://picsum.photos/seed/${participant.identity}/100/100`;
     }
   };
@@ -46,11 +47,13 @@ export default function UserCard({
       if (value[0] > 0 && isMuted) setIsMuted(false);
   }
   
+  // Get the microphone track for this participant
   const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true })
     .filter(ref => ref.participant.identity === participant.identity);
 
   return (
     <>
+      {/* Render the audio track for remote participants to hear them */}
       {!isLocal && tracks.map(trackRef => (
         <AudioTrack 
             key={trackRef.publication.trackSid} 
@@ -64,7 +67,7 @@ export default function UserCard({
             <div className="relative">
               <Avatar className={cn("h-12 w-12 transition-all", participant.isSpeaking && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
                 <AvatarImage src={photoURL} alt={name} data-ai-hint="person portrait" />
-                <AvatarFallback>{name.charAt(0)}</AvatarFallback>
+                <AvatarFallback>{name?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
               </Avatar>
               {participant.isMicrophoneMuted && (
                   <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
@@ -75,14 +78,20 @@ export default function UserCard({
             <CardTitle className="font-headline text-lg flex-1 truncate">{name}</CardTitle>
           </div>
           <div className="flex justify-center items-center mt-2 gap-1 h-9">
+              {/* Show the mic toggle button only for the local user */}
               {isLocal && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant={!participant.isMicrophoneMuted ? 'secondary' : 'ghost'} size="icon" onClick={() => participant.setMicrophoneEnabled(!participant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
+                      <Button 
+                        variant={participant.isMicrophoneMuted ? 'destructive' : 'secondary'} 
+                        size="icon" 
+                        onClick={() => participant.setMicrophoneEnabled(!participant.isMicrophoneMuted)} 
+                        aria-label="Toggle Mic Broadcast"
+                      >
                           <Mic className="h-5 w-5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent><p>Toggle Mic</p></TooltipContent>
+                    <TooltipContent><p>{participant.isMicrophoneMuted ? 'Unmute Microphone' : 'Mute Microphone'}</p></TooltipContent>
                   </Tooltip>
               )}
           </div>
@@ -90,6 +99,7 @@ export default function UserCard({
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
           <SpeakingIndicator isSpeaking={participant.isSpeaking} />
           
+          {/* Show volume controls only for remote participants */}
           {!isLocal && (
             <div className="flex items-center gap-2">
               <Tooltip>
