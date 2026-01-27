@@ -13,6 +13,7 @@ import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDe
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
+import MusicJukeboxCard from "./MusicJukeboxCard";
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -36,7 +37,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  const actualParticipants = remoteParticipants.filter(p => p.identity !== 'Jukebox');
 
   // User microphone and speaker state
   const [micDeviceId, setMicDeviceId] = useState<string | undefined>();
@@ -46,11 +46,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   // All available devices
   const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
   const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
-
-
-  // Player and Progress state
-  const playerRef = useRef<ReactPlayer>(null);
-  const progressUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -156,43 +151,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     setupMicTrack();
   }, [localParticipant, micDeviceId, toast]);
 
-
-  // Effect for Host to update progress
-  useEffect(() => {
-    if (isRoomOwner && room?.isPlaying && roomRef) {
-      progressUpdateIntervalRef.current = setInterval(() => {
-        if (playerRef.current) {
-          const progress = playerRef.current.getCurrentTime();
-          if (progress > 0) {
-            updateDocumentNonBlocking(roomRef, { currentTrackProgress: progress });
-          }
-        }
-      }, 2000);
-    } else {
-      if (progressUpdateIntervalRef.current) {
-        clearInterval(progressUpdateIntervalRef.current);
-      }
-    }
-
-    return () => {
-      if (progressUpdateIntervalRef.current) {
-        clearInterval(progressUpdateIntervalRef.current);
-      }
-    };
-  }, [isRoomOwner, room?.isPlaying, roomRef]);
-
-  // Effect for listeners to sync progress
-  useEffect(() => {
-    if (playerRef.current && !isRoomOwner && room?.currentTrackProgress) {
-        const localProgress = playerRef.current.getCurrentTime();
-        // Sync if more than 3 seconds out of sync
-        if (Math.abs(localProgress - room.currentTrackProgress) > 3) { 
-            playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
-        }
-    }
-  }, [room?.currentTrackProgress, isRoomOwner]);
-
-
   useEffect(() => {
     if (room && !room.playlist && isRoomOwner && roomRef) {
         updateDocumentNonBlocking(roomRef, { 
@@ -288,16 +246,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleSeek = (seconds: number) => {
-    if (playerRef.current) {
-        playerRef.current.seekTo(seconds, 'seconds');
-        if (canControlMusic && roomRef) {
-            updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
-        }
-    }
+      if (canControlMusic && roomRef) {
+          updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
+      }
   };
-
-  const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  const playerProgressInSeconds = room?.currentTrackProgress || 0;
 
   return (
     <>
@@ -306,20 +258,17 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-1 h-full">
                <MusicPlayerCard
-                ref={playerRef}
-                roomId={roomId}
-                currentTrack={currentTrack}
-                playlist={room?.playlist || []}
+                currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
+                progress={room?.currentTrackProgress || 0}
+                duration={0} // Duration is now handled locally in Jukebox card
                 playing={room?.isPlaying || false}
-                progress={playerProgressInSeconds}
-                onSeek={handleSeek}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
                 onPlayNext={handlePlayNext}
                 onPlayPrev={handlePlayPrev}
+                onSeek={handleSeek}
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
-                isRoomOwner={isRoomOwner}
               />
             </div>
 
@@ -351,6 +300,10 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         )}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {musicPlayerOpen && room?.currentTrackId && (
+            <MusicJukeboxCard room={room} />
+          )}
+
           {localParticipant && (
             <UserCard
               key={localParticipant.sid}
@@ -366,7 +319,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             />
           )}
 
-          {actualParticipants.map((participant) => (
+          {remoteParticipants.map((participant) => (
             <UserCard
               key={participant.sid}
               participant={participant}

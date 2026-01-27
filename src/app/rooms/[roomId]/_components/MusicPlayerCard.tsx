@@ -1,8 +1,7 @@
 'use client';
 
 import Image from "next/image";
-import React, { useState, useRef, useEffect, forwardRef } from "react";
-import ReactPlayer from "react-player/youtube";
+import React from "react";
 import {
   Card,
   CardContent,
@@ -16,99 +15,56 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  Volume2,
-  VolumeX,
   Youtube,
   Music,
   ListMusic,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
-import { AudioVisualizer } from "./AudioVisualizer";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-
-const MusicPlayerCard = forwardRef<ReactPlayer, {
-  roomId: string;
+type MusicPlayerCardProps = {
   currentTrack: PlaylistItem | undefined;
-  playlist: PlaylistItem[];
+  progress: number;
+  duration: number;
   playing: boolean;
   isPlayerControlAllowed: boolean;
   onPlayPause: (playing: boolean) => void;
   onPlayNext: () => void;
   onPlayPrev: () => void;
+  onSeek: (seconds: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
-  isRoomOwner: boolean;
-  progress: number; // Progress in seconds
-  onSeek: (seconds: number) => void;
-}>(({
-  roomId,
+};
+
+// This component is now a "Remote Control" for the host. It only sends commands.
+// The actual audio playback is handled by MusicJukeboxCard.
+export default function MusicPlayerCard({
   currentTrack,
-  playlist,
+  progress,
+  duration,
   playing,
   isPlayerControlAllowed,
   onPlayPause,
   onPlayNext,
   onPlayPrev,
+  onSeek,
   activePanels,
   onTogglePanel,
-  isRoomOwner,
-  progress,
-  onSeek,
-}, ref) => {
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => { setIsClient(true); }, []);
+}: MusicPlayerCardProps) {
 
-  const internalPlayerRef = useRef<ReactPlayer | null>(null);
-  const [duration, setDuration] = useState(0);
+  const [isSeeking, setIsSeeking] = React.useState(false);
+  const [seekValue, setSeekValue] = React.useState(progress);
 
-  // This allows the parent to control the player while also having an internal ref
-  React.useImperativeHandle(ref, () => internalPlayerRef.current!, []);
-
-  const [isSeeking, setIsSeeking] = useState(false);
-  const [seekValue, setSeekValue] = useState(progress);
-
-  // State for local volume. THIS IS THE KEY CHANGE.
-  const [localVolume, setLocalVolume] = useState(1);
-  const [isLocallyMuted, setIsLocallyMuted] = useState(false);
-
-  useEffect(() => {
+  React.useEffect(() => {
     if (!isSeeking) {
       setSeekValue(progress);
     }
   }, [progress, isSeeking]);
-  
-  // Load local volume from localStorage on mount
-  useEffect(() => {
-    if (!isClient) return;
-    try {
-        const savedVolume = localStorage.getItem(`hearmeout-listener-volume-${roomId}`);
-        if (savedVolume !== null) {
-            const parsed = JSON.parse(savedVolume);
-            setLocalVolume(parsed.volume);
-            setIsLocallyMuted(parsed.isMuted);
-        }
-    } catch (e) {
-        console.error("Failed to load local music volume from localStorage", e);
-    }
-  }, [roomId, isClient]);
-
-  // Save local volume to localStorage on change
-  useEffect(() => {
-    if (!isClient) return;
-    try {
-        const value = { volume: localVolume, isMuted: isLocallyMuted };
-        localStorage.setItem(`hearmeout-listener-volume-${roomId}`, JSON.stringify(value));
-    } catch (e) {
-        console.error("Failed to save local music volume to localStorage", e);
-    }
-  }, [localVolume, isLocallyMuted, roomId, isClient]);
-
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
 
@@ -116,20 +72,12 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
   const handlePlayNextWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayNext();
   const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
   
-  const handleLocalVolumeChange = (value: number[]) => {
-      setLocalVolume(value[0]);
-      if (value[0] > 0 && isLocallyMuted) {
-          setIsLocallyMuted(false);
-      }
-  }
-
   const handleSeekChange = (value: number[]) => {
     if (!isSeeking) setIsSeeking(true);
     setSeekValue(value[0]);
   }
   
   const handleSeekCommit = (value: number[]) => {
-    // only host can seek for everyone
     if (isPlayerControlAllowed) {
         onSeek(value[0]);
     }
@@ -143,38 +91,8 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
 
-  const isAudioPlayingForMe = !!currentTrack && playing && !isLocallyMuted;
-
   return (
     <Card className="flex flex-col h-full">
-       <div className="hidden">
-        {/* Everyone now gets a ReactPlayer. Volume and mute are controlled locally. */}
-        {isClient && currentTrack && (
-            <ReactPlayer
-                ref={internalPlayerRef}
-                url={currentTrack.url}
-                playing={playing}
-                volume={localVolume}
-                muted={isLocallyMuted}
-                onDuration={setDuration}
-                onEnded={onPlayNext}
-                onPause={() => onPlayPause(false)}
-                onPlay={() => onPlayPause(true)}
-                width="1px"
-                height="1px"
-                progressInterval={1000}
-                config={{
-                    youtube: {
-                        playerVars: {
-                            // Attempts to disable controls on the embedded YouTube player
-                            controls: 0,
-                            disablekb: 1,
-                        }
-                    }
-                }}
-            />
-        )}
-      </div>
       <CardHeader>
         <div className="flex items-center gap-4">
             {albumArt ? (
@@ -201,7 +119,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-          <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
+          {/* Visualizer is now in the Jukebox card */}
           <div className="flex items-center gap-2 ml-auto">
               <Tooltip>
                   <TooltipTrigger asChild>
@@ -231,7 +149,7 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
                 value={[seekValue]}
                 onValueChange={handleSeekChange}
                 onValueCommit={handleSeekCommit}
-                max={duration}
+                max={duration > 0 ? duration : 1}
                 step={1}
                 disabled={!isPlayerControlAllowed || !currentTrack}
             />
@@ -241,64 +159,39 @@ const MusicPlayerCard = forwardRef<ReactPlayer, {
             </div>
         </div>
        
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center justify-center gap-1">
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handlePlayPrevWithTrack} disabled={!isPlayerControlAllowed || !currentTrack} className="h-9 w-9">
-                          <SkipBack className="h-4 w-4" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Previous</p>
-                    </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button size="default" className="h-10 w-10 rounded-full" onClick={handlePlayPause} disabled={!isPlayerControlAllowed || !currentTrack}>
-                          {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>{playing ? 'Pause' : 'Play'}</p>
-                    </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handlePlayNextWithTrack} disabled={!isPlayerControlAllowed || !currentTrack} className="h-9 w-9">
-                          <SkipForward className="h-4 w-4" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next</p>
-                    </TooltipContent>
-                </Tooltip>
-            </div>
-            {/* THIS IS NOW THE LOCAL VOLUME CONTROL FOR EVERYONE */}
-            <div className="flex items-center gap-2 flex-1 min-w-24">
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setIsLocallyMuted(!isLocallyMuted)} className="h-9 w-9">
-                            {isLocallyMuted ? <VolumeX className="h-5 w-5 text-muted-foreground" /> : <Volume2 className="h-5 w-5 text-muted-foreground" />}
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>{isLocallyMuted ? 'Unmute' : 'Mute'}</p>
-                    </TooltipContent>
-                </Tooltip>
-                <Slider 
-                    value={[isLocallyMuted ? 0 : localVolume]} 
-                    onValueChange={handleLocalVolumeChange}
-                    max={1}
-                    step={0.05}
-                />
-            </div>
+        <div className="flex items-center justify-center gap-1">
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={handlePlayPrevWithTrack} disabled={!isPlayerControlAllowed || !currentTrack}>
+                      <SkipBack />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Previous</p>
+                </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button size="lg" className="h-12 w-12 rounded-full" onClick={handlePlayPause} disabled={!isPlayerControlAllowed || !currentTrack}>
+                      {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>{playing ? 'Pause' : 'Play'}</p>
+                </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={handlePlayNextWithTrack} disabled={!isPlayerControlAllowed || !currentTrack}>
+                      <SkipForward/>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Next</p>
+                </TooltipContent>
+            </Tooltip>
         </div>
       </CardContent>
     </Card>
   );
-});
-
-MusicPlayerCard.displayName = "MusicPlayerCard";
-
-export default MusicPlayerCard;
+}

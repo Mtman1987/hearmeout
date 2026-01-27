@@ -122,10 +122,10 @@ export default function UserCard({
 
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
-    if (isLocal && audioTrackRef?.publication.track) {
-        const micTrack = audioTrackRef.publication.track;
-        // SUPER-SAFE GUARD: Check if the track has the `setMuted` function before calling it.
-        if (micTrack instanceof LocalAudioTrack && typeof micTrack.setMuted === 'function') {
+    if (isLocal) {
+        const micTrack = audioTrackRef?.publication.track;
+        // Hyper-defensive check to prevent crashes.
+        if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
             if (micTrack.isMuted !== isMuted) {
                 micTrack.setMuted(isMuted);
             }
