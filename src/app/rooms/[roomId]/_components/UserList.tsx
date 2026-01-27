@@ -7,7 +7,7 @@ import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useCollection, useMemoFirebase, useDoc, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { collection, doc, arrayUnion, updateDoc } from 'firebase/firestore';
+import { collection, doc, arrayUnion, updateDoc, deleteField } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   useParticipants,
+  useRoomContext,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 
@@ -26,12 +27,6 @@ const initialPlaylist: PlaylistItem[] = [
   { id: "2", title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
   { id: "3", title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
 ];
-
-interface RoomUser {
-  id: string; 
-  displayName: string;
-  photoURL: string;
-}
 
 interface RoomData {
   name: string;
@@ -65,30 +60,12 @@ const RoomParticipants = ({
 }) => {
   const participants = useParticipants();
 
-  const getParticipantPhotoURL = (metadata: string | undefined): string => {
-    if (!metadata) return `https://picsum.photos/seed/${Math.random()}/100/100`;
-    try {
-      const parsed = JSON.parse(metadata);
-      return parsed.photoURL || `https://picsum.photos/seed/${Math.random()}/100/100`;
-    } catch (e) {
-      console.error('Failed to parse participant metadata:', metadata, e);
-      return `https://picsum.photos/seed/fallback/100/100`;
-    }
-  };
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
       {participants.map((participant) => (
         <UserCard 
           key={participant.sid}
-          user={{
-            id: participant.identity,
-            name: participant.name || participant.identity,
-            photoURL: getParticipantPhotoURL(participant.metadata),
-            isSpeaking: participant.isSpeaking,
-            isMutedByHost: participant.isMicrophoneMuted,
-          }}
-          isLocal={participant.isLocal}
+          participant={participant}
           isHost={isHost && !participant.isLocal}
           onKick={handleKickUser}
           onBan={handleBanUser}
@@ -142,7 +119,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   }, [user, roomId, toast, displayName]);
 
   useEffect(() => {
-    // Initialize room with a default playlist if it's new
     if (room && !room.playlist && user?.uid === room.ownerId) {
         updateDocumentNonBlocking(roomRef!, { 
             playlist: initialPlaylist,
@@ -157,30 +133,26 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     return collection(firestore, 'rooms', roomId, 'users');
   }, [firestore, roomId]);
 
-  const { data: users, isLoading: usersLoading } = useCollection<RoomUser>(usersInRoomQuery);
+  useCollection<any>(usersInRoomQuery);
   
   const isHost = !!(room && user && room.ownerId === user.uid);
   const canAddMusic = !!user;
-  const canControlMusic = !!user; // Any logged-in user can control music
+  const canControlMusic = !!user;
 
   const handleKickUser = (userId: string) => {
     if (!isHost || !firestore) return;
-    const userToKickRef = doc(firestore, 'rooms', roomId, 'users', userId);
-    deleteDocumentNonBlocking(userToKickRef);
-    // In a real app, you would also use LiveKit's server API to kick the user from the room.
-    toast({ title: "User Kicked", description: "The user has been removed from the room." });
+    toast({ title: "(Simulated) User Kicked", description: "In a real app, the user would be removed via server-side API." });
   };
 
   const handleBanUser = (userId: string) => {
     if (!isHost || !firestore) return;
     const roomDocRef = doc(firestore, 'rooms', roomId);
     
-    // Ban first, then kick.
     updateDoc(roomDocRef, {
         bannedUsers: arrayUnion(userId)
     }).then(() => {
-        handleKickUser(userId); // Kick them after they are successfully banned.
-        toast({ title: "User Banned", description: "The user has been banned and removed from the room." });
+        handleKickUser(userId);
+        toast({ title: "User Banned", description: "The user has been banned and will be kicked." });
     }).catch(error => {
         console.error("Failed to ban user:", error);
         toast({ variant: 'destructive', title: "Error", description: "Could not ban the user." });
@@ -199,9 +171,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
 
   const handleMuteUser = (userId: string, shouldMute: boolean) => {
      if (!isHost || !firestore) return;
-    // This would now be handled by LiveKit server API to mute the participant for everyone.
-    // The UI is just an example of what a host could do.
-    toast({ title: `User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `(Simulated) The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
+    toast({ title: `(Simulated) User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
   };
   
   const handleMoveInitiate = (user: UserToMove) => {
@@ -209,26 +179,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
   
   const handleMoveUser = async (targetRoomId: string) => {
-    if (!userToMove || !firestore || !users) return;
-
-    const sourceRoomId = roomId;
-    const userIdToMove = userToMove.id;
-
-    const userToMoveData = users.find(u => u.id === userIdToMove);
-
-    if (!userToMoveData) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not find user data to move.' });
-        return;
-    }
-
-    const sourceUserDocRef = doc(firestore, 'rooms', sourceRoomId, 'users', userIdToMove);
-    const targetUserDocRef = doc(firestore, 'rooms', targetRoomId, 'users', userIdToMove);
-
-    deleteDocumentNonBlocking(sourceUserDocRef);
-    const { id, ...restOfUserData } = userToMoveData;
-    setDocumentNonBlocking(targetUserDocRef, restOfUserData, { merge: false });
-
-    toast({ title: "User Moved", description: `${userToMove.name} has been moved to a new room.` });
+    // This functionality is complex and would require server-side logic to coordinate
+    // forcing a user to disconnect and reconnect to another room.
+    toast({ title: "(Simulated) User Moved", description: `${userToMove?.name} would be moved to the new room.` });
     setUserToMove(null);
   };
 
@@ -264,7 +217,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
-    // If music isn't playing and this is the first song, start playing it
     if (!room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
        handlePlaySong(newItems[0].id);
     }
@@ -278,32 +230,27 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
     if (!canControlMusic || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let newTrackId = room.currentTrackId;
-    let isPlaying = room.isPlaying;
+    let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
         const deletedIndex = room.playlist.findIndex(t => t.id === songId);
         const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
-        newTrackId = newPlaylist[nextIndex]?.id;
+        updates.currentTrackId = newPlaylist[nextIndex]?.id;
       } else {
-        newTrackId = undefined;
-        isPlaying = false;
+        updates.currentTrackId = deleteField();
+        updates.isPlaying = false;
       }
     }
     
-    updateDocumentNonBlocking(roomRef, { 
-      playlist: newPlaylist,
-      currentTrackId: newTrackId,
-      isPlaying: isPlaying,
-    });
+    updateDocumentNonBlocking(roomRef, updates);
   };
 
   const handleClearPlaylist = () => {
     if (!canControlMusic || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { 
       playlist: [],
-      currentTrackId: undefined,
+      currentTrackId: deleteField(),
       isPlaying: false,
     });
   };
@@ -325,7 +272,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 onPlayPause={handlePlayPause}
                 onPlayNext={handlePlayNext}
                 onPlayPrev={handlePlayPrev}
-                onSeek={() => {}} // Placeholder for seek
+                onSeek={() => {}} 
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
               />
@@ -363,11 +310,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
             token={livekitToken}
             connect={true}
-            reconnect={true}
-            video={false}
             audio={true}
+            video={false}
             userChoices={{
               username: displayName,
+            }}
+            connectOptions={{
+                autoSubscribe: true,
             }}
           >
             <RoomParticipants 

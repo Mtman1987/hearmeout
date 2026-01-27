@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,126 +32,86 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-    Track,
-} from 'livekit-client';
-import { useLocalParticipant, useTracks } from '@livekit/components-react';
+import { useLocalParticipant, AudioTrack, useTracks } from '@livekit/components-react';
+import type { Participant, Track } from 'livekit-client';
 
-export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove, onMute, isRoomOwner, onDeleteRoom }: { 
-    user: { id: string; name: string; photoURL: string; isSpeaking: boolean; isMutedByHost?: boolean; }; 
-    isLocal?: boolean; 
+export default function UserCard({ 
+    participant,
+    isHost, 
+    onKick, 
+    onBan, 
+    onMove, 
+    onMute,
+    isRoomOwner,
+    onDeleteRoom,
+}: { 
+    participant: Participant;
     isHost?: boolean; 
-    onKick?: (userId: string) => void;
-    onBan?: (userId: string) => void;
-    onMute?: (userId: string, shouldMute: boolean) => void;
+    onKick?: (identity: string) => void;
+    onBan?: (identity: string) => void;
+    onMute?: (identity: string, shouldMute: boolean) => void;
     onMove?: (user: { id: string; name: string; }) => void;
     isRoomOwner?: boolean;
     onDeleteRoom?: () => void;
 }) {
-  const params = useParams<{ roomId: string }>();
-
-  // Audio settings for remote users
+  const { localParticipant } = useLocalParticipant();
+  const isLocal = participant.isLocal;
   const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  const { localParticipant } = useLocalParticipant();
-
-  const audioTracks = useTracks(
-    [Track.Source.Microphone],
-    { onlySubscribed: true }
-  ).filter(trackRef => trackRef.participant.identity === user.id);
-
-
-  // Load non-local user preferences from localStorage
-  useEffect(() => {
-    if (!isLocal) {
-        const storageKey = `hearmeout-user-prefs-${params.roomId}`;
-        try {
-            const allPrefs = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            const userPrefs = allPrefs[user.id];
-            if (userPrefs) {
-                if (typeof userPrefs.volume === 'number') setVolume(userPrefs.volume);
-                if (typeof userPrefs.isMuted === 'boolean') setIsMuted(userPrefs.isMuted);
-            }
-        } catch (e) {
-            console.error("Failed to parse user preferences from localStorage", e);
-        } finally {
-            setIsLoaded(true);
-        }
-    } else {
-        setIsLoaded(true);
+  const getParticipantPhotoURL = (metadata: string | undefined): string => {
+    if (!metadata) return `https://picsum.photos/seed/${Math.random()}/100/100`;
+    try {
+      const parsed = JSON.parse(metadata);
+      return parsed.photoURL || `https://picsum.photos/seed/${participant.identity}/100/100`;
+    } catch (e) {
+      console.error('Failed to parse participant metadata:', metadata, e);
+      return `https://picsum.photos/seed/${participant.identity}/100/100`;
     }
-  }, [user.id, params.roomId, isLocal]);
+  };
 
-  // Save non-local user preferences to localStorage
-  useEffect(() => {
-    if (!isLocal && isLoaded) {
-        const storageKey = `hearmeout-user-prefs-${params.roomId}`;
-        try {
-            const allPrefs = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            if (!allPrefs[user.id]) allPrefs[user.id] = {};
-            allPrefs[user.id].volume = volume;
-            allPrefs[user.id].isMuted = isMuted;
-            localStorage.setItem(storageKey, JSON.stringify(allPrefs));
-        } catch (e) {
-             console.error("Failed to save user preferences to localStorage", e);
-        }
-    }
-  }, [volume, isMuted, user.id, params.roomId, isLocal, isLoaded]);
-  
+  const name = participant.name || participant.identity;
+  const photoURL = getParticipantPhotoURL(participant.metadata);
 
   const handleVolumeChange = (value: number[]) => {
       setVolume(value[0]);
       if (value[0] > 0 && isMuted) setIsMuted(false);
   }
-
-  // Determine if the speaking indicator should be active
-  let isVisuallySpeaking = user.isSpeaking && !user.isMutedByHost;
-  if (!isLocal) {
-      isVisuallySpeaking = isVisuallySpeaking && !isMuted;
-  } else if (localParticipant) {
-      isVisuallySpeaking = user.isSpeaking && localParticipant.isMicrophoneEnabled;
-  }
-
+  
+  const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: true })
+    .filter(ref => ref.participant.identity === participant.identity);
 
   return (
     <>
-       {!isLocal && audioTracks.map(trackRef => (
-        <audio
-          key={trackRef.publication.trackSid}
-          ref={(el) => {
-            if (el && trackRef.publication.track) {
-              el.srcObject = trackRef.publication.track.mediaStream as MediaStream;
-              el.volume = isMuted ? 0 : volume;
-              el.play().catch(e => console.error("Remote audio play failed", e));
-            }
-          }}
-          style={{ display: 'none' }}
+      {!isLocal && tracks.map(trackRef => (
+        <AudioTrack 
+            key={trackRef.publication.trackSid} 
+            trackRef={trackRef} 
+            volume={isMuted ? 0 : volume}
         />
       ))}
       <Card className="flex flex-col h-full">
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Avatar className={cn("h-12 w-12 transition-all", isVisuallySpeaking && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
-                <AvatarImage src={user.photoURL || `https://picsum.photos/seed/${user.id}/100/100`} alt={user.name} data-ai-hint="person portrait" />
-                <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+              <Avatar className={cn("h-12 w-12 transition-all", participant.isSpeaking && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
+                <AvatarImage src={photoURL} alt={name} data-ai-hint="person portrait" />
+                <AvatarFallback>{name.charAt(0)}</AvatarFallback>
               </Avatar>
-              {(user.isMutedByHost || (isLocal && !localParticipant?.isMicrophoneEnabled)) && (
+              {participant.isMicrophoneMuted && (
                   <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
                       <MicOff className="w-3 h-3 text-destructive-foreground" />
                   </div>
               )}
             </div>
-            <CardTitle className="font-headline text-lg flex-1 truncate">{user.name}</CardTitle>
+            <CardTitle className="font-headline text-lg flex-1 truncate">{name}</CardTitle>
           </div>
           <div className="flex justify-center items-center mt-2 gap-1 h-9">
               {isLocal ? (
                   <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant={localParticipant?.isMicrophoneEnabled ? 'secondary' : 'ghost'} size="icon" onClick={() => localParticipant?.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
+                      <Button variant={localParticipant?.isMicrophoneEnabled ? 'secondary' : 'ghost'} size="icon" onClick={() => localParticipant.setMicrophoneEnabled(!localParticipant.isMicrophoneEnabled)} aria-label="Toggle Mic Broadcast">
                           <Mic className="h-5 w-5" />
                       </Button>
                     </TooltipTrigger>
@@ -206,16 +166,16 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove,
                   </>
               ) : isHost ? (
                   <>
-                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onMove?.({id: user.id, name: user.name})}><ArrowRightLeft className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Move to another room</TooltipContent></Tooltip>
-                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onMute?.(user.id, !user.isMutedByHost)}><MicOff className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>{user.isMutedByHost ? 'Unmute for Room' : 'Mute for Room'}</TooltipContent></Tooltip>
-                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onKick?.(user.id)}><LogOut className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Kick</TooltipContent></Tooltip>
-                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onBan?.(user.id)}><Ban className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Ban</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onMove?.({id: participant.identity, name: name})}><ArrowRightLeft className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Move to another room</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onMute?.(participant.identity, !participant.isMicrophoneMuted)}><MicOff className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>{participant.isMicrophoneMuted ? 'Unmute for Room' : 'Mute for Room'}</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => onKick?.(participant.identity)}><LogOut className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Kick</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onBan?.(participant.identity)}><Ban className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>Ban</TooltipContent></Tooltip>
                   </>
               ) : null}
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
-          <SpeakingIndicator isSpeaking={isVisuallySpeaking} />
+          <SpeakingIndicator isSpeaking={participant.isSpeaking} />
           
           {!isLocal && (
             <div className="flex items-center gap-2">
