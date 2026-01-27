@@ -28,6 +28,7 @@ import { Logo } from '@/app/components/Logo';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
+import { ThemeCustomizer } from '@/app/components/ThemeCustomizer';
 
 const rooms = [
   {
@@ -75,7 +76,7 @@ const rooms = [
 ];
 
 
-function LeftSidebar({ roomId }: { roomId: string }) {
+function LeftSidebar({ roomId, onThemeSettingsClick }: { roomId: string, onThemeSettingsClick: () => void }) {
   const publicRooms = rooms.filter(room => room.isPublic);
   return (
     <Sidebar>
@@ -132,7 +133,7 @@ function LeftSidebar({ roomId }: { roomId: string }) {
                 <User/>
                 <span className='sr-only'>Profile</span>
             </Button>
-            <Button variant="outline" size="icon" className='flex-1'>
+            <Button variant="outline" size="icon" className='flex-1' onClick={onThemeSettingsClick}>
                 <Settings/>
                 <span className='sr-only'>Settings</span>
             </Button>
@@ -173,11 +174,12 @@ function RoomHeader({ roomName, onToggleChat } : { roomName: string, onToggleCha
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
   const [chatOpen, setChatOpen] = useState(false);
+  const [themeDialogOpen, setThemeDialogOpen] = useState(false);
   const room = rooms.find(r => r.id === params.roomId) || rooms[0];
 
   return (
     <SidebarProvider>
-        <LeftSidebar roomId={params.roomId} />
+        <LeftSidebar roomId={params.roomId} onThemeSettingsClick={() => setThemeDialogOpen(true)} />
         <div className="bg-secondary/30 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width-icon)_+_1rem)] md:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width)_+_1rem)] duration-200 transition-[margin-left]">
             <SidebarInset>
                 <div className="flex flex-col h-screen">
@@ -194,6 +196,7 @@ export default function RoomPage() {
                 <ChatBox />
             </SheetContent>
         </Sheet>
+        <ThemeCustomizer open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
     </SidebarProvider>
   );
 }
