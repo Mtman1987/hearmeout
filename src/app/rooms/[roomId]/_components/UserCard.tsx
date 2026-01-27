@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Headphones,
   Mic,
@@ -16,7 +16,7 @@ import {
   LoaderCircle
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
-import { Track, type Participant, type MediaDevice, RoomEvent } from 'livekit-client';
+import { Track, type Participant, type MediaDevice } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase } from '@/firebase';
@@ -75,6 +75,8 @@ export default function UserCard({
     activeSpeakerId,
     onMicDeviceChange,
     onSpeakerDeviceChange,
+    onToggleMic,
+    isMuted: isMutedProp,
 }: {
     participant: Participant;
     isHost?: boolean;
@@ -85,6 +87,8 @@ export default function UserCard({
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
     onSpeakerDeviceChange?: (deviceId: string) => void;
+    onToggleMic?: () => void;
+    isMuted?: boolean;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -99,7 +103,7 @@ export default function UserCard({
 
   const tracks = useTracks([Track.Source.Microphone], { participant });
   const micPublication = tracks.find((t) => t.source === Track.Source.Microphone)?.publication;
-  const isMuted = micPublication?.isMuted ?? participant.isMicrophoneMuted;
+  const isMuted = isLocal ? isMutedProp : (micPublication?.isMuted ?? participant.isMicrophoneMuted);
   
   // Use LiveKit data for remote, metadata for local to get latest profile pic from Firebase
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
@@ -112,12 +116,6 @@ export default function UserCard({
       if (newVolume > 0 && isMutedForUser) {
           setIsMutedForUser(false);
       }
-  };
-
-  const toggleLocalMic = () => {
-    if (isLocal && micPublication) {
-      micPublication.setMuted(!isMuted);
-    }
   };
   
   const handleDeleteRoom = async () => {
@@ -227,7 +225,7 @@ export default function UserCard({
 
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={toggleLocalMic} className="h-7 w-7">
+                                     <Button variant={isMuted ? "destructive" : "ghost"} size="icon" onClick={onToggleMic} className="h-7 w-7">
                                         {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </Button>
                                 </TooltipTrigger>
@@ -283,7 +281,7 @@ export default function UserCard({
             </div>
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
-                <SpeakingIndicator audioLevel={audioLevel} />
+                <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
                 {!isLocal && (
                     <div className="flex items-center gap-2 pt-2">
                         <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
