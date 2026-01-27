@@ -6,20 +6,19 @@ import { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { doc, arrayUnion, updateDoc, deleteField } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { doc, deleteField } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
-import { MoveUserDialog } from './MoveUserDialog';
 import { generateLiveKitToken } from '@/app/actions';
 import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   useParticipants,
+  useLocalParticipant,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
-
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -35,29 +34,9 @@ interface RoomData {
   isPlaying?: boolean;
 }
 
-interface UserToMove {
-    id: string;
-    name: string;
-}
-
-const RoomParticipants = ({
-  isHost,
-  isRoomOwner,
-  onDeleteRoom,
-  handleKickUser,
-  handleBanUser,
-  handleMuteUser,
-  handleMoveInitiate
-}: {
-  isHost: boolean;
-  isRoomOwner: boolean;
-  onDeleteRoom: () => void;
-  handleKickUser: (userId: string) => void;
-  handleBanUser: (userId: string) => void;
-  handleMuteUser: (userId: string, shouldMute: boolean) => void;
-  handleMoveInitiate: (user: UserToMove) => void;
-}) => {
+const RoomParticipants = () => {
   const participants = useParticipants();
+  const { localParticipant } = useLocalParticipant();
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -65,23 +44,15 @@ const RoomParticipants = ({
         <UserCard 
           key={participant.sid}
           participant={participant}
-          isHost={isHost && !participant.isLocal}
-          onKick={handleKickUser}
-          onBan={handleBanUser}
-          onMute={handleMuteUser}
-          onMove={handleMoveInitiate}
-          isRoomOwner={participant.isLocal && isRoomOwner}
-          onDeleteRoom={participant.isLocal ? onDeleteRoom : undefined}
+          isLocal={participant.sid === localParticipant.sid}
         />
       ))}
     </div>
   );
 };
 
-
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
-  const [userToMove, setUserToMove] = useState<UserToMove | null>(null);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
@@ -97,7 +68,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
    useEffect(() => {
-    if (!user || !roomId) return;
+    if (!user || !roomId || !displayName) return;
 
     (async () => {
       try {
@@ -126,56 +97,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         });
     }
   }, [room, user, roomRef]);
-
-  const isHost = !!(room && user && room.ownerId === user.uid);
-  const canAddMusic = !!user;
+  
   const canControlMusic = !!user;
-
-  const handleKickUser = (userId: string) => {
-    if (!isHost || !firestore) return;
-    toast({ title: "(Simulated) User Kicked", description: "In a real app, the user would be removed via server-side API." });
-  };
-
-  const handleBanUser = (userId: string) => {
-    if (!isHost || !firestore) return;
-    const roomDocRef = doc(firestore, 'rooms', roomId);
-    
-    updateDoc(roomDocRef, {
-        bannedUsers: arrayUnion(userId)
-    }).then(() => {
-        handleKickUser(userId);
-        toast({ title: "User Banned", description: "The user has been banned and will be kicked." });
-    }).catch(error => {
-        console.error("Failed to ban user:", error);
-        toast({ variant: 'destructive', title: "Error", description: "Could not ban the user." });
-    });
-  };
-
-  const handleDeleteRoom = () => {
-    if (!isHost || !roomRef) return;
-    deleteDocumentNonBlocking(roomRef);
-    toast({
-      title: "Room Deleted",
-      description: "The room has been successfully deleted.",
-    });
-    router.push('/');
-  };
-
-  const handleMuteUser = (userId: string, shouldMute: boolean) => {
-     if (!isHost || !firestore) return;
-    toast({ title: `(Simulated) User ${shouldMute ? 'Muted' : 'Unmuted'}`, description: `The user has been ${shouldMute ? 'muted' : 'unmuted'} for everyone in the room.` });
-  };
-  
-  const handleMoveInitiate = (user: UserToMove) => {
-    setUserToMove(user);
-  };
-  
-  const handleMoveUser = async (targetRoomId: string) => {
-    // This functionality is complex and would require server-side logic to coordinate
-    // forcing a user to disconnect and reconnect to another room.
-    toast({ title: "(Simulated) User Moved", description: `${userToMove?.name} would be moved to the new room.` });
-    setUserToMove(null);
-  };
 
   const handlePlaySong = (songId: string) => {
     if (!canControlMusic || !roomRef) return;
@@ -205,7 +128,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   };
 
   const handleAddItems = (newItems: PlaylistItem[]) => {
-    if (!canAddMusic || !roomRef || !room) return;
+    if (!canControlMusic || !roomRef || !room) return;
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
@@ -289,7 +212,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                       <AddMusicPanel
                           onAddItems={handleAddItems}
                           onClose={() => handleTogglePanel('add')}
-                          canAddMusic={canAddMusic}
+                          canAddMusic={canControlMusic}
                       />
                   </div>
               )}
@@ -304,22 +227,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
             connect={true}
             audio={true}
             video={false}
-            userChoices={{
-              username: displayName,
-            }}
-            connectOptions={{
-                autoSubscribe: true,
-            }}
           >
-            <RoomParticipants 
-              isHost={isHost}
-              isRoomOwner={isHost}
-              onDeleteRoom={handleDeleteRoom} 
-              handleBanUser={handleBanUser} 
-              handleKickUser={handleKickUser}
-              handleMuteUser={handleMuteUser}
-              handleMoveInitiate={handleMoveInitiate}
-            />
+            <RoomParticipants />
           </LiveKitRoom>
         ) : (
            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -327,14 +236,6 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
            </div>
         )}
       </div>
-       {userToMove && (
-          <MoveUserDialog
-              userToMove={userToMove}
-              currentRoomId={roomId}
-              onMoveUser={handleMoveUser}
-              onOpenChange={(open) => !open && setUserToMove(null)}
-          />
-      )}
     </>
   );
 }
