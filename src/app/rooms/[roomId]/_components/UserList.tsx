@@ -10,7 +10,6 @@ import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, delete
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
 import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
-import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -46,6 +45,8 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   // All available devices
   const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
   const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
+
+  const [duration, setDuration] = useState(0);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -260,7 +261,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                <MusicPlayerCard
                 currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
                 progress={room?.currentTrackProgress || 0}
-                duration={0} // Duration is now handled locally in Jukebox card
+                duration={duration}
                 playing={room?.isPlaying || false}
                 isPlayerControlAllowed={canControlMusic}
                 onPlayPause={handlePlayPause}
@@ -300,8 +301,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         )}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {musicPlayerOpen && room?.currentTrackId && (
-            <MusicJukeboxCard room={room} />
+          {musicPlayerOpen && room?.currentTrackId && room && (
+            <MusicJukeboxCard 
+              room={room} 
+              isHost={isRoomOwner}
+              roomRef={roomRef}
+              setDuration={setDuration}
+            />
           )}
 
           {localParticipant && (

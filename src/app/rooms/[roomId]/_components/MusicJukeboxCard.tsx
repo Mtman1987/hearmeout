@@ -10,6 +10,9 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { type PlaylistItem } from "./Playlist";
+import { updateDocumentNonBlocking } from '@/firebase';
+import { DocumentReference } from 'firebase/firestore';
+
 
 interface RoomData {
   name: string;
@@ -20,12 +23,19 @@ interface RoomData {
   currentTrackProgress?: number;
 }
 
-export default function MusicJukeboxCard({ room }: { room: RoomData }) {
+interface MusicJukeboxCardProps {
+  room: RoomData;
+  isHost: boolean;
+  roomRef: DocumentReference | null;
+  setDuration: (duration: number) => void;
+}
+
+export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration }: MusicJukeboxCardProps) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
   const playerRef = useRef<ReactPlayer>(null);
-  const [duration, setDuration] = useState(0);
+  const lastProgressUpdateTime = useRef(0);
 
   // Local state for this user's volume preference for the jukebox
   const [localVolume, setLocalVolume] = useState(1);
@@ -33,13 +43,34 @@ export default function MusicJukeboxCard({ room }: { room: RoomData }) {
 
   // Sync player to Firestore's progress
   useEffect(() => {
-    if (playerRef.current && room.currentTrackProgress) {
+    if (!isHost && playerRef.current && typeof room.currentTrackProgress === 'number') {
       const localProgress = playerRef.current.getCurrentTime();
-      if (Math.abs(localProgress - room.currentTrackProgress) > 3) {
+      // Only seek if the difference is significant, to avoid jumpiness
+      if (Math.abs(localProgress - room.currentTrackProgress) > 5) {
         playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
       }
     }
-  }, [room.currentTrackProgress]);
+  }, [room.currentTrackProgress, isHost]);
+
+  const handleProgress = (state: { playedSeconds: number }) => {
+    // Only the host writes progress updates
+    if (isHost && roomRef) {
+        const now = Date.now();
+        // Throttle updates to every 2 seconds to avoid excessive writes
+        if (now - lastProgressUpdateTime.current > 2000) {
+            lastProgressUpdateTime.current = now;
+            updateDocumentNonBlocking(roomRef, { currentTrackProgress: state.playedSeconds });
+        }
+    }
+  };
+
+  const handleDuration = (duration: number) => {
+    setDuration(duration);
+    if (isHost && roomRef) {
+        // When a new track loads, reset progress for all clients.
+        updateDocumentNonBlocking(roomRef, { currentTrackProgress: 0 });
+    }
+  };
 
   const handleVolumeChange = (value: number[]) => {
     const newVolume = value[0];
@@ -62,10 +93,11 @@ export default function MusicJukeboxCard({ room }: { room: RoomData }) {
             playing={room.isPlaying}
             volume={localVolume}
             muted={isLocallyMuted}
-            onDuration={setDuration}
+            onDuration={handleDuration}
+            onProgress={handleProgress}
+            progressInterval={1000}
             width="1px"
             height="1px"
-            progressInterval={1000}
             config={{
               youtube: {
                 playerVars: { controls: 0, disablekb: 1 }
