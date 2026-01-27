@@ -83,7 +83,7 @@ export default function UserCard({
     { participant }
   );
   
-  const getParticipantPhotoURL = (meta: string | undefined): string => {
+  const getRemoteParticipantPhotoURL = (meta: string | undefined): string => {
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
     try {
       const parsed = JSON.parse(meta);
@@ -98,7 +98,7 @@ export default function UserCard({
   const displayName = isLocal ? firebaseUser?.displayName || name : name || identity;
   const photoURL = isLocal 
     ? firebaseUser?.photoURL || `https://picsum.photos/seed/${firebaseUser?.uid}/100/100` 
-    : getParticipantPhotoURL(metadata);
+    : getRemoteParticipantPhotoURL(metadata);
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -127,6 +127,7 @@ export default function UserCard({
         const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
+        // Use window.location to force a full page reload, clearing any broken state.
         window.location.assign('/');
     } catch (error) {
         console.error("Error deleting room:", error);

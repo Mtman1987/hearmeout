@@ -76,23 +76,17 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const { data: room } = useDoc<RoomData>(roomRef);
 
   useEffect(() => {
-    // Return early if we're still loading the user or if the user object is null.
-    if (isUserLoading || !user) {
+    if (isUserLoading || !user?.uid) {
       return;
     }
 
-    // A user must have a UID to connect.
-    if (!user.uid || !roomId) {
-        return;
-    }
-
-    const displayName = user.displayName || (user.isAnonymous ? 'Guest' : 'Anonymous');
-    const photoURL = user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`;
-    const metadata = JSON.stringify({ photoURL });
+    const participantIdentity = user.uid;
+    const participantName = user.displayName || 'Guest';
+    const participantMetadata = JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` });
 
     (async () => {
       try {
-        const token = await generateLiveKitToken(roomId, user.uid, displayName, metadata);
+        const token = await generateLiveKitToken(roomId, participantIdentity, participantName, participantMetadata);
         setLivekitToken(token);
       } catch (e) {
         console.error('[UserList] Failed to get LiveKit token', e);
