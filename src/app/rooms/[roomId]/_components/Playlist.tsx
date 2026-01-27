@@ -56,7 +56,7 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlaye
                     data-ai-hint={art.imageHint}
                 />
               }
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden min-w-0">
                 <p className="truncate">{item.title}</p>
                 <p className="text-sm text-muted-foreground truncate">
                   {item.artist}
