@@ -31,26 +31,43 @@ import {
   ListMusic
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
-import Playlist from "./Playlist";
+import Playlist, { type PlaylistItem } from "./Playlist";
+
+
+const initialPlaylist: PlaylistItem[] = [
+  { id: 1, title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
+  { id: 2, title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
+  { id: 3, title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
+  { id: 4, title: "Don't Stop The Music", artist: "Rihanna", artId: "album-art-1", url: "https://www.youtube.com/watch?v=yd8jh9QYfSM" },
+  { id: 5, title: "So What", artist: "Miles Davis", artId: "album-art-2", url: "https://www.youtube.com/watch?v=ylXk1LBvIqU" },
+];
+
 
 export default function MusicPlayerCard() {
-  const albumArt = placeholderData.placeholderImages.find(p => p.id === "album-art-1");
   const [isClient, setIsClient] = useState(false);
+  useEffect(() => { setIsClient(true); }, []);
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  const [playlist, setPlaylist] = useState<PlaylistItem[]>(initialPlaylist);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
 
-  const [url, setUrl] = useState("https://www.youtube.com/watch?v=c9scA_s1d4A");
+  const currentTrack = playlist[currentTrackIndex] || initialPlaylist[0];
+  
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
-  const [song, setSong] = useState({ title: "Golden Hour", artist: "JVKE"});
   
   const [inputValue, setInputValue] = useState("");
   const playerRef = useRef<ReactPlayer>(null);
+
+  const albumArt = placeholderData.placeholderImages.find(p => p.id === currentTrack.artId);
+
+  const playSong = (index: number) => {
+    setCurrentTrackIndex(index);
+    setPlayed(0);
+    setPlaying(true);
+  }
 
   const handlePlayPause = () => setPlaying(!playing);
   const handleVolumeChange = (value: number[]) => setVolume(value[0]);
@@ -62,11 +79,7 @@ export default function MusicPlayerCard() {
   };
 
   const handleDuration = (duration: number) => setDuration(duration);
-
-  const handleSeekChange = (value: number[]) => {
-    setPlayed(value[0]);
-  };
-  
+  const handleSeekChange = (value: number[]) => { setPlayed(value[0]); };
   const handleSeekCommit = (value: number[]) => {
     setSeeking(false);
     playerRef.current?.seekTo(value[0]);
@@ -74,22 +87,29 @@ export default function MusicPlayerCard() {
   
   const handleAddUrl = () => {
     if (inputValue.trim() && isClient && ReactPlayer.canPlay(inputValue)) {
-      setUrl(inputValue);
-      setPlayed(0);
-      setPlaying(true);
-      setSong({title: "YouTube Video", artist: "from URL"});
+      const newSong: PlaylistItem = {
+        id: Date.now(),
+        title: "YouTube Video",
+        artist: "From URL",
+        artId: "album-art-1",
+        url: inputValue,
+      };
+      
+      const newPlaylist = [newSong, ...playlist];
+      setPlaylist(newPlaylist);
+      playSong(0);
       setInputValue("");
     }
   };
 
-  const handleSeekForward = () => {
-    const currentTime = playerRef.current?.getCurrentTime() || 0;
-    playerRef.current?.seekTo(currentTime + 10);
+  const handlePlayNext = () => {
+    const nextIndex = (currentTrackIndex + 1) % playlist.length;
+    playSong(nextIndex);
   };
   
-  const handleSeekBackward = () => {
-    const currentTime = playerRef.current?.getCurrentTime() || 0;
-    playerRef.current?.seekTo(currentTime - 10);
+  const handlePlayPrev = () => {
+    const prevIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
+    playSong(prevIndex);
   };
 
   function formatTime(seconds: number) {
@@ -112,11 +132,12 @@ export default function MusicPlayerCard() {
       {isClient && (
             <ReactPlayer
                 ref={playerRef}
-                url={url}
+                url={currentTrack.url}
                 playing={playing}
                 volume={volume}
                 onProgress={handleProgress}
                 onDuration={handleDuration}
+                onEnded={handlePlayNext}
                 onPause={() => setPlaying(false)}
                 onPlay={() => setPlaying(true)}
                 width="1px"
@@ -129,18 +150,18 @@ export default function MusicPlayerCard() {
             {albumArt &&
                 <Image
                     src={albumArt.imageUrl}
-                    alt="Album Art"
+                    alt={currentTrack.title}
                     width={64}
                     height={64}
                     className="rounded-lg shadow-lg object-cover aspect-square"
                     data-ai-hint={albumArt.imageHint}
                 />
             }
-            <div className="flex-1">
+            <div className="flex-1 overflow-hidden">
                 <CardTitle className="font-headline text-lg flex items-center gap-2">
                     <Music /> Now Playing
                 </CardTitle>
-                <p className="text-muted-foreground text-sm truncate">{song.title} - {song.artist}</p>
+                <p className="text-muted-foreground text-sm truncate">{currentTrack.title} - {currentTrack.artist}</p>
             </div>
         </div>
       </CardHeader>
@@ -161,13 +182,13 @@ export default function MusicPlayerCard() {
         </div>
         <div className="flex items-center justify-between gap-2">
             <div className="flex items-center justify-center gap-2">
-                <Button variant="ghost" size="icon" onClick={handleSeekBackward}>
+                <Button variant="ghost" size="icon" onClick={handlePlayPrev}>
                   <SkipBack />
                 </Button>
                 <Button size="lg" className="h-12 w-12 rounded-full" onClick={handlePlayPause}>
                   {playing ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleSeekForward}>
+                <Button variant="ghost" size="icon" onClick={handlePlayNext}>
                   <SkipForward />
                 </Button>
             </div>
@@ -192,7 +213,7 @@ export default function MusicPlayerCard() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-0 pb-0">
-                 <Playlist />
+                 <Playlist playlist={playlist} onPlaySong={playSong} currentTrackId={currentTrack.id} />
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="add-music" className="border-b-0">
