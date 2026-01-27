@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Headphones,
   Mic,
@@ -15,8 +15,8 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack, useMediaDeviceSelect } from '@livekit/components-react';
-import { Track, type Participant } from 'livekit-client';
+import { useTracks, AudioTrack, useMediaDeviceSelect, useRoomContext } from '@livekit/components-react';
+import { Track, type Participant, RoomEvent } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase } from '@/firebase';
@@ -65,30 +65,6 @@ import { Switch } from "@/components/ui/switch";
 import { SpeakingIndicator } from "./SpeakingIndicator";
 
 
-const AudioSettingsContent = ({ kind }: { kind: 'audioinput' | 'audiooutput' }) => {
-    const { devices, activeDeviceId, setMediaDevice } = useMediaDeviceSelect({ kind });
-    const label = kind === 'audioinput' ? 'Microphone' : 'Speaker';
-
-    return (
-        <div className="grid grid-cols-3 items-center gap-4">
-            <Label htmlFor={kind} className="col-span-1">{label}</Label>
-            <Select onValueChange={setMediaDevice} defaultValue={activeDeviceId} disabled={devices.length === 0}>
-                <SelectTrigger id={kind} className="col-span-2">
-                    <SelectValue placeholder={`Select a ${label.toLowerCase()}`} />
-                </SelectTrigger>
-                <SelectContent>
-                    {devices.map((device) => (
-                        <SelectItem key={device.deviceId} value={device.deviceId}>
-                            {device.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
-    );
-};
-
-
 export default function UserCard({
     participant,
     isHost,
@@ -113,6 +89,58 @@ export default function UserCard({
     [Track.Source.Microphone],
     { participant }
   );
+
+  const room = useRoomContext();
+  const { devices: speakerDevices, activeDeviceId: activeSpeakerId, setMediaDevice: setSpeakerDevice } = useMediaDeviceSelect({ kind: 'audiooutput' });
+  const [micDevices, setMicDevices] = React.useState<MediaDeviceInfo[]>([]);
+  const [activeMicId, setActiveMicId] = React.useState<string>();
+
+  const micTrack = useTracks([Track.Source.Microphone], { participant: participant })
+    .find(ref => ref.source === Track.Source.Microphone);
+
+  React.useEffect(() => {
+    if (!isLocal) return;
+
+    const getDevices = async () => {
+        try {
+            const devices = await Room.getLocalDevices('audioinput');
+            setMicDevices(devices);
+            
+            const savedMicId = localStorage.getItem('hearmeout-user-mic-device-id');
+            const currentMic = micTrack?.publication.track?.mediaStreamTrack.getSettings().deviceId;
+
+            if (savedMicId && devices.some(d => d.deviceId === savedMicId)) {
+                if (currentMic !== savedMicId) {
+                    await micTrack?.publication.track?.setDeviceId(savedMicId);
+                }
+                setActiveMicId(savedMicId);
+            } else if(currentMic) {
+                setActiveMicId(currentMic);
+            } else if (devices.length > 0) {
+                setActiveMicId(devices[0].deviceId);
+            }
+        } catch (e) {
+            console.error("Failed to get audio devices:", e);
+        }
+    };
+
+    const handleDeviceChange = () => getDevices();
+    room.on(RoomEvent.MediaDevicesChanged, handleDeviceChange);
+    getDevices();
+
+    return () => {
+        room.off(RoomEvent.MediaDevicesChanged, handleDeviceChange);
+    };
+}, [isLocal, room, micTrack]);
+
+const handleMicDeviceChange = async (deviceId: string) => {
+    if (micTrack?.publication.track) {
+        await micTrack.publication.track.setDeviceId(deviceId);
+        setActiveMicId(deviceId);
+        localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
+    }
+};
+
   
   // Use Firebase data for local user, LiveKit data for remote
   const displayName = isLocal ? firebaseUser?.displayName || name : name;
@@ -128,9 +156,9 @@ export default function UserCard({
 
   const toggleLocalMic = () => {
     if (isLocal) {
-        const micTrack = tracks.find(trackRef => trackRef.source === Track.Source.Microphone);
-        if (micTrack && micTrack.publication) {
-           micTrack.publication.setMuted(!isMicrophoneMuted);
+        const micTrackRef = tracks.find(trackRef => trackRef.source === Track.Source.Microphone);
+        if (micTrackRef && micTrackRef.publication) {
+           micTrackRef.publication.setMuted(!isMicrophoneMuted);
         }
     }
   };
@@ -173,7 +201,7 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL || `https://picsum.photos/seed/${identity}/100/100`} alt={displayName} data-ai-hint="person portrait" />
+                        <AvatarImage src={photoURL || `https://picsum.photos/seed/${identity}/100/100`} alt={displayName || 'User'} data-ai-hint="person portrait" />
                         <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
                      {isMicrophoneMuted && (
@@ -197,8 +225,36 @@ export default function UserCard({
                                             <p className="text-sm text-muted-foreground">Manage your input and output settings.</p>
                                         </div>
                                          <div className="grid gap-4">
-                                            <AudioSettingsContent kind="audioinput" />
-                                            <AudioSettingsContent kind="audiooutput" />
+                                            <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor='audioinput'>Microphone</Label>
+                                                <Select onValueChange={handleMicDeviceChange} value={activeMicId} disabled={micDevices.length === 0}>
+                                                    <SelectTrigger id='audioinput' className="col-span-2">
+                                                        <SelectValue placeholder="Select a microphone" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {micDevices.map((device) => (
+                                                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                                                                {device.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor='audiooutput'>Speaker</Label>
+                                                <Select onValueChange={setSpeakerDevice} value={activeSpeakerId} disabled={speakerDevices.length === 0}>
+                                                    <SelectTrigger id='audiooutput' className="col-span-2">
+                                                        <SelectValue placeholder="Select a speaker" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {speakerDevices.map((device) => (
+                                                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                                                                {device.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor="push-to-talk">Push to Talk</Label>
                                                 <Switch id="push-to-talk" className="col-span-2" disabled />
