@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,12 +13,16 @@ import { Volume2, VolumeX, MicOff, Headphones, MoreVertical, Ban, LogOut, ArrowR
 import { SpeakingIndicator } from "./SpeakingIndicator";
 import { cn } from '@/lib/utils';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +42,7 @@ import {
 } from 'livekit-client';
 import { useLocalParticipant, useTracks } from '@livekit/components-react';
 
-export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove }: { 
+export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove, onMute, isRoomOwner, onDeleteRoom }: { 
     user: { id: string; name: string; photoURL: string; isSpeaking: boolean; isMutedByHost?: boolean; }; 
     isLocal?: boolean; 
     isHost?: boolean; 
@@ -46,6 +50,8 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove 
     onBan?: (userId: string) => void;
     onMute?: (userId: string, shouldMute: boolean) => void;
     onMove?: (user: { id: string; name: string; }) => void;
+    isRoomOwner?: boolean;
+    onDeleteRoom?: () => void;
 }) {
   const params = useParams<{ roomId: string }>();
 
@@ -311,15 +317,52 @@ export default function UserCard({ user, isLocal, isHost, onKick, onBan, onMove 
                       </div>
                       </DialogContent>
                   </Dialog>
-                  <DropdownMenu>
-                    <Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /><span className="sr-only">Room Settings</span></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent><p>Room Settings</p></TooltipContent></Tooltip>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit Room Name</DropdownMenuItem>
-                        <DropdownMenuItem>Make Private</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">Delete Room</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {isRoomOwner && (
+                    <AlertDialog>
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreVertical className="h-5 w-5" />
+                                <span className="sr-only">Room Settings</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Room Settings</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem disabled>Edit Room Name</DropdownMenuItem>
+                          <DropdownMenuItem disabled>Make Private</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem className="text-destructive hover:!bg-destructive/90 hover:!text-destructive-foreground focus:!bg-destructive/90 focus:!text-destructive-foreground">
+                              Delete Room
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the room and remove all users.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={onDeleteRoom}
+                            className={buttonVariants({ variant: 'destructive' })}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                   </>
               ) : isHost ? (
                   <>

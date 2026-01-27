@@ -13,6 +13,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
 import { MoveUserDialog } from './MoveUserDialog';
 import { generateLiveKitToken } from '@/app/actions';
+import { useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
   useParticipants,
@@ -47,12 +48,16 @@ interface UserToMove {
 
 const RoomParticipants = ({
   isHost,
+  isRoomOwner,
+  onDeleteRoom,
   handleKickUser,
   handleBanUser,
   handleMuteUser,
   handleMoveInitiate
 }: {
   isHost: boolean;
+  isRoomOwner: boolean;
+  onDeleteRoom: () => void;
   handleKickUser: (userId: string) => void;
   handleBanUser: (userId: string) => void;
   handleMuteUser: (userId: string, shouldMute: boolean) => void;
@@ -78,6 +83,8 @@ const RoomParticipants = ({
           onBan={handleBanUser}
           onMute={handleMuteUser}
           onMove={handleMoveInitiate}
+          isRoomOwner={participant.isLocal && isRoomOwner}
+          onDeleteRoom={participant.isLocal ? onDeleteRoom : undefined}
         />
       ))}
     </div>
@@ -91,6 +98,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
+  const router = useRouter();
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -161,6 +169,16 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
         console.error("Failed to ban user:", error);
         toast({ variant: 'destructive', title: "Error", description: "Could not ban the user." });
     });
+  };
+
+  const handleDeleteRoom = () => {
+    if (!isHost || !roomRef) return;
+    deleteDocumentNonBlocking(roomRef);
+    toast({
+      title: "Room Deleted",
+      description: "The room has been successfully deleted.",
+    });
+    router.push('/');
   };
 
   const handleMuteUser = (userId: string, shouldMute: boolean) => {
@@ -300,7 +318,9 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
              onDisconnected={() => setLivekitToken(null)}
           >
             <RoomParticipants 
-              isHost={isHost} 
+              isHost={isHost}
+              isRoomOwner={isHost}
+              onDeleteRoom={handleDeleteRoom} 
               handleBanUser={handleBanUser} 
               handleKickUser={handleKickUser}
               handleMuteUser={handleMuteUser}
