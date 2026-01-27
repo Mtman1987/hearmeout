@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AudioTrack, useTracks } from '@livekit/components-react';
-import type { Participant, Track } from 'livekit-client';
+import { type Participant, Track } from 'livekit-client';
 import { useState } from 'react';
 
 
