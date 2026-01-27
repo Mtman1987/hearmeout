@@ -169,16 +169,15 @@ export default function MusicPlayerCard({
             </div>
         </div>
       </CardContent>
-      <CardFooter className="p-0 flex-col items-start border-t">
-          <Button variant="ghost" className="w-full justify-start rounded-b-none p-4 data-[active=true]:bg-secondary" data-active={activePanels.playlist} onClick={() => onTogglePanel('playlist')}>
-            <ListMusic className="mr-2" />
-            Up Next
-          </Button>
-          <div className="border-t w-full"></div>
-           <Button variant="ghost" className="w-full justify-start rounded-t-none p-4 data-[active=true]:bg-secondary" data-active={activePanels.add} onClick={() => onTogglePanel('add')}>
-            <Youtube className="mr-2" />
-            Add Music
-          </Button>
+      <CardFooter className="p-4 border-t">
+        <div className="flex items-center justify-center w-full gap-2">
+            <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist">
+                <ListMusic className="h-5 w-5" />
+            </Button>
+            <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music">
+                <Youtube className="h-5 w-5" />
+            </Button>
+        </div>
       </CardFooter>
     </Card>
   );
