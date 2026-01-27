@@ -57,30 +57,49 @@ export default function LoginPage() {
   const [status, setStatus] = useState<'authenticating' | 'idle'>('authenticating');
 
   useEffect(() => {
+    // If user is already logged in, redirect to home.
     if (user) {
       router.push('/');
       return;
     }
-
+    
+    // When auth is ready and there's no user, check for redirect result.
     if (!isUserLoading && auth && firestore) {
       getRedirectResult(auth)
-        .then(async (result) => {
+        .then((result) => {
           if (result) {
+            // This gives you a Google Access Token.
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            if (!credential) {
+                setStatus('idle');
+                return;
+            }
+            // The signed-in user info.
             const loggedInUser = result.user;
             const userRef = doc(firestore, 'users', loggedInUser.uid);
-            await setDoc(userRef, {
+            
+            // Create user document in Firestore.
+            setDoc(userRef, {
               id: loggedInUser.uid,
               username: loggedInUser.displayName,
               email: loggedInUser.email,
               displayName: loggedInUser.displayName,
               profileImageUrl: loggedInUser.photoURL,
             }, { merge: true });
+
+            // At this point, onAuthStateChanged will trigger, the `user` object will update,
+            // and the `if (user)` block at the top of this effect will redirect.
+            // We keep showing the spinner until that happens.
+
           } else {
+            // No redirect result, so the user is just on the login page.
             setStatus('idle');
           }
-        })
-        .catch((error) => {
-          console.error("Authentication failed during redirect:", error);
+        }).catch((error) => {
+          // Handle Errors here.
+          const errorCode = error.code;
+          const errorMessage = error.message;
+          console.error(`Login Error (${errorCode}):`, errorMessage);
           setStatus('idle');
         });
     }
