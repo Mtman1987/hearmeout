@@ -12,39 +12,39 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AudioTrack, useParticipantTracks } from '@livekit/components-react';
+import { AudioTrack, useTracks } from '@livekit/components-react';
 import type { Participant } from 'livekit-client';
 import { Track } from 'livekit-client';
 import { useState } from 'react';
 
 
-export default function UserCard({ 
+export default function UserCard({
     participant,
-}: { 
+}: {
     participant: Participant;
 }) {
   const [volume, setVolume] = useState(0.7);
   const [isMutedForUser, setIsMutedForUser] = useState(false);
   const { isLocal, isMicrophoneMuted, isSpeaking, metadata, name, identity } = participant;
 
-  // Safely parse metadata to get photoURL
   const getParticipantPhotoURL = (meta: string | undefined): string => {
     if (!meta || meta.trim() === '') return `https://picsum.photos/seed/${identity}/100/100`;
     try {
       const parsed = JSON.parse(meta);
-      // Check for parsed.photoURL and ensure it's not an empty string
       return parsed.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
     } catch (e) {
       console.error('Failed to parse participant metadata:', e);
       return `https://picsum.photos/seed/${identity}/100/100`;
     }
   };
-  
+
   const photoURL = getParticipantPhotoURL(metadata);
   const displayName = name || identity;
-  
-  // Get microphone tracks for this participant
-  const tracks = useParticipantTracks(participant, { sources: [Track.Source.Microphone] });
+
+  const tracks = useTracks(
+    [{ source: Track.Source.Microphone, withPlaceholder: false }],
+    { participant }
+  );
 
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -64,11 +64,11 @@ export default function UserCard({
 
   return (
     <>
-      {/* Render the audio track for remote participants to hear them */}
-      {!isLocal && tracks.map(trackRef => (
-        <AudioTrack 
-            key={trackRef.publication.trackSid} 
-            trackRef={trackRef} 
+      {/* This renders the audio from remote participants so we can hear them */}
+      {tracks.map(trackRef => (
+        <AudioTrack
+            key={trackRef.publication.trackSid}
+            trackRef={trackRef}
             volume={effectiveVolume}
         />
       ))}
@@ -92,10 +92,10 @@ export default function UserCard({
               {isLocal && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
-                        variant={isMicrophoneMuted ? 'destructive' : 'secondary'} 
-                        size="icon" 
-                        onClick={toggleLocalMic} 
+                      <Button
+                        variant={isMicrophoneMuted ? 'destructive' : 'secondary'}
+                        size="icon"
+                        onClick={toggleLocalMic}
                         aria-label="Toggle Mic Broadcast"
                       >
                           <Mic className="h-5 w-5" />
@@ -108,7 +108,7 @@ export default function UserCard({
         </CardHeader>
         <CardContent className="flex flex-col gap-4 flex-grow justify-end">
           <SpeakingIndicator isSpeaking={isSpeaking} />
-          
+
           {!isLocal && (
             <div className="flex items-center gap-2">
               <Tooltip>
