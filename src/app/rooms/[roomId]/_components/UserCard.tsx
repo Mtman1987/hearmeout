@@ -15,14 +15,18 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack } from '@livekit/components-react';
+import { useTracks, AudioTrack, useParticipantContext } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -125,7 +129,6 @@ export default function UserCard({
     }
   };
 
-
   const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
@@ -194,18 +197,33 @@ export default function UserCard({
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         )}
-                        {!isLocal && isHost && (
-                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <DropdownMenuItem><UserX className="mr-2 h-4 w-4" /> Kick</DropdownMenuItem>
-                                    <DropdownMenuItem disabled><ShieldOff className="mr-2 h-4 w-4" /> Ban</DropdownMenuItem>
-                                    <DropdownMenuItem disabled><MicOff className="mr-2 h-4 w-4" /> Mute for Room</DropdownMenuItem>
-                                    <DropdownMenuItem disabled><Move className="mr-2 h-4 w-4" /> Move to Room</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                         {!isLocal && isHost && (
+                            <div className='flex items-center gap-1'>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7"><UserX className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Kick</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled><ShieldOff className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Ban</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled><MicOff className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Mute for Room</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" disabled><Move className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Move to Room</p></TooltipContent>
+                                </Tooltip>
+                            </div>
                         )}
                     </div>
                 </div>
