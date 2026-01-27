@@ -35,6 +35,10 @@
         "twitchId": {
           "type": "string",
           "description": "The user's Twitch ID, if linked."
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "description": "Indicates if the user has administrative privileges."
         }
       },
       "required": [

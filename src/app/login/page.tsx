@@ -180,6 +180,61 @@ export default function LoginPage() {
       }
     }
   };
+
+  const handleTwitchLogin = async () => {
+    if (auth && firestore) {
+      setStatus('authenticating');
+      const email = "madison.reddell.simulated@example.com";
+      const password = "very-secure-simulation-password-123!";
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (error: any) {
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+          try {
+            await createUserWithEmailAndPassword(auth, email, password);
+          } catch (createError: any) {
+            console.error("Simulated user creation for Twitch failed:", createError);
+            setStatus('idle');
+            return;
+          }
+        } else {
+          console.error("Simulated Twitch sign-in failed:", error);
+          setStatus('idle');
+          return;
+        }
+      }
+
+      const user = auth.currentUser;
+      if (user) {
+        const twitchInfo = {
+            username: "Madired29 | MOD",
+            discordId: "1177028432949940244",
+            profilePicture: "https://cdn.discordapp.com/avatars/1177028432949940244/c2d41bae9566783581415508de900f08.png",
+            isAdmin: true
+        };
+        try {
+            await updateProfile(user, {
+                displayName: twitchInfo.username,
+                photoURL: twitchInfo.profilePicture
+            });
+            const userRef = doc(firestore, 'users', user.uid);
+            await setDoc(userRef, {
+                id: user.uid,
+                username: twitchInfo.username,
+                email: user.email,
+                displayName: twitchInfo.username,
+                profileImageUrl: twitchInfo.profilePicture,
+                discordId: twitchInfo.discordId,
+                isAdmin: twitchInfo.isAdmin,
+            }, { merge: true });
+        } catch (error: any) {
+            console.error("Failed to update profile or Firestore for Twitch user:", error);
+            setStatus('idle');
+        }
+      }
+    }
+  };
   
   if (status === 'authenticating' || isUserLoading) {
     return (
@@ -216,7 +271,7 @@ export default function LoginPage() {
             <DiscordIcon />
             <span className="ml-2">Continue with Discord</span>
           </Button>
-          <Button variant="outline" className="w-full">
+          <Button variant="outline" className="w-full" onClick={handleTwitchLogin}>
             <TwitchIcon />
             <span className="ml-2">Continue with Twitch</span>
           </Button>
