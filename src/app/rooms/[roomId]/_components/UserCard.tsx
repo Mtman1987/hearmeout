@@ -35,6 +35,7 @@ export default function UserCard({
       // Check for parsed.photoURL and ensure it's not an empty string
       return parsed.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
     } catch (e) {
+      console.error('Failed to parse participant metadata:', e);
       return `https://picsum.photos/seed/${identity}/100/100`;
     }
   };
