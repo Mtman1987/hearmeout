@@ -15,8 +15,8 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack, useMediaDeviceSelect, useRoomContext } from '@livekit/components-react';
-import { Track, type Participant, RoomEvent } from 'livekit-client';
+import { useTracks, AudioTrack, useMediaDeviceSelect } from '@livekit/components-react';
+import { Track, type Participant, type MediaDevice, RoomEvent } from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase } from '@/firebase';
@@ -69,12 +69,18 @@ export default function UserCard({
     participant,
     isHost,
     roomId,
+    micDevices,
+    activeMicId,
+    onMicDeviceChange,
 }: {
     participant: Participant;
     isHost?: boolean;
     roomId: string;
+    micDevices?: MediaDevice[];
+    activeMicId?: string;
+    onMicDeviceChange?: (deviceId: string) => void;
 }) {
-  const { firestore, user: firebaseUser } = useFirebase();
+  const { firestore } = useFirebase();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -90,31 +96,12 @@ export default function UserCard({
     { participant }
   );
   
-  // Use LiveKit's built-in hooks for device management, which is more robust
   const { devices: speakerDevices, activeDeviceId: activeSpeakerId, setMediaDevice: setSpeakerDevice } = useMediaDeviceSelect({ kind: 'audiooutput' });
-  const { devices: micDevices, activeDeviceId: activeMicId, setMediaDevice: setMicDevice } = useMediaDeviceSelect({ kind: 'audioinput' });
 
-  // Handle setting the microphone device
-  const handleMicDeviceChange = (deviceId: string) => {
-    setMicDevice(deviceId);
-    localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
-  };
-  
-  // On mount, try to set the microphone to the one saved in local storage
-  useEffect(() => {
-    if (isLocal) {
-        const savedMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-        if (savedMicId) {
-            setMicDevice(savedMicId);
-        }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLocal, setMicDevice]);
-
-
-  // Use Firebase data for local user, LiveKit data for remote
-  const displayName = isLocal ? firebaseUser?.displayName || name : name;
-  const photoURL = isLocal ? firebaseUser?.photoURL : participant.metadata ? JSON.parse(participant.metadata).photoURL : undefined;
+  // Use LiveKit data for remote, metadata for local to get latest profile pic from Firebase
+  const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
+  const displayName = isLocal ? name : participantMeta.displayName || name;
+  const photoURL = isLocal ? participantMeta.photoURL : participant.metadata ? JSON.parse(participant.metadata).photoURL : undefined;
   
   const handleVolumeChange = (value: number[]) => {
       const newVolume = value[0];
@@ -126,7 +113,7 @@ export default function UserCard({
 
   const toggleLocalMic = () => {
     if (isLocal) {
-      participant.setMicrophoneEnabled(!participant.isMicrophoneMuted);
+      participant.setMicrophoneEnabled(!isMicrophoneMuted);
     }
   };
   
@@ -194,12 +181,12 @@ export default function UserCard({
                                          <div className="grid gap-4">
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor='audioinput'>Microphone</Label>
-                                                <Select onValueChange={handleMicDeviceChange} value={activeMicId} disabled={micDevices.length === 0}>
+                                                <Select onValueChange={onMicDeviceChange} value={activeMicId} disabled={!micDevices || micDevices.length === 0}>
                                                     <SelectTrigger id='audioinput' className="col-span-2">
                                                         <SelectValue placeholder="Select a microphone" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {micDevices.map((device) => (
+                                                        {micDevices && micDevices.map((device) => (
                                                             <SelectItem key={device.deviceId} value={device.deviceId}>
                                                                 {device.label}
                                                             </SelectItem>

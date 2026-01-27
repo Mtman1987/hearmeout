@@ -9,9 +9,10 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks, AudioTrack } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track } from 'livekit-client';
+import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
 import ReactPlayer from 'react-player/youtube';
 import '@livekit/components-styles';
+import { useToast } from "@/hooks/use-toast";
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -37,7 +38,6 @@ const JukeboxAudioHandler = () => {
   const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'Jukebox');
   
   // Attempt to subscribe to any audio track from the jukebox participant.
-  // We include Source.Unknown because the track is published with a custom source name 'jukebox'.
   const tracks = useTracks(
       [Track.Source.Microphone, Track.Source.Unknown], 
       { participant: jukeboxParticipant }
@@ -55,7 +55,19 @@ const JukeboxAudioHandler = () => {
 };
 
 
-const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string; }) => {
+const RoomParticipants = ({ 
+    isHost, 
+    roomId,
+    micDevices,
+    activeMicId,
+    onMicDeviceChange,
+}: { 
+    isHost: boolean; 
+    roomId: string;
+    micDevices: MediaDevice[];
+    activeMicId: string;
+    onMicDeviceChange: (deviceId: string) => void;
+}) => {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
@@ -70,13 +82,16 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
           participant={localParticipant}
           isHost={isHost}
           roomId={roomId}
+          micDevices={micDevices}
+          activeMicId={activeMicId}
+          onMicDeviceChange={onMicDeviceChange}
         />
       )}
       {humanParticipants.map((participant) => (
         <UserCard 
           key={participant.sid}
           participant={participant}
-          isHost={isHost}
+          isHost={false}
           roomId={roomId}
         />
       ))}
@@ -87,15 +102,28 @@ const RoomParticipants = ({ isHost, roomId }: { isHost: boolean; roomId: string;
 export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen: boolean, roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
-  const { localParticipant } = useLocalParticipant();
-  const { devices } = useMediaDeviceSelect({ kind: 'audioinput' });
-  const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
+  const { toast } = useToast();
   
+  // --- All Local Participant Media Logic is Centralized Here ---
+  const { localParticipant } = useLocalParticipant();
+  
+  // Jukebox state
+  const { devices: audioDevices } = useMediaDeviceSelect({ kind: 'audioinput' });
+  const [musicDeviceId, setMusicDeviceId] = useState<string | undefined>();
   const musicTrackPublicationRef = useRef<LocalTrackPublication | null>(null);
+
+  // User microphone state
+  const { 
+      devices: micDevices, 
+      activeDeviceId: activeMicId, 
+      setMediaDevice: setMicDevice 
+  } = useMediaDeviceSelect({ kind: 'audioinput' });
+
+  // Player and Progress state
   const playerRef = useRef<ReactPlayer>(null);
   const progressUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-
+  // Firestore state
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
     return doc(firestore, 'rooms', roomId);
@@ -106,20 +134,37 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
   const isRoomOwner = !!user && !!room && user.uid === room.ownerId;
   const canControlMusic = isRoomOwner;
 
-  // Effect to load saved settings from local storage
+  // Handler for changing user's primary microphone
+  const handleMicDeviceChange = async (deviceId: string) => {
+      try {
+          await setMicDevice(deviceId);
+          localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
+      } catch (e) {
+          console.error("Failed to set media device:", e);
+          toast({
+              variant: "destructive",
+              title: "Error switching microphone",
+              description: "Could not switch to the selected microphone."
+          });
+      }
+  };
+
+  // Effect to load ALL saved settings from local storage on mount
   useEffect(() => {
     try {
-        const savedDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
-        if (savedDeviceId) {
-            setMusicDeviceId(savedDeviceId);
-        }
+        const savedJukeboxDeviceId = localStorage.getItem('hearmeout-jukebox-device-id');
+        if (savedJukeboxDeviceId) setMusicDeviceId(savedJukeboxDeviceId);
+
+        const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
+        if (savedUserMicId) setMicDevice(savedUserMicId);
+        
         const savedPanels = localStorage.getItem('hearmeout-active-panels');
-        if (savedPanels) {
-            setActivePanels(JSON.parse(savedPanels));
-        }
+        if (savedPanels) setActivePanels(JSON.parse(savedPanels));
+
     } catch (e) {
         console.error("Failed to load saved state from localStorage", e);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Effect to publish/unpublish the jukebox track
@@ -341,7 +386,7 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
                 activePanels={activePanels}
                 onTogglePanel={handleTogglePanel}
                 isRoomOwner={isRoomOwner}
-                audioDevices={devices}
+                audioDevices={audioDevices}
                 selectedMusicDeviceId={musicDeviceId}
                 onMusicDeviceSelect={handleMusicDeviceSelect}
               />
@@ -374,7 +419,13 @@ export default function UserList({ musicPlayerOpen, roomId }: { musicPlayerOpen:
           </div>
         )}
         
-        <RoomParticipants isHost={isRoomOwner} roomId={roomId}/>
+        <RoomParticipants 
+          isHost={isRoomOwner} 
+          roomId={roomId}
+          micDevices={micDevices}
+          activeMicId={activeMicId || ''}
+          onMicDeviceChange={handleMicDeviceChange}
+        />
       </div>
     </>
   );
