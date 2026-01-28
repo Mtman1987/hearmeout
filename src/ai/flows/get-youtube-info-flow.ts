@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview A flow to fetch information about YouTube videos, trigger a download via an external service, and return playable URLs.
+ * @fileOverview A flow to fetch information about YouTube videos and return playable stream URLs from an external conversion service.
  *
  * - getYoutubeInfo - A function that handles the entire process.
  * - GetYoutubeInfoInput - The input type for the getYoutubeInfo function.
@@ -9,7 +9,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { google } from 'googleapis';
 import { PlaylistItem } from '@/types/playlist';
 import { YouTube } from 'youtube-sr';
 
@@ -61,73 +60,6 @@ function selectArtId(videoId: string): string {
   return artIds[hash % artIds.length];
 }
 
-const parseYouTubeVideoId = (url: string): string | null => {
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
-};
-
-
-// --- RapidAPI Helper Functions ---
-
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const RAPIDAPI_HOST = 'yt-downloader9.p.rapidapi.com';
-
-async function startDownloadJob(youtubeUrl: string): Promise<string> {
-    const response = await fetch(`https://${RAPIDAPI_HOST}/start`, {
-        method: 'POST',
-        headers: {
-            'x-rapidapi-key': RAPIDAPI_KEY!,
-            'x-rapidapi-host': RAPIDAPI_HOST,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            urls: [youtubeUrl],
-            onlyAudio: true,
-            ignorePlaylists: false, // We want to process playlists
-            videoQuality: 'best'
-        })
-    });
-    const data = await response.json();
-    if (!response.ok || !data.jobId) {
-        console.error("RapidAPI /start error:", data);
-        throw new Error(`Failed to start download job on RapidAPI. ${data.message || ''}`);
-    }
-    return data.jobId;
-}
-
-async function pollJobStatus(jobId: string) {
-    const MAX_POLLS = 36; // 36 polls * 5 seconds = 180 seconds (3 minutes)
-    const POLL_INTERVAL = 5000; // 5 seconds
-
-    for (let i = 0; i < MAX_POLLS; i++) {
-        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-
-        const response = await fetch(`https://${RAPIDAPI_HOST}/status?jobId=${jobId}`, {
-            method: 'GET',
-            headers: {
-                'x-rapidapi-key': RAPIDAPI_KEY!,
-                'x-rapidapi-host': RAPIDAPI_HOST,
-            }
-        });
-        
-        if (!response.ok) {
-            console.warn(`Polling failed for job ${jobId}, status ${response.status}. Retrying...`);
-            continue;
-        }
-        
-        const data = await response.json();
-
-        if (data.status === 'finished') {
-            return data;
-        } else if (data.status === 'failed') {
-            throw new Error(`RapidAPI job ${jobId} failed: ${data.error || 'Unknown reason'}`);
-        }
-    }
-
-    throw new Error('Song conversion timed out after 3 minutes. The video may be too long or the service is busy.');
-}
-
 
 // --- Genkit Flow ---
 
@@ -139,61 +71,58 @@ const getYoutubeInfoFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-        if (!RAPIDAPI_KEY) {
-            throw new Error('RapidAPI key is not configured. Please add RAPIDAPI_KEY to your .env file.');
-        }
+        const isUrl = YouTube.isYouTube(input.url, { checkVideo: true, checkPlaylist: true });
+        let videos: any[] = [];
 
-        const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-        if (!YOUTUBE_API_KEY) {
-            throw new Error('YouTube API key is not configured. Please add YOUTUBE_API_KEY to your .env file.');
-        }
-
-        let targetUrl = input.url;
-
-        // If it's not a valid YouTube URL, perform a search
-        if (!YouTube.isYouTube(targetUrl, { checkVideo: true, checkPlaylist: true })) {
-            const youtube = google.youtube({ version: 'v3', auth: YOUTUBE_API_KEY });
-            const searchResponse = await youtube.search.list({
-                part: ['id'],
-                q: input.url,
-                maxResults: 1,
-                type: ['video'],
-                videoCategoryId: '10' // Music Category
-            });
-            if (!searchResponse.data.items || searchResponse.data.items.length === 0 || !searchResponse.data.items[0].id?.videoId) {
-                throw new Error(`No music video found for query: "${input.url}".`);
+        if (isUrl) {
+            if (YouTube.isPlaylist(input.url)) {
+                const playlist = await YouTube.getPlaylist(input.url);
+                if (!playlist || playlist.videos.length === 0) {
+                    throw new Error(`I couldn't find that playlist or it's empty.`);
+                }
+                videos = playlist.videos;
+            } else {
+                const video = await YouTube.getVideo(input.url);
+                if (!video) {
+                    throw new Error(`I couldn't find a video at that URL.`);
+                }
+                videos.push(video);
             }
-            const videoId = searchResponse.data.items[0].id.videoId;
-            targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        } else {
+            const searchResults = await YouTube.search(input.url, { limit: 1, type: 'video' });
+            if (!searchResults || searchResults.length === 0) {
+                throw new Error(`I couldn't find any songs matching "${input.url}".`);
+            }
+            videos.push(searchResults[0]);
         }
-
-        // Start the job and poll for results
-        const jobId = await startDownloadJob(targetUrl);
-        const result = await pollJobStatus(jobId);
-
-        if (!result.videos || result.videos.length === 0) {
-            throw new Error('The download job completed but returned no videos.');
+        
+        if (videos.length === 0) {
+            throw new Error(`I couldn't find any songs for "${input.url}".`);
         }
 
         // Map the results to our playlist item format
-        const playlistItems: PlaylistItem[] = result.videos.map((video: any) => {
-            const videoId = parseYouTubeVideoId(video.originalUrl) || video.id || jobId;
-            return {
-                id: videoId,
-                title: video.title || 'Unknown Title',
-                artist: video.channel || 'Unknown Artist',
-                artId: selectArtId(videoId),
-                url: video.url, // This is the direct download URL
-                duration: video.duration || 0,
-            };
-        });
+        const playlistItems: PlaylistItem[] = videos
+            .filter(video => video && video.id) // Ensure video and video.id are not null
+            .map((video) => {
+                const originalUrl = `https://www.youtube.com/watch?v=${video.id}`;
+                const streamUrl = `https://convert2mp3s.com/api/single/mp3?url=${encodeURIComponent(originalUrl)}`;
+
+                return {
+                    id: video.id!,
+                    title: video.title || 'Unknown Title',
+                    artist: video.channel?.name || 'Unknown Artist',
+                    artId: selectArtId(video.id!),
+                    url: streamUrl,
+                    duration: (video.duration || 0) / 1000,
+                };
+            });
 
         return playlistItems;
 
     } catch (error) {
       console.error('An error occurred in the getYoutubeInfoFlow:', error);
       if (error instanceof Error) {
-        throw error; // Re-throw the original error to be caught by the action
+        throw new Error(`Failed to process request: ${error.message}`);
       }
       throw new Error('An unknown error occurred while fetching song info.');
     }
