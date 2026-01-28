@@ -7,7 +7,7 @@ import {
   useConnectionState,
   useRoomContext,
 } from '@livekit/components-react';
-import { ConnectionState, createLocalAudioTrackFromMediaElement, RoomPublication } from 'livekit-client';
+import { ConnectionState, createLocalAudioTrack, RoomPublication } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -218,53 +218,70 @@ function MusicStreamer({
 }) {
     const room = useRoomContext();
     const audioRef = useRef<HTMLAudioElement>(null);
-    const [musicPublication, setMusicPublication] = useState<RoomPublication | null>(null);
+    // Use a ref to hold the publication to avoid re-renders and dependency array issues
+    const publicationRef = useRef<RoomPublication | null>(null);
 
     useEffect(() => {
-        if (!isDJ || !room || !audioRef.current) return;
-        
         const audioEl = audioRef.current;
-        let isCleaningUp = false;
-
-        const cleanup = async () => {
-            if (isCleaningUp) return;
-            isCleaningUp = true;
-            audioEl.pause();
-            audioEl.src = '';
-            if (musicPublication && musicPublication.track) {
-                await room.localParticipant.unpublishTrack(musicPublication.track);
-                setMusicPublication(null);
+        if (!isDJ || !room || !audioEl) {
+            // If we are not the DJ, ensure everything is unpublished and stopped.
+            if (publicationRef.current) {
+                room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
+                publicationRef.current = null;
             }
-        };
+            if(audioEl) audioEl.pause();
+            return;
+        }
 
-        const setup = async () => {
-            await cleanup();
-            isCleaningUp = false;
-
+        const manageTrack = async () => {
+            // If we should be playing and have a URL
             if (isPlaying && trackUrl) {
                 try {
+                    // Unpublish any existing track before publishing a new one
+                    if (publicationRef.current) {
+                        await room.localParticipant.unpublishTrack(publicationRef.current.track!);
+                        publicationRef.current = null;
+                    }
+
                     audioEl.src = trackUrl;
                     await audioEl.play();
-                    const track = await createLocalAudioTrackFromMediaElement(audioEl);
+                    
+                    const track = await createLocalAudioTrack({
+                        mediaElement: audioEl,
+                    });
+                    
                     const publication = await room.localParticipant.publishTrack(track, {
                         name: 'music',
                         source: 'music_bot_audio'
                     });
-                    setMusicPublication(publication);
+                    publicationRef.current = publication;
                 } catch (e) {
                     console.error("Failed to publish music track:", e);
+                }
+            } else {
+                // If we should not be playing, stop the audio and unpublish
+                audioEl.pause();
+                if (publicationRef.current) {
+                    await room.localParticipant.unpublishTrack(publicationRef.current.track!);
+                    publicationRef.current = null;
                 }
             }
         };
         
-        setup();
+        manageTrack();
 
+        // The main cleanup function for when the component unmounts
         return () => {
-            cleanup();
+            if (publicationRef.current) {
+                room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
+                publicationRef.current = null;
+            }
         };
 
-    }, [isDJ, room, isPlaying, trackUrl]);
+    // This effect depends on the core state that dictates playback.
+    }, [isDJ, isPlaying, trackUrl, room]);
 
+    // The audio element itself. It's hidden but drives the WebRTC track.
     return <audio ref={audioRef} onEnded={onTrackEnd} crossOrigin="anonymous" className="hidden"></audio>;
 }
 
