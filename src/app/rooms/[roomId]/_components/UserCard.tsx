@@ -7,6 +7,7 @@ import {
   MicOff,
   MoreVertical,
   Move,
+  Music,
   Pen,
   ShieldOff,
   Trash2,
@@ -78,6 +79,7 @@ export default function UserCard({
     isLocal,
     isHost,
     roomId,
+    isActingAsJukebox,
     micDevices,
     speakerDevices,
     activeMicId,
@@ -89,6 +91,7 @@ export default function UserCard({
     isLocal: boolean;
     isHost?: boolean;
     roomId: string;
+    isActingAsJukebox?: boolean;
     micDevices?: MediaDeviceInfo[];
     speakerDevices?: MediaDeviceInfo[];
     activeMicId?: string;
@@ -162,8 +165,8 @@ export default function UserCard({
   };
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
-  const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
+  const displayName = isActingAsJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
+  const photoURL = isActingAsJukebox ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
   
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
@@ -184,12 +187,37 @@ export default function UserCard({
         setIsDeleting(false);
     }
   };
+  
+  if (isActingAsJukebox) {
+    return (
+      <Card className="flex flex-col h-full">
+        <CardContent className="p-4 flex flex-col gap-4 flex-grow">
+            <div className="flex items-start gap-4">
+                <div className="relative">
+                    <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
+                        <AvatarFallback>
+                          <Music className="h-8 w-8" />
+                        </AvatarFallback>
+                    </Avatar>
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="font-bold text-lg truncate">Jukebox</p>
+                    <p className="text-sm text-muted-foreground">Connected</p>
+                </div>
+            </div>
+            <div className="space-y-2 flex-grow flex flex-col justify-end">
+                <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
+            </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
 
   return (
     <>
       {!isLocal && audioTracks.map((trackRef) => (
-        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} />
+        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} volume={volume} />
       ))}
 
       <Card className="flex flex-col h-full">
@@ -371,5 +399,3 @@ export default function UserCard({
     </>
   );
 }
-
-    

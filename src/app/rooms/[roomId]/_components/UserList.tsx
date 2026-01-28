@@ -8,12 +8,10 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import * as LivekitClient from 'livekit-client';
-import MusicJukeboxCard from "./MusicJukeboxCard";
-import JukeboxConnector from "./JukeboxConnector";
 
 
 export interface RoomData {
@@ -38,15 +36,10 @@ export default function UserList({ roomId }: { roomId: string }) {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   
-  const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'jukebox');
-  const humanParticipants = [
+  const participants = [
     ...(localParticipant ? [localParticipant] : []),
-    ...remoteParticipants.filter(p => p.identity !== 'jukebox'),
+    ...remoteParticipants,
   ];
-  
-  const jukeboxTracks = useTracks([LivekitClient.Track.Source.Unknown], { participant: jukeboxParticipant });
-  const jukeboxAudioTrack = jukeboxTracks.find(t => t.publication.kind === 'audio');
-
 
   const { 
     devices: micDevices, 
@@ -246,7 +239,6 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   return (
     <>
-      {isDj && <JukeboxConnector roomId={roomId} />}
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {isDj && (
@@ -296,16 +288,10 @@ export default function UserList({ roomId }: { roomId: string }) {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {jukeboxParticipant && (
-            <MusicJukeboxCard 
-              trackRef={jukeboxAudioTrack}
-              activePanels={activePanels}
-              onTogglePanel={handleTogglePanel}
-              onPlayNext={handlePlayNext}
-            />
-          )}
-          {humanParticipants.map((participant) => {
+          {participants.map((participant) => {
               const isLocal = participant.sid === localParticipant?.sid;
+              const isActingAsJukebox = isLocal && participant.identity === room?.djId;
+
               return (
                 <UserCard
                   key={participant.sid}
@@ -313,6 +299,7 @@ export default function UserList({ roomId }: { roomId: string }) {
                   isLocal={isLocal}
                   isHost={participant.identity === room?.ownerId}
                   roomId={roomId}
+                  isActingAsJukebox={isActingAsJukebox}
                   micDevices={isLocal ? micDevices : undefined}
                   speakerDevices={isLocal ? speakerDevices : undefined}
                   activeMicId={isLocal ? activeMicId : ''}
