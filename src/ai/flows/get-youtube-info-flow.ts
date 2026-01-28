@@ -83,7 +83,6 @@ const getYoutubeInfoFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-        let videosToProcess: { id: string, title: string, artist: string, duration: number }[] = [];
         const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
         
         if (!YOUTUBE_API_KEY) {
@@ -102,7 +101,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
 
         if (playlistId) {
             const playlistResponse = await youtube.playlistItems.list({
-                part: ['snippet,contentDetails'],
+                part: ['contentDetails'],
                 playlistId: playlistId,
                 maxResults: 50 // YouTube API max is 50 per page
             });
@@ -120,32 +119,16 @@ const getYoutubeInfoFlow = ai.defineFlow(
             const searchResponse = await youtube.search.list({
                 part: ['snippet'],
                 q: input.url,
-                maxResults: 10,
-                type: ['video']
+                maxResults: 1,
+                type: ['video'],
+                videoCategoryId: '10' // Official YouTube ID for the "Music" category
             });
 
-            if (!searchResponse.data.items || searchResponse.data.items.length === 0) {
-                throw new Error(`No video found for query: "${input.url}"`);
+            if (!searchResponse.data.items || searchResponse.data.items.length === 0 || !searchResponse.data.items[0].id?.videoId) {
+                 throw new Error(`No music video found for query: "${input.url}". Please try a more specific search.`);
             }
 
-            const items = searchResponse.data.items;
-            let bestMatch = items[0]; 
-
-            const officialVideo = items.find(item => item.snippet?.title?.toLowerCase().includes('official music video'));
-            const goodMatch = items.find(item => 
-                !item.snippet?.title?.toLowerCase().includes('cover') &&
-                !item.snippet?.title?.toLowerCase().includes('lyrics') &&
-                !item.snippet?.title?.toLowerCase().includes('live') &&
-                !item.snippet?.title?.toLowerCase().includes('remix')
-            );
-            
-            if (officialVideo) bestMatch = officialVideo;
-            else if (goodMatch) bestMatch = goodMatch;
-            
-            if (!bestMatch.id?.videoId) {
-                throw new Error(`No usable video found for query: "${input.url}"`);
-            }
-            videoIds.push(bestMatch.id.videoId);
+            videoIds.push(searchResponse.data.items[0].id.videoId);
         }
 
         if (videoIds.length === 0) {
