@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -139,7 +138,7 @@ export default function UserCard({
   }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
 
 
-  const tracks = useTracks(
+  const audioTracks = useTracks(
       [LivekitClient.Track.Source.Microphone], 
       { participant }
   );
@@ -149,14 +148,14 @@ export default function UserCard({
   // This effect syncs the LiveKit track's state FROM the Firestore state for the local user.
   React.useEffect(() => {
     if (isLocal) {
-        const micTrack = tracks[0]?.publication.track;
+        const micTrack = audioTracks[0]?.publication.track;
         if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
           if (micTrack.isMuted !== isMuted) {
               micTrack.setMuted(isMuted);
           }
         }
     }
-  }, [isLocal, tracks, isMuted]);
+  }, [isLocal, audioTracks, isMuted]);
   
   const handleToggleMic = async () => {
     if (isLocal && userInRoomRef) {
@@ -191,13 +190,9 @@ export default function UserCard({
 
   return (
     <>
-      {!isLocal && (
-        <AudioTrack
-          participant={participant}
-          source={LivekitClient.Track.Source.Microphone}
-          volume={volume}
-        />
-      )}
+      {!isLocal && audioTracks.map((trackRef) => (
+        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} volume={volume} />
+      ))}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
