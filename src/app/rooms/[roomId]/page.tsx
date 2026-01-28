@@ -5,8 +5,6 @@ import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
-  useLocalParticipant,
-  LocalAudioTrack,
 } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import {
@@ -187,7 +185,6 @@ function RoomPageContent() {
   const params = useParams<{ roomId: string }>();
   const { firestore, user, isUserLoading } = useFirebase();
   const { toast } = useToast();
-  const { localParticipant } = useLocalParticipant();
   
   const [chatOpen, setChatOpen] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | undefined>(undefined);
@@ -198,7 +195,6 @@ function RoomPageContent() {
   const [duration, setDuration] = useState(0);
 
   const playerRef = useRef<ReactPlayer>(null);
-  const musicTrackRef = useRef<LocalAudioTrack | null>(null);
 
   const roomRef = useMemoFirebase(() => {
       if (!firestore || !params.roomId) return null;
@@ -208,50 +204,6 @@ function RoomPageContent() {
   const { data: room, isLoading: isRoomLoading } = useDoc<RoomData>(roomRef);
 
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
-
-  // Audio Capture and Publishing Logic
-  useEffect(() => {
-    if (!userHasInteracted || !localParticipant || !playerRef.current) return;
-
-    const setupAudio = async () => {
-      // Unpublish original microphone
-      localParticipant.tracks.forEach((pub) => {
-        if (pub.source === LivekitClient.Track.Source.Microphone) {
-          localParticipant.unpublishTrack(pub.track);
-        }
-      });
-      
-      const audioPlayer = playerRef.current.getInternalPlayer() as HTMLAudioElement;
-      if (!audioPlayer) return;
-
-      // @ts-ignore
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const stream = audioPlayer.captureStream ? audioPlayer.captureStream() : audioPlayer.mozCaptureStream();
-      
-      if (!stream) return;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      const destination = audioContext.createMediaStreamDestination();
-      source.connect(destination);
-
-      const [newMusicTrack] = destination.stream.getAudioTracks();
-      const track = new LocalAudioTrack(newMusicTrack, { name: 'jukebox-audio' });
-      musicTrackRef.current = track;
-      
-      await localParticipant.publishTrack(track);
-    };
-
-    setupAudio();
-
-    return () => {
-      if (musicTrackRef.current) {
-        localParticipant.unpublishTrack(musicTrackRef.current);
-        musicTrackRef.current = null;
-      }
-      // Re-enable microphone on exit
-      localParticipant.setMicrophoneEnabled(true).catch(e => console.error("Failed to re-enable mic", e));
-    };
-  }, [userHasInteracted, localParticipant]);
   
   const togglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
@@ -265,6 +217,7 @@ function RoomPageContent() {
   const handlePlayNext = useCallback(() => {
     if (!room || !roomRef) return;
     const { playlist, currentTrackId } = room;
+    if (!playlist || playlist.length === 0) return;
     const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
     const nextIndex = (currentIndex + 1) % playlist.length;
     updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[nextIndex].id, isPlaying: true });
@@ -273,6 +226,7 @@ function RoomPageContent() {
   const handlePlayPrev = useCallback(() => {
     if (!room || !roomRef) return;
     const { playlist, currentTrackId } = room;
+    if (!playlist || playlist.length === 0) return;
     const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
     const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
     updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[prevIndex].id, isPlaying: true });
@@ -404,7 +358,7 @@ function RoomPageContent() {
                             serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
-                            audio={false} // Initially connect without audio, we'll publish tracks manually
+                            audio={true}
                             video={false}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
