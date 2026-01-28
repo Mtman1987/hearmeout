@@ -107,6 +107,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
               Room.setActiveDevice('audiooutput', savedSpeakerId);
             } else if (outputs.length > 0) {
               setSpeakerDeviceId(outputs[0].deviceId);
+              Room.setActiveDevice('audiooutput', outputs[0].deviceId);
             }
 
         } catch (e) {
