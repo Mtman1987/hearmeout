@@ -9,7 +9,8 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import { createLocalAudioTrack, LocalTrackPublication, Room, Track, type MediaDevice } from 'livekit-client';
+import { createLocalAudioTrack, LocalTrackPublication, Track, type MediaDevice } from 'livekit-client';
+import * as LivekitClient from 'livekit-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -72,7 +73,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   const handleSpeakerDeviceChange = (deviceId: string) => {
     setSpeakerDeviceId(deviceId);
-    Room.setActiveDevice('audiooutput', deviceId);
+    LivekitClient.Room.setActiveDevice('audiooutput', deviceId);
     try {
       localStorage.setItem('hearmeout-user-speaker-device-id', deviceId);
     } catch (e) {
@@ -87,8 +88,8 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     const getDevices = async () => {
         try {
             const [inputs, outputs] = await Promise.all([
-                Room.getLocalDevices('audioinput'),
-                Room.getLocalDevices('audiooutput'),
+                LivekitClient.Room.getLocalDevices('audioinput'),
+                LivekitClient.Room.getLocalDevices('audiooutput'),
             ]);
             setAllAudioInputDevices(inputs);
             setAllAudioOutputDevices(outputs);
@@ -104,10 +105,10 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
             if (savedSpeakerId && outputs.some(d => d.deviceId === savedSpeakerId)) {
               setSpeakerDeviceId(savedSpeakerId);
-              Room.setActiveDevice('audiooutput', savedSpeakerId);
+              LivekitClient.Room.setActiveDevice('audiooutput', savedSpeakerId);
             } else if (outputs.length > 0) {
               setSpeakerDeviceId(outputs[0].deviceId);
-              Room.setActiveDevice('audiooutput', outputs[0].deviceId);
+              LivekitClient.Room.setActiveDevice('audiooutput', outputs[0].deviceId);
             }
 
         } catch (e) {
