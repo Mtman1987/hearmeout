@@ -58,7 +58,6 @@ export default function UserList({ roomId }: { roomId: string }) {
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
-  const isPublishingRef = useRef(false);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -121,50 +120,26 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
-    if (!localParticipant || !activeMicId) return;
-  
-    const setupMicTrack = async () => {
-        if (isPublishingRef.current) {
-            console.log("Already publishing, skipping setup.");
-            return;
-        }
-        isPublishingRef.current = true;
-
-        try {
-            const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+    // This effect manages the microphone track based on the activeMicId
+    if (!localParticipant || !activeMicId) {
+      return;
+    }
     
-            if (existingPublication) {
-                // If the device ID changes, we need to unpublish the old track
-                if (existingPublication.track?.mediaStreamTrack.getSettings().deviceId !== activeMicId) {
-                    await localParticipant.unpublishTrack(existingPublication.track, true);
-                    const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
-                    await localParticipant.publishTrack(track, {
-                        source: LivekitClient.Track.Source.Microphone,
-                    });
-                }
-            } else {
-                // Publish a new track if one doesn't already exist for the source
-                const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
-                await localParticipant.publishTrack(track, {
-                    source: LivekitClient.Track.Source.Microphone,
-                });
-            }
-        } catch (e) {
-            console.error("Failed to create and publish mic track:", e);
-            if (String(e).includes('already publishing')) {
-              // This is a common race condition, we can often ignore it.
-              console.warn("Attempted to publish a track that was already being published.");
-            } else {
-              toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
-            }
-        } finally {
-            isPublishingRef.current = false;
-        }
+    // Options for the track
+    const audioOptions: LivekitClient.AudioCaptureOptions = { deviceId: activeMicId };
+
+    // The `setMicrophoneEnabled` function with `audioOptions` handles everything:
+    // - It creates and publishes a track if not already present.
+    // - It replaces the track if the deviceId changes.
+    // We just need to make sure to disable it on cleanup.
+    localParticipant.setMicrophoneEnabled(true, audioOptions);
+
+    return () => {
+      // On cleanup, disable the microphone. This will unpublish the track.
+      // This is crucial for React 18 Strict Mode's double-useEffect behavior.
+      localParticipant.setMicrophoneEnabled(false);
     };
-  
-    setupMicTrack();
-  
-  }, [localParticipant, activeMicId, toast]);
+  }, [localParticipant, activeMicId]);
 
   useEffect(() => {
     if (room && !room.playlist && isDj && roomRef) {
