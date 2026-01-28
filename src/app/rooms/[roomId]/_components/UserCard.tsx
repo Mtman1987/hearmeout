@@ -128,10 +128,10 @@ export default function UserCard({
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   useEffect(() => {
-    if (userInRoomRef) {
+    if (userInRoomRef && isSpeaking !== firestoreUser?.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
-  }, [isSpeaking, userInRoomRef]);
+  }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
 
   const audioTrackRef = useTracks(
       [LivekitClient.Track.Source.Microphone], 

@@ -2,7 +2,7 @@
 
 import UserCard from "./UserCard";
 import MusicPlayerCard from "./MusicPlayerCard";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
@@ -53,7 +53,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const isPublishingRef = React.useRef(false);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -117,37 +117,39 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
-    if (!localParticipant || !activeMicId || isPublishing) return;
+    if (!localParticipant || !activeMicId) return;
   
     const setupMicTrack = async () => {
-      setIsPublishing(true);
+      if (isPublishingRef.current) return;
+      isPublishingRef.current = true;
+
       try {
         const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
   
-        if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === activeMicId) {
-          setIsPublishing(false);
-          return;
+        // If the device ID changes, we need to unpublish the old track
+        if (existingPublication && existingPublication.track?.mediaStreamTrack.getSettings().deviceId !== activeMicId) {
+            await localParticipant.unpublishTrack(existingPublication.track, true);
         }
-  
-        if (existingPublication) {
-          await localParticipant.unpublishTrack(existingPublication.track, true);
+
+        // Only publish a new track if one doesn't already exist for the source
+        const currentPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+        if (!currentPublication) {
+            const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
+            await localParticipant.publishTrack(track, {
+              source: LivekitClient.Track.Source.Microphone,
+            });
         }
-  
-        const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
-        await localParticipant.publishTrack(track, {
-          source: LivekitClient.Track.Source.Microphone,
-        });
       } catch (e) {
         console.error("Failed to create and publish mic track:", e);
         toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
       } finally {
-        setIsPublishing(false);
+        isPublishingRef.current = false;
       }
     };
   
     setupMicTrack();
   
-  }, [localParticipant, activeMicId, toast, isPublishing]);
+  }, [localParticipant, activeMicId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && canControlMusic && roomRef) {
