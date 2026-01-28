@@ -1,7 +1,7 @@
 
 import 'dotenv/config';
 import { db } from '@/firebase/admin';
-import { Room, RoomEvent, RoomServiceClient, LocalTrack, AudioPresets } from 'livekit-server-sdk';
+import { Room, RoomEvent, RoomServiceClient, LocalTrack, AudioPresets, AccessToken } from 'livekit-server-sdk';
 import ytdl from 'ytdl-core';
 import { PassThrough } from 'stream';
 
@@ -16,88 +16,111 @@ if (!livekitUrl || !livekitApiKey || !livekitApiSecret || !targetRoomId) {
 }
 
 const roomService = new RoomServiceClient(livekitUrl, livekitApiKey, livekitApiSecret);
-const room = new Room(roomService, targetRoomId, {
-    name: 'Jukebox',
-    identity: 'jukebox', // CRITICAL FIX: Identify the bot as 'jukebox'
-});
+let room: Room;
+let publishedTrack: LocalTrack | null = null;
+let broadcastStream: PassThrough | null = null;
+let currentSongStream: ReturnType<typeof ytdl> | null = null;
 
-let currentTrack: LocalTrack | null = null;
-let currentStream: PassThrough | null = null;
-let isPlaying = false;
-let currentTrackId: string | null = null;
-
-async function connectToRoom() {
+async function connectAndPublish() {
     try {
+        room = new Room();
+
         console.log(`Attempting to connect to LiveKit room: ${targetRoomId}`);
-        await room.connect();
-        console.log(`Successfully connected to room: ${room.name}`);
-        console.log(`Bot connected with identity: ${room.localParticipant.identity}`);
         
-        // Listen for remote participants disconnecting
-        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-            console.log(`Participant disconnected: ${participant.identity}`);
+        // This is the persistent stream that we will publish.
+        broadcastStream = new PassThrough();
+
+        // Listen for events.
+        room.on(RoomEvent.Connected, async () => {
+            console.log(`Successfully connected to room: ${room.name}`);
+            console.log(`Bot connected with identity: ${room.localParticipant.identity}`);
+
+            // Publish the single, persistent track.
+            publishedTrack = await room.localParticipant.publishTrack(broadcastStream!, {
+                name: 'jukebox-audio',
+                source: 'unknown',
+                audioPreset: AudioPresets.musicHighQuality,
+            });
+            console.log(`Published persistent Jukebox track with SID: ${publishedTrack.sid}`);
+            listenToFirestore(); // Start listening for commands AFTER publishing the track.
+        });
+        
+        room.on(RoomEvent.Disconnected, () => {
+            console.log('Bot disconnected from the room.');
+            // You might want to add reconnection logic here.
         });
 
+        const token = new AccessToken(livekitApiKey, livekitApiSecret, {
+            identity: 'jukebox',
+            name: 'Jukebox',
+        });
+        token.addGrant({ room: targetRoomId, roomJoin: true, canPublish: true, canSubscribe: false });
+        
+        await room.connect(livekitUrl, token.toJwt());
+
     } catch (error) {
-        console.error("Failed to connect to LiveKit room:", error);
+        console.error("Failed to connect or publish to LiveKit room:", error);
         process.exit(1);
     }
 }
 
-function stopCurrentTrack() {
-    if (currentTrack) {
-        console.log("Stopping current track publication.");
-        room.localParticipant.unpublishTrack(currentTrack.sid!);
-        currentTrack = null;
+function streamSong(url: string) {
+    // If another song is already streaming, destroy its source stream.
+    if (currentSongStream) {
+        currentSongStream.destroy();
+        currentSongStream = null;
     }
-    if (currentStream) {
-        currentStream.destroy();
-        currentStream = null;
-    }
-    isPlaying = false;
-}
 
-async function playTrack(trackId: string, url: string) {
-    if (!ytdl.validateURL(url)) {
-        console.error(`Invalid YouTube URL: ${url}`);
+    if (!broadcastStream) {
+        console.error("Broadcast stream is not initialized. Cannot play song.");
         return;
     }
 
-    stopCurrentTrack();
-    currentTrackId = trackId;
-
-    console.log(`Starting to play track: ${trackId} from ${url}`);
+    console.log(`Starting to stream new song from ${url}`);
 
     try {
-        const stream = ytdl(url, {
+        currentSongStream = ytdl(url, {
             quality: 'highestaudio',
             filter: 'audioonly',
         });
-        
-        currentStream = new PassThrough();
-        stream.pipe(currentStream);
 
-        currentTrack = await room.localParticipant.publishTrack(currentStream, {
-            name: 'jukebox-audio',
-            source: 'unknown',
-            audioPreset: AudioPresets.musicHighQuality,
+        currentSongStream.on('error', (err) => {
+            console.error('Error with song stream:', err.message);
         });
 
-        console.log(`Published new track with SID: ${currentTrack.sid}`);
-        isPlaying = true;
+        currentSongStream.on('end', () => {
+            console.log(`Song from ${url} finished streaming.`);
+        });
+
+        // Pipe the new song's audio into our long-lived broadcast stream.
+        // `end: false` prevents the song stream from closing our broadcast stream when it finishes.
+        currentSongStream.pipe(broadcastStream, { end: false });
+
     } catch (error) {
-        console.error("Error streaming or publishing track:", error);
-        stopCurrentTrack();
+        console.error("Error creating ytdl stream:", error);
+    }
+}
+
+function stopStreaming() {
+    if (currentSongStream) {
+        console.log("Stopping current song stream.");
+        // Unpipe to stop feeding the broadcast stream, but don't destroy the broadcast stream itself.
+        currentSongStream.unpipe(broadcastStream!);
+        currentSongStream.destroy();
+        currentSongStream = null;
     }
 }
 
 function listenToFirestore() {
     const roomRef = db.collection('rooms').doc(targetRoomId!);
 
+    let lastTrackId: string | null = null;
+    let lastIsPlaying: boolean = false;
+
     roomRef.onSnapshot(async (doc) => {
         if (!doc.exists) {
-            console.log("Target room does not exist in Firestore. Shutting down bot for this room.");
-            stopCurrentTrack();
+            console.log("Target room does not exist. Stopping stream.");
+            stopStreaming();
             return;
         }
 
@@ -105,33 +128,35 @@ function listenToFirestore() {
         const newTrackId = roomData?.currentTrackId;
         const newIsPlaying = roomData?.isPlaying;
 
-        // Case 1: Stop playing
-        if (newIsPlaying === false && isPlaying === true) {
-            console.log("Firestore state changed to not playing. Stopping track.");
-            stopCurrentTrack();
-            // We set currentTrackId to null so if we play the same song again, it restarts
-            currentTrackId = null;
+        // Case 1: Playback is stopped/paused.
+        if (newIsPlaying === false && lastIsPlaying === true) {
+            console.log("Firestore state changed to 'paused'. Stopping stream feed.");
+            stopStreaming();
         }
         
-        // Case 2: Start playing a new track (or resume a stopped one)
-        else if (newIsPlaying === true && newTrackId && newTrackId !== currentTrackId) {
+        // Case 2: Playback starts or the track changes while already playing.
+        else if (newIsPlaying === true && (newTrackId !== lastTrackId || lastIsPlaying === false)) {
             const playlistItem = roomData?.playlist?.find((item: any) => item.id === newTrackId);
             if (playlistItem && playlistItem.url) {
-                console.log(`Firestore state changed. New track requested: ${playlistItem.title}`);
-                await playTrack(newTrackId, playlistItem.url);
+                console.log(`Firestore state changed. Streaming track: ${playlistItem.title}`);
+                streamSong(playlistItem.url);
             } else {
                 console.log(`Track ${newTrackId} requested but not found in playlist.`);
+                stopStreaming();
             }
         }
+
+        lastTrackId = newTrackId;
+        lastIsPlaying = newIsPlaying;
+
     }, (err) => {
         console.error("Error listening to Firestore:", err);
     });
 }
 
 async function main() {
-    await connectToRoom();
-    listenToFirestore();
-    console.log(`Jukebox bot is running for room: ${targetRoomId}`);
+    await connectAndPublish();
+    console.log(`Jukebox bot is initializing for room: ${targetRoomId}`);
 }
 
 main();
