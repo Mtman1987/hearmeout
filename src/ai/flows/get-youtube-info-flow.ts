@@ -10,7 +10,6 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'zod';
-import {YouTube} from 'youtube-sr';
 import YoutubeMp3Downloader from 'youtube-mp3-downloader';
 import path from 'path';
 import fs from 'fs';
@@ -80,6 +79,19 @@ function selectArtId(videoId: string): string {
   return artIds[hash % artIds.length];
 }
 
+function parseYouTubeVideoId(url: string): string | null {
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
+
+function parseYouTubePlaylistId(url: string): string | null {
+    const regex = /[?&]list=([^#&?]+)/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
+
+
 /**
  * Wraps the youtube-mp3-downloader in a Promise to be used with async/await.
  * This is necessary because the library uses event emitters (.on('finished', ...))
@@ -87,7 +99,7 @@ function selectArtId(videoId: string): string {
  * @param videoId The ID of the YouTube video to download.
  * @returns A Promise that resolves with the PlaylistItem data.
  */
-function downloadVideoAsPromise(videoId: string, title: string): Promise<PlaylistItem> {
+function downloadVideoAsPromise(videoId: string, title: string, artist: string): Promise<PlaylistItem> {
     return new Promise((resolve, reject) => {
         // Start the download
         YD.download(videoId, `${videoId}.mp3`);
@@ -103,11 +115,10 @@ function downloadVideoAsPromise(videoId: string, title: string): Promise<Playlis
                 resolve({
                     id: data.videoId,
                     title: data.videoTitle || title,
-                    artist: data.artist || 'Unknown Artist',
+                    artist: data.artist || artist,
                     url: publicUrl,
                     artId: selectArtId(data.videoId),
-                    // duration is not provided by this library, default to 0
-                    duration: data.stats.runtime || 0,
+                    duration: data.stats?.runtime || 0,
                 });
             }
         };
@@ -141,62 +152,82 @@ const getYoutubeInfoFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-        let videosToDownload: { id: string, title: string }[] = [];
+        let videosToDownload: { id: string, title: string, artist: string }[] = [];
         const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+        
+        if (!YOUTUBE_API_KEY) {
+            throw new Error('YouTube API key is not configured on the server. Please add YOUTUBE_API_KEY to your .env file.');
+        }
 
-        // 1. Determine if input is a URL or a search query
-        if (YouTube.isPlaylist(input.url)) {
-            const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
-            if (!playlist || playlist.videos.length === 0) {
-                 return [];
-            }
-            videosToDownload = playlist.videos
-                .filter(v => v.id && v.title)
-                .map(v => ({ id: v.id!, title: v.title! }));
+        const youtube = google.youtube({
+            version: 'v3',
+            auth: YOUTUBE_API_KEY
+        });
+        
+        const playlistId = parseYouTubePlaylistId(input.url);
+        const videoId = parseYouTubeVideoId(input.url);
 
-        } else if (YouTube.isYouTube(input.url, { checkVideo: true })) {
-             const video = await YouTube.getVideo(input.url);
-             if (!video || !video.id || !video.title) throw new Error('Could not find video info.');
-             videosToDownload.push({ id: video.id, title: video.title });
-
-        } else {
-            // Use the official YouTube Data API for searching
-            if (!YOUTUBE_API_KEY) {
-                throw new Error('YouTube API key is not configured on the server. Please add YOUTUBE_API_KEY to your .env file.');
-            }
-
-            const youtube = google.youtube({
-                version: 'v3',
-                auth: YOUTUBE_API_KEY
+        if (playlistId) {
+            const playlistResponse = await youtube.playlistItems.list({
+                part: ['snippet'],
+                playlistId: playlistId,
+                maxResults: 50 // YouTube API max is 50 per page
             });
 
+            const items = playlistResponse.data.items;
+            if (!items || items.length === 0) {
+                throw new Error("Could not find that playlist or it's empty.");
+            }
+            
+            videosToDownload = items
+                .filter(item => item.snippet?.resourceId?.videoId && item.snippet.title)
+                .map(item => ({
+                    id: item.snippet!.resourceId!.videoId!,
+                    title: item.snippet!.title!,
+                    artist: item.snippet!.videoOwnerChannelTitle || 'Unknown Artist'
+                }));
+
+        } else if (videoId) {
+            const videoResponse = await youtube.videos.list({
+                part: ['snippet'],
+                id: [videoId]
+            });
+            const video = videoResponse.data.items?.[0];
+            if (!video || !video.id || !video.snippet?.title) {
+                throw new Error('Could not find video info for the given URL.');
+            }
+            videosToDownload.push({ 
+                id: video.id, 
+                title: video.snippet.title,
+                artist: video.snippet.channelTitle || 'Unknown Artist'
+            });
+
+        } else {
             const searchResponse = await youtube.search.list({
                 part: ['snippet'],
                 q: input.url,
                 maxResults: 1,
                 type: ['video']
             });
-
-            const searchResults = searchResponse.data.items;
-
-            if (!searchResults || searchResults.length === 0 || !searchResults[0].id?.videoId || !searchResults[0].snippet?.title) {
+            const searchResult = searchResponse.data.items?.[0];
+            if (!searchResult || !searchResult.id?.videoId || !searchResult.snippet?.title) {
                 throw new Error(`No video found for query: "${input.url}"`);
             }
-            const video = searchResults[0];
-            videosToDownload.push({ id: video.id.videoId, title: video.snippet.title });
+            videosToDownload.push({ 
+                id: searchResult.id.videoId, 
+                title: searchResult.snippet.title,
+                artist: searchResult.snippet.channelTitle || 'Unknown Artist'
+            });
         }
 
         if (videosToDownload.length === 0) {
              throw new Error('No videos found to download.');
         }
         
-        // 2. Create a download promise for each video
-        // We use Promise.allSettled to ensure that even if one download fails, the others can continue.
         const downloadPromises = videosToDownload.map(video =>
-            downloadVideoAsPromise(video.id, video.title)
+            downloadVideoAsPromise(video.id, video.title, video.artist)
         );
 
-        // 3. Wait for all downloads to settle
         const settledResults = await Promise.allSettled(downloadPromises);
         
         const successfulDownloads: PlaylistItem[] = [];
@@ -204,24 +235,23 @@ const getYoutubeInfoFlow = ai.defineFlow(
             if (result.status === 'fulfilled') {
                 successfulDownloads.push(result.value);
             } else {
-                // Log the error for debugging but don't crash the whole flow
                 console.error("A song failed to download:", result.reason);
             }
         });
 
-        // 4. Return only the successfully downloaded songs
         if (successfulDownloads.length === 0) {
-            // This will be caught by the client and shown as a toast.
-            throw new Error('Failed to download any songs from the request. They may be private or region-locked.');
+            throw new Error('Failed to download any songs from the request. They may be private, region-locked, or too long.');
         }
 
         return successfulDownloads;
 
     } catch (error) {
         console.error('An error occurred in the getYoutubeInfoFlow:', error);
-        // Throwing the error will propagate it to the client-side caller.
-        // Re-throw a more user-friendly message.
         if (error instanceof Error) {
+            // Check for API-specific error messages
+            if (error.message.includes('API key not valid')) {
+                throw new Error('The YouTube API key is invalid. Please check the server configuration.');
+            }
             throw new Error(error.message || 'Failed to process song request.');
         }
         throw new Error('An unknown error occurred while processing the song request.');
