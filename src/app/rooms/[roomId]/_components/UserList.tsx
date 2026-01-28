@@ -19,11 +19,15 @@ export default function UserList({
     isPlaying,
     onTogglePanel,
     activePanels,
+    jukeboxVolume,
+    onJukeboxVolumeChange,
 }: { 
     roomId: string, 
     isPlaying: boolean,
     onTogglePanel: (panel: 'playlist' | 'add') => void;
     activePanels: { playlist: boolean, add: boolean };
+    jukeboxVolume: number;
+    onJukeboxVolumeChange: (volume: number) => void;
 }) {
   const { firestore, user } = useFirebase();
   
@@ -65,6 +69,8 @@ export default function UserList({
               audioType="music"
               onTogglePanel={onTogglePanel}
               activePanels={activePanels}
+              jukeboxVolume={jukeboxVolume}
+              onJukeboxVolumeChange={onJukeboxVolumeChange}
             />
           )}
 

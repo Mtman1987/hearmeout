@@ -82,6 +82,8 @@ export default function UserCard({
     audioType,
     onTogglePanel,
     activePanels,
+    jukeboxVolume,
+    onJukeboxVolumeChange,
 }: {
     participant: LivekitClient.Participant;
     isLocal: boolean;
@@ -90,6 +92,8 @@ export default function UserCard({
     audioType: 'voice' | 'music';
     onTogglePanel?: (panel: 'playlist' | 'add') => void;
     activePanels?: { playlist: boolean, add: boolean };
+    jukeboxVolume?: number;
+    onJukeboxVolumeChange?: (volume: number) => void;
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -99,10 +103,27 @@ export default function UserCard({
 
   const isJukeboxCard = audioType === 'music';
 
+  // Remote participant volume control state
   const [volume, setVolume] = React.useState(1);
   const [isMutedByMe, setIsMutedByMe] = React.useState(false);
   const lastNonZeroVolume = React.useRef(volume);
   
+  // Local jukebox volume control state and handlers
+  const isJukeboxMutedByMe = jukeboxVolume === 0;
+  const lastNonZeroJukeboxVolume = React.useRef(jukeboxVolume);
+
+  React.useEffect(() => {
+    if (jukeboxVolume !== undefined && jukeboxVolume > 0) {
+      lastNonZeroJukeboxVolume.current = jukeboxVolume;
+    }
+  }, [jukeboxVolume]);
+  
+  const toggleJukeboxMuteByMe = () => {
+    if (onJukeboxVolumeChange && jukeboxVolume !== undefined) {
+      onJukeboxVolumeChange(jukeboxVolume > 0 ? 0 : lastNonZeroJukeboxVolume.current || 0.5);
+    }
+  };
+
   const { devices: audioInputDevices, activeDeviceId: activeAudioInputDeviceId, setDevice: setAudioInputDevice } = useAudioDevice({ kind: 'audioinput' });
   const { devices: audioOutputDevices, activeDeviceId: activeAudioOutputDeviceId, setDevice: setAudioOutputDevice } = useAudioDevice({ kind: 'audiooutput' });
 
@@ -147,7 +168,6 @@ export default function UserCard({
   }, [firestore, roomId, identity]);
 
   const { data: firestoreUser, isLoading: isFirestoreUserLoading } = useDoc<RoomParticipantData>(userInRoomRef, {
-      // Don't re-render on server-side speaking changes. LiveKit is the source of truth.
       ignoreUpdates: (data) => 'isSpeaking' in data
   });
   
@@ -344,6 +364,30 @@ export default function UserCard({
             </div>
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
+                {isLocal && audioType === 'music' && jukeboxVolume !== undefined && onJukeboxVolumeChange && (
+                    <div className="flex items-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={toggleJukeboxMuteByMe}
+                                >
+                                    {isJukeboxMutedByMe ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>{isJukeboxMutedByMe ? 'Unmute' : 'Mute for me'}</p></TooltipContent>
+                        </Tooltip>
+                        <Slider
+                            aria-label="Jukebox Volume"
+                            value={[jukeboxVolume]}
+                            onValueChange={(value) => onJukeboxVolumeChange(value[0])}
+                            max={1}
+                            step={0.05}
+                        />
+                    </div>
+                )}
                  {!isLocal && (
                      <div className="flex items-center gap-2">
                         <Tooltip>

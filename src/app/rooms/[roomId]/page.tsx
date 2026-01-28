@@ -192,6 +192,7 @@ function RoomPageContent() {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [jukeboxVolume, setJukeboxVolume] = useState(0.5);
 
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [audioDestination, setAudioDestination] = useState<MediaStreamAudioDestinationNode | null>(null);
@@ -336,36 +337,36 @@ function RoomPageContent() {
 
     const setupUserAndToken = async () => {
         try {
-            // Wait for the user document to be created before continuing.
-            // This listener will fire once immediately with the current state.
-            const unsub = onSnapshot(userInRoomRef!, (docSnap) => {
-                if (docSnap.exists() || isCancelled) {
-                    unsub(); // Stop listening once we have the document.
-                    
-                    if (isCancelled) return;
-
-                    generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }))
-                        .then(token => {
-                            if (!isCancelled) setLivekitToken(token);
-                        })
-                        .catch(e => {
-                            if (!isCancelled) {
-                                console.error('[RoomPage] Failed to get LiveKit token', e);
-                                toast({ variant: 'destructive', title: 'Connection Failed', description: e.message || 'Could not join the room.' });
-                            }
-                        });
-                }
-            });
-
-            // If the listener doesn't fire because the doc doesn't exist, create it.
-            // This prevents a race condition on first join.
-            if (userInRoomRef) {
-                await setDocumentNonBlocking(userInRoomRef, {
+            // This is the race condition fix: ensure the doc exists before proceeding.
+            const ensureDocExists = new Promise<void>((resolve) => {
+                if (!userInRoomRef) return resolve();
+                const unsub = onSnapshot(userInRoomRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        unsub();
+                        resolve();
+                    }
+                });
+                 setDocumentNonBlocking(userInRoomRef, {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
                 }, { merge: true });
-            }
+            });
+
+            await ensureDocExists;
+
+            if (isCancelled) return;
+
+            generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }))
+                .then(token => {
+                    if (!isCancelled) setLivekitToken(token);
+                })
+                .catch(e => {
+                    if (!isCancelled) {
+                        console.error('[RoomPage] Failed to get LiveKit token', e);
+                        toast({ variant: 'destructive', title: 'Connection Failed', description: e.message || 'Could not join the room.' });
+                    }
+                });
 
         } catch (e: any) {
             if (!isCancelled) {
@@ -472,6 +473,8 @@ function RoomPageContent() {
                                             isPlaying={!!room?.isPlaying}
                                             activePanels={activePanels}
                                             onTogglePanel={togglePanel}
+                                            jukeboxVolume={jukeboxVolume}
+                                            onJukeboxVolumeChange={setJukeboxVolume}
                                         />
                                     </div>
                                     <div className="lg:col-span-2 space-y-6">
@@ -519,6 +522,7 @@ function RoomPageContent() {
                                             controls={false}
                                             width="1px"
                                             height="1px"
+                                            volume={jukeboxVolume}
                                             config={{
                                                 youtube: {
                                                     playerVars: {
