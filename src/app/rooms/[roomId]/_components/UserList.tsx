@@ -132,9 +132,7 @@ export default function UserList({ roomId }: { roomId: string }) {
   ];
 
   // Find the music track from any participant in the room
-  const musicTrackRefs = useTracks([LivekitClient.Track.Source.Unknown], {
-    updateOnlyOn: [],
-  });
+  const musicTrackRefs = useTracks([LivekitClient.Track.Source.Unknown]);
 
   const jukeboxTrackRef = musicTrackRefs.find(ref => ref.publication.trackName === 'jukebox-audio');
 
