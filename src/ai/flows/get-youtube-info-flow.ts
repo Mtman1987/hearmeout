@@ -11,7 +11,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { YouTube } from 'youtube-sr';
 import ytdl from 'ytdl-core';
-import { PlaylistItem } from '@/app/rooms/[roomId]/_components/Playlist';
 
 const GetYoutubeInfoInputSchema = z.object({
   url: z.string().describe('The YouTube URL for a video or playlist.'),
@@ -25,7 +24,10 @@ const PlaylistItemSchema = z.object({
     artId: z.string(),
     url: z.string(),
     duration: z.number(),
+    streamUrl: z.string().optional(),
 });
+
+export type PlaylistItem = z.infer<typeof PlaylistItemSchema>;
 
 const GetYoutubeInfoOutputSchema = z.array(PlaylistItemSchema);
 export type GetYoutubeInfoOutput = z.infer<typeof GetYoutubeInfoOutputSchema>;
@@ -67,21 +69,37 @@ const getYoutubeInfoFlow = ai.defineFlow(
         const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
         if (!playlist || playlist.videos.length === 0) return [];
         
-        // Note: duration from youtube-sr on playlist items can be unreliable.
-        return playlist.videos
+        const videoItems = await Promise.all(
+          playlist.videos
             .filter(video => video.id)
-            .map((video): PlaylistItem => ({
-              id: video.id!,
-              title: video.title || 'Untitled',
-              artist: video.channel?.name || 'Unknown Artist',
-              url: video.url,
-              artId: selectArtId(video.id!),
-              // duration is in ms, convert to seconds. Fallback to 0 if not present.
-              duration: video.duration ? video.duration / 1000 : 0, 
-            }));
+            .map(async (video): Promise<PlaylistItem | null> => {
+              try {
+                const info = await ytdl.getInfo(video.id!);
+                const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
+                const streamUrl = audioFormats.find(f => f.mimeType?.includes('audio/webm'))?.url || audioFormats[0]?.url;
+
+                return {
+                  id: video.id!,
+                  title: video.title || 'Untitled',
+                  artist: video.channel?.name || 'Unknown Artist',
+                  url: video.url,
+                  artId: selectArtId(video.id!),
+                  duration: video.duration ? video.duration / 1000 : 0, 
+                  streamUrl: streamUrl,
+                };
+              } catch (e) {
+                console.error(`Failed to get info for video ${video.id}`, e);
+                return null;
+              }
+            })
+        );
+        
+        return videoItems.filter((item): item is PlaylistItem => item !== null);
 
       } else if (ytdl.validateURL(input.url)) {
         const info = await ytdl.getInfo(input.url);
+        const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
+        const streamUrl = audioFormats.find(f => f.mimeType?.includes('audio/webm'))?.url || audioFormats[0]?.url;
         const videoDetails = info.videoDetails;
 
         return [{
@@ -91,6 +109,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
           url: videoDetails.video_url,
           artId: selectArtId(videoDetails.videoId),
           duration: parseInt(videoDetails.lengthSeconds, 10),
+          streamUrl,
         }];
       } else {
         // Fallback to youtube-sr for general search if not a valid URL for ytdl
@@ -101,6 +120,8 @@ const getYoutubeInfoFlow = ai.defineFlow(
          const video = searchResults[0];
          // Get more detailed info using ytdl to ensure duration is correct
          const info = await ytdl.getInfo(video.url);
+         const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
+         const streamUrl = audioFormats.find(f => f.mimeType?.includes('audio/webm'))?.url || audioFormats[0]?.url;
          const videoDetails = info.videoDetails;
          return [{
             id: video.id!,
@@ -109,6 +130,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
             url: videoDetails.video_url,
             artId: selectArtId(video.id!),
             duration: parseInt(videoDetails.lengthSeconds, 10),
+            streamUrl,
          }];
       }
     } catch (error) {
@@ -120,6 +142,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
              throw new Error('Could not fetch video or playlist data from YouTube.');
         }
         const video = searchResults[0];
+        // In fallback, we don't fetch streamUrl to avoid another ytdl call which might fail again.
         return [{
             id: video.id!,
             title: video.title || "Unknown Title",
