@@ -68,11 +68,11 @@
         },
         "djId": {
           "type": "string",
-          "description": "The user ID of the current DJ controlling the music."
+          "description": "The user ID of the current DJ, who claimed control via the UI. This can be empty if no one is the DJ."
         },
         "djDisplayName": {
           "type": "string",
-          "description": "The display name of the current DJ."
+          "description": "The display name of the current DJ. Denormalized for easy display."
         },
         "isPrivate": {
           "type": "boolean",

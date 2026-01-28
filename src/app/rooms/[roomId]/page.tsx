@@ -41,11 +41,13 @@ interface RoomData {
   playlist: PlaylistItem[];
   currentTrackId?: string;
   isPlaying?: boolean;
+  djId?: string;
+  djDisplayName?: string;
 }
 
 
 // This component establishes a silent, background connection for the Jukebox identity.
-function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying, isDJ }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean, isDJ: boolean }) {
+function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
 
     const onConnected = useCallback(async (room: LivekitClient.Room) => {
         if (!musicAudioTrack) return;
@@ -67,7 +69,7 @@ function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying, isDJ 
     // Effect to publish/unpublish track when playing state changes
     const { localParticipant } = useLocalParticipant();
     useEffect(() => {
-        if (!localParticipant || !musicAudioTrack || !isDJ) return;
+        if (!localParticipant || !musicAudioTrack) return;
 
         const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
         
@@ -82,7 +84,7 @@ function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying, isDJ 
             }
         }
 
-    }, [localParticipant, musicAudioTrack, isPlaying, isDJ]);
+    }, [localParticipant, musicAudioTrack, isPlaying]);
 
 
     return (
@@ -152,13 +154,17 @@ function RoomHeader({
     onToggleChat,
     isConnected,
     isDJ,
-    onTogglePlayer,
+    djId,
+    onClaimDJ,
+    onRelinquishDJ,
 }: {
     roomName: string,
     onToggleChat: () => void,
     isConnected: boolean,
     isDJ: boolean,
-    onTogglePlayer: () => void,
+    djId: string | undefined,
+    onClaimDJ: () => void,
+    onRelinquishDJ: () => void,
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -200,16 +206,31 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
+                {/* If I am the DJ, show icon to relinquish DJ role */}
                 {isDJ && (
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" onClick={onTogglePlayer}>
+                            <Button variant="outline" size="icon" onClick={onRelinquishDJ}>
                                 <Music className="h-4 w-4" />
-                                <span className="sr-only">Toggle Music Player</span>
+                                <span className="sr-only">Stop being the DJ</span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Toggle Music Player</p>
+                            <p>Stop being the DJ</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+                {/* If there is NO DJ, show icon for anyone to claim it */}
+                {!djId && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={onClaimDJ}>
+                                <Music className="h-4 w-4" />
+                                <span className="sr-only">Become the DJ</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Become the DJ</p>
                         </TooltipContent>
                     </Tooltip>
                 )}
@@ -271,7 +292,6 @@ function RoomPageContent() {
   
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [audioDestination, setAudioDestination] = useState<MediaStreamAudioDestinationNode | null>(null);
-  const [jukeboxVolume, setJukeboxVolume] = useState(0.5);
 
   const playerRef = useRef<ReactPlayer>(null);
 
@@ -288,7 +308,12 @@ function RoomPageContent() {
   }, [firestore, params.roomId, user]);
   
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
-  const isDJ = user?.uid === room?.ownerId;
+  const isDJ = !!user && !!room?.djId && user.uid === room.djId;
+
+  // When I become the DJ or stop being the DJ, toggle player visibility
+  useEffect(() => {
+    setIsPlayerVisible(isDJ);
+  }, [isDJ]);
 
   // Create audio context after user interaction
   useEffect(() => {
@@ -321,6 +346,31 @@ function RoomPageContent() {
   const togglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   };
+
+  const handleClaimDJ = useCallback(() => {
+    if (!roomRef || !user) {
+        toast({
+            variant: 'destructive',
+            title: 'Authentication Error',
+            description: 'You must be signed in to become the DJ.',
+        });
+        return;
+    };
+    updateDocumentNonBlocking(roomRef, {
+        djId: user.uid,
+        djDisplayName: user.displayName || 'Anonymous DJ'
+    });
+  }, [roomRef, user, toast]);
+
+  const handleRelinquishDJ = useCallback(() => {
+    if (!roomRef || !isDJ) return;
+    updateDocumentNonBlocking(roomRef, {
+        djId: '',
+        djDisplayName: '',
+        isPlaying: false,
+        currentTrackId: '',
+    });
+  }, [roomRef, isDJ]);
 
   const handlePlayPause = useCallback((playing: boolean) => {
     if (!roomRef || !isDJ) return;
@@ -436,6 +486,8 @@ function RoomPageContent() {
                     .then(token => {
                         if (!isCancelled) setJukeboxToken(token);
                     });
+            } else {
+                setJukeboxToken(undefined); // Clear jukebox token if not DJ
             }
 
         } catch (e: any) {
@@ -488,7 +540,9 @@ function RoomPageContent() {
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={false}
                                 isDJ={isDJ}
-                                onTogglePlayer={() => setIsPlayerVisible(p => !p)}
+                                djId={room.djId}
+                                onClaimDJ={handleClaimDJ}
+                                onRelinquishDJ={handleRelinquishDJ}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -507,7 +561,6 @@ function RoomPageContent() {
                                 serverUrl={livekitUrl}
                                 musicAudioTrack={musicAudioTrack}
                                 isPlaying={!!room?.isPlaying}
-                                isDJ={isDJ}
                             />
                         )}
                         <LiveKitRoom
@@ -530,7 +583,9 @@ function RoomPageContent() {
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={true}
                                 isDJ={isDJ}
-                                onTogglePlayer={() => setIsPlayerVisible(p => !p)}
+                                djId={room.djId}
+                                onClaimDJ={handleClaimDJ}
+                                onRelinquishDJ={handleRelinquishDJ}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -587,7 +642,6 @@ function RoomPageContent() {
                                             controls={false}
                                             width="1px"
                                             height="1px"
-                                            volume={jukeboxVolume}
                                             config={{
                                                 youtube: {
                                                     playerVars: {
