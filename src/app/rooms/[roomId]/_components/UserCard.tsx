@@ -102,22 +102,18 @@ export default function UserCard({
         }
         
         // Publish the new jukebox audio track
-        await localParticipant.publishTrack(jukeboxAudioTrack, {
-          source: LivekitClient.Track.Source.Microphone,
-          name: 'Jukebox',
-        });
+        if (jukeboxAudioTrack.readyState === 'live') {
+            await localParticipant.publishTrack(jukeboxAudioTrack, {
+              source: LivekitClient.Track.Source.Microphone,
+              name: 'Jukebox',
+            });
+        }
       };
 
       publishTrack().catch(err => {
         console.error("Failed to publish jukebox audio track:", err);
       });
 
-      // Cleanup on dismount
-      return () => {
-        if (jukeboxAudioTrack) {
-          localParticipant.unpublishTrack(jukeboxAudioTrack, true).catch(console.error);
-        }
-      };
     }
   }, [isLocal, isActingAsJukebox, jukeboxAudioTrack, localParticipant]);
 
@@ -143,19 +139,18 @@ export default function UserCard({
     return doc(firestore, 'rooms', roomId, 'users', identity);
   }, [firestore, roomId, identity]);
 
-  const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
+  const { data: firestoreUser, isLoading: isFirestoreUserLoading } = useDoc<RoomParticipantData>(userInRoomRef);
 
-  React.useEffect(() => {
-    if (userInRoomRef && firestoreUser && isSpeaking !== firestoreUser.isSpeaking) {
+  useEffect(() => {
+    if (userInRoomRef && firestoreUser && !isFirestoreUserLoading && isSpeaking !== firestoreUser.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
-  }, [isSpeaking, userInRoomRef, firestoreUser]);
+  }, [isSpeaking, userInRoomRef, firestoreUser, isFirestoreUserLoading]);
 
 
   const isMuted = firestoreUser?.isMuted ?? false;
 
   React.useEffect(() => {
-    // We don't manage the Jukebox's mic track here anymore, it's handled by the jukeboxAudioTrack effect
     if (isLocal && !isActingAsJukebox) {
         const micTrack = audioTracks[0]?.publication.track;
         if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {

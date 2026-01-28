@@ -228,11 +228,18 @@ function RoomPageContent() {
   useEffect(() => {
     const player = playerRef.current?.getInternalPlayer() as HTMLMediaElement;
     if (player && audioContext && audioDestination) {
-      const sourceNode = audioContext.createMediaElementSource(player);
-      sourceNode.connect(audioDestination);
-      return () => {
-        sourceNode.disconnect();
-      };
+      try {
+        const sourceNode = audioContext.createMediaElementSource(player);
+        sourceNode.connect(audioDestination);
+        return () => {
+          sourceNode.disconnect();
+        };
+      } catch (error) {
+        // This can happen if the source is already connected, which is fine.
+        if (!(error instanceof DOMException && error.name === 'InvalidStateError')) {
+          console.error("Error connecting audio source:", error);
+        }
+      }
     }
   }, [audioContext, audioDestination, currentTrack, room?.isPlaying]);
   
@@ -297,52 +304,55 @@ function RoomPageContent() {
     }
   };
 
-  useEffect(() => {
-    if (user && !isUserLoading && firestore && params.roomId && !livekitToken) {
-        let isCancelled = false;
+ useEffect(() => {
+    if (isUserLoading || !user || !firestore || !params.roomId || livekitToken) return;
 
-        const setupUserInRoom = async () => {
-            try {
-                if (!userInRoomRef) return;
-                const participantData = {
-                    uid: user.uid,
-                    displayName: user.displayName,
-                    photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-                    isSpeaking: false,
-                };
-                
-                // Use non-blocking setDoc which will attempt to create the document
+    let isCancelled = false;
+
+    const setupUserAndToken = async () => {
+        try {
+            const participantData = {
+                uid: user.uid,
+                displayName: user.displayName,
+                photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                isSpeaking: false,
+            };
+            if (userInRoomRef) {
+                // Non-blocking write to create/merge the user document.
                 setDocumentNonBlocking(userInRoomRef, participantData, { merge: true });
-
-                const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
-                const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
-                if (!isCancelled) {
-                    setLivekitToken(token);
-                }
-            } catch (e: any) {
-                console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
-                if (!isCancelled) {
-                  toast({
-                      variant: 'destructive',
-                      title: 'Connection Failed',
-                      description: e.message || 'Could not join the room.',
-                  });
-                }
             }
-        };
 
-        setupUserInRoom();
-
-        return () => {
-            isCancelled = true;
-            if(userInRoomRef) {
-                deleteDoc(userInRoomRef).catch(err => {
-                    console.error("Failed to clean up user document in room:", err);
+            const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
+            const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
+            
+            if (!isCancelled) {
+                setLivekitToken(token);
+            }
+        } catch (e: any) {
+            console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
+            if (!isCancelled) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Connection Failed',
+                    description: e.message || 'Could not join the room.',
                 });
             }
-        };
-    }
-  }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef]);
+        }
+    };
+
+    setupUserAndToken();
+
+    return () => {
+        isCancelled = true;
+        if (userInRoomRef) {
+            // Attempt to delete the user document when they leave.
+            deleteDoc(userInRoomRef).catch(err => {
+                // This might fail if permissions are lost, but it's okay to just log it.
+                console.warn("Failed to clean up user document in room on dismount:", err);
+            });
+        }
+    };
+}, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef]);
 
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
