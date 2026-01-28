@@ -124,15 +124,6 @@ export default function UserList({ roomId }: { roomId: string }) {
       const audioOptions = { deviceId: activeMicId };
       localParticipant.setMicrophoneEnabled(true, audioOptions);
     }
-    // The cleanup function is crucial for React's strict mode.
-    // It prevents errors from tracks being published multiple times on fast re-renders.
-    return () => {
-      if (localParticipant) {
-        // This does not immediately unpublish, but signals the intent.
-        // The SDK handles the timing to avoid race conditions.
-        localParticipant.setMicrophoneEnabled(false);
-      }
-    };
   }, [localParticipant, activeMicId]);
 
 
@@ -322,3 +313,5 @@ export default function UserList({ roomId }: { roomId: string }) {
     </>
   );
 }
+
+    

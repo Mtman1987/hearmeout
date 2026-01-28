@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Headphones,
   Mic,
@@ -107,6 +107,11 @@ export default function UserCard({
   const [isMutedByMe, setIsMutedByMe] = React.useState(false);
   const lastNonZeroVolume = React.useRef(volume);
 
+  const audioTracks = useTracks(
+    [LivekitClient.Track.Source.Microphone], 
+    { participant }
+  );
+
   React.useEffect(() => {
     if (isLocal) return;
     if (volume > 0) {
@@ -131,21 +136,14 @@ export default function UserCard({
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   React.useEffect(() => {
-    // This effect is responsible for syncing the LiveKit speaking status to Firestore.
     if (userInRoomRef && isSpeaking !== firestoreUser?.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
   }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
 
 
-  const audioTracks = useTracks(
-      [LivekitClient.Track.Source.Microphone], 
-      { participant }
-  );
-
   const isMuted = firestoreUser?.isMuted ?? false;
 
-  // This effect syncs the LiveKit track's state FROM the Firestore state for the local user.
   React.useEffect(() => {
     if (isLocal) {
         const micTrack = audioTracks[0]?.publication.track;
@@ -191,7 +189,7 @@ export default function UserCard({
   return (
     <>
       {!isLocal && audioTracks.map((trackRef) => (
-        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} volume={volume} />
+        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} />
       ))}
 
       <Card className="flex flex-col h-full">
@@ -373,3 +371,5 @@ export default function UserCard({
     </>
   );
 }
+
+    

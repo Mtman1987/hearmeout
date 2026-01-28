@@ -330,7 +330,7 @@ function RoomPageContent() {
                                 showMusicIcon={showMusicIcon}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                                <UserList roomId={params.roomId} isDj={isDj} />
+                                <UserList roomId={params.roomId} />
                             </main>
                         </LiveKitRoom>
                     )}
