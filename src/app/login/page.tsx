@@ -130,8 +130,8 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     if (auth && firestore) {
       setStatus('authenticating');
-      // Use a different, predictable email to simulate a Google login
-      const email = "mtman1987.google@example.com"; 
+      // Simulate Teddy's login
+      const email = "teddy.simulated@example.com";
       const password = "very-secure-simulation-password-123!";
 
       try {
@@ -141,12 +141,12 @@ export default function LoginPage() {
           try {
             await createUserWithEmailAndPassword(auth, email, password);
           } catch (createError: any) {
-            console.error("Simulated Google user creation failed:", createError);
+            console.error("Simulated user creation for Teddy failed:", createError);
             setStatus('idle');
             return;
           }
         } else {
-          console.error("Simulated Google sign-in failed:", error);
+          console.error("Simulated sign-in for Teddy failed:", error);
           setStatus('idle');
           return;
         }
@@ -154,27 +154,27 @@ export default function LoginPage() {
 
       const user = auth.currentUser;
       if (user) {
-        // Use the user's actual Google info for the profile
-        const googleInfo = {
-            displayName: "Mt Man",
-            email: "mtman1987@gmail.com",
-            photoURL: `https://picsum.photos/seed/${user.uid}/100/100`
+        const userInfo = {
+            username: "Teddy",
+            discordId: "149805185105920000",
+            profilePicture: "https://cdn.discordapp.com/avatars/149805185105920000/dcf59f025ac52b6025b700f1bf1ce808.png"
         };
         try {
             await updateProfile(user, {
-                displayName: googleInfo.displayName,
-                photoURL: googleInfo.photoURL,
+                displayName: userInfo.username,
+                photoURL: userInfo.profilePicture
             });
             const userRef = doc(firestore, 'users', user.uid);
             await setDoc(userRef, {
                 id: user.uid,
-                username: googleInfo.displayName,
-                email: user.email, // Use the created user's email
-                displayName: googleInfo.displayName,
-                profileImageUrl: googleInfo.photoURL,
+                username: userInfo.username,
+                email: user.email,
+                displayName: userInfo.username,
+                profileImageUrl: userInfo.profilePicture,
+                discordId: userInfo.discordId,
             }, { merge: true });
         } catch (error: any) {
-            console.error("Failed to update Google profile or Firestore:", error);
+            console.error("Failed to update profile or Firestore for Teddy:", error);
             setStatus('idle');
         }
       }
