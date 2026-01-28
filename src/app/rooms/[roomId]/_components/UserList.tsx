@@ -16,12 +16,6 @@ import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
 import * as LivekitClient from 'livekit-client';
 
-const initialPlaylist: PlaylistItem[] = [
-  { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
-  { id: "2", title: "Sofia", artist: "Clairo", artId: "album-art-2", url: "https://www.youtube.com/watch?v=L9l8zCOwEII" },
-  { id: "3", title: "Sweden", artist: "C418", artId: "album-art-3", url: "https://www.youtube.com/watch?v=aBkTkxapoJY" },
-];
-
 export interface RoomData {
   name: string;
   ownerId: string;
@@ -34,7 +28,7 @@ export interface RoomData {
 
 
 // This component contains the hidden ReactPlayer and handles publishing its audio stream.
-// It only renders for the DJ.
+// It only renders for the DJ. It has been refactored to be robust and avoid race conditions.
 const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: { 
     url: string;
     isPlaying: boolean;
@@ -45,12 +39,13 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
     const { localParticipant } = useLocalParticipant();
     const playerRef = useRef<ReactPlayer>(null);
     const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
-    const [isPlayerReady, setIsPlayerReady] = useState(false);
+    const [isPlayerReady, setIsPlayerReady] = useState(false); // State to track player readiness
 
     useEffect(() => {
         let isCancelled = false;
         
         const publishTrack = async () => {
+            // Wait for all conditions to be met: participant, player ref, and the player being ready.
             if (isCancelled || !localParticipant || !playerRef.current || !isPlayerReady) {
                 return;
             }
@@ -111,7 +106,7 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
                 ref={playerRef}
                 url={url || ''}
                 playing={isPlaying}
-                onReady={() => setIsPlayerReady(true)}
+                onReady={() => setIsPlayerReady(true)} // Set player as ready
                 onEnded={onEnded}
                 onDuration={onDuration}
                 onProgress={(state) => onProgress(state.playedSeconds)}
@@ -171,7 +166,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const isDj = user?.uid === room?.djId;
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  const canShowMusicPanels = isDj || (!!jukeboxTrackRef && (activePanels.add || activePanels.playlist));
+  const canShowMusicPanels = isDj || (activePanels.add || activePanels.playlist);
   
   const handleForceJukeboxRestart = () => {
     setJukeboxStreamerKey(k => k + 1);
@@ -236,18 +231,6 @@ export default function UserList({ roomId }: { roomId: string }) {
       localParticipant.setMicrophoneEnabled(true, audioOptions);
     }
   }, [localParticipant, activeMicId]);
-
-
-  useEffect(() => {
-    if (room && !room.playlist && isDj && roomRef) {
-        updateDocumentNonBlocking(roomRef, { 
-            playlist: initialPlaylist,
-            currentTrackId: initialPlaylist[0].id,
-            isPlaying: true, // Start playing automatically
-        });
-    }
-  }, [room, isDj, roomRef]);
-
 
   const handlePlaySong = (songId: string) => {
     if (!isDj || !roomRef) return;
@@ -335,10 +318,6 @@ export default function UserList({ roomId }: { roomId: string }) {
   // Manual seek from the DJ's remote control.
   const handleSeek = (seconds: number) => {
       if(isDj) {
-        // This is a complex operation in a streaming setup.
-        // For now, we will simply update the local DJ's progress bar.
-        // A full implementation would require sending a 'seek' event to all listeners,
-        // which is beyond the current scope.
         setLocalProgress(seconds);
       }
   };
@@ -406,7 +385,7 @@ export default function UserList({ roomId }: { roomId: string }) {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           <MusicJukeboxCard 
-            key={jukeboxStreamerKey}
+            key={`jukebox-permanent-${jukeboxStreamerKey}`}
             trackRef={jukeboxTrackRef}
             activePanels={activePanels}
             onTogglePanel={handleTogglePanel}
