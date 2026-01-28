@@ -157,6 +157,7 @@ function RoomHeader({
     djId,
     onClaimDJ,
     onRelinquishDJ,
+    onTogglePlayer,
 }: {
     roomName: string,
     onToggleChat: () => void,
@@ -165,6 +166,7 @@ function RoomHeader({
     djId: string | undefined,
     onClaimDJ: () => void,
     onRelinquishDJ: () => void,
+    onTogglePlayer: () => void,
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -206,22 +208,19 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                {/* If I am the DJ, show icon to relinquish DJ role */}
-                {isDJ && (
-                    <Tooltip>
+                {isDJ ? (
+                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" onClick={onRelinquishDJ}>
+                            <Button variant="outline" size="icon" onClick={onTogglePlayer}>
                                 <Music className="h-4 w-4" />
-                                <span className="sr-only">Stop being the DJ</span>
+                                <span className="sr-only">Toggle Music Player</span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Stop being the DJ</p>
+                            <p>Toggle Music Player</p>
                         </TooltipContent>
                     </Tooltip>
-                )}
-                {/* If there is NO DJ, show icon for anyone to claim it */}
-                {!djId && (
+                ) : !djId ? (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="outline" size="icon" onClick={onClaimDJ}>
@@ -231,6 +230,19 @@ function RoomHeader({
                         </TooltipTrigger>
                         <TooltipContent>
                             <p>Become the DJ</p>
+                        </TooltipContent>
+                    </Tooltip>
+                ) : null}
+                 {isDJ && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={onRelinquishDJ}>
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Stop being the DJ</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Stop being the DJ</p>
                         </TooltipContent>
                     </Tooltip>
                 )}
@@ -310,11 +322,6 @@ function RoomPageContent() {
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
   const isDJ = !!user && !!room?.djId && user.uid === room.djId;
 
-  // When I become the DJ or stop being the DJ, toggle player visibility
-  useEffect(() => {
-    setIsPlayerVisible(isDJ);
-  }, [isDJ]);
-
   // Create audio context after user interaction
   useEffect(() => {
     if (userHasInteracted && !audioContext && isDJ) {
@@ -371,11 +378,11 @@ function RoomPageContent() {
 
   const handleRelinquishDJ = useCallback(() => {
     if (!roomRef || !isDJ) return;
+    setIsPlayerVisible(false);
     updateDocumentNonBlocking(roomRef, {
         djId: '',
         djDisplayName: '',
         isPlaying: false,
-        currentTrackId: '',
     });
   }, [roomRef, isDJ]);
 
@@ -543,6 +550,7 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
+                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -586,6 +594,7 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
+                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
