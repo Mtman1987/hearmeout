@@ -28,16 +28,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 import { PlaylistItem } from './_components/Playlist';
 import ReactPlayer from 'react-player';
@@ -202,8 +194,8 @@ function RoomPageContent() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const [speakerDevices, setSpeakerDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('default');
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [audioDestination, setAudioDestination] = useState<MediaStreamAudioDestinationNode | null>(null);
 
   const playerRef = useRef<ReactPlayer>(null);
 
@@ -212,46 +204,37 @@ function RoomPageContent() {
       return doc(firestore, 'rooms', params.roomId);
   }, [firestore, params.roomId]);
 
-  const { data: room, isLoading: isRoomLoading } = useDoc<RoomData>(roomRef);
+  const { data: room, isLoading: isRoomLoading, error: roomError } = useDoc<RoomData>(roomRef);
+  const userInRoomRef = useMemoFirebase(() => {
+    if (!firestore || !params.roomId || !user) return null;
+    return doc(firestore, 'rooms', params.roomId, 'users', user.uid);
+  }, [firestore, params.roomId, user]);
   
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
 
   useEffect(() => {
-    // This effect populates the speaker devices dropdown.
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-        setSpeakerDevices(devices.filter(d => d.kind === 'audiooutput'));
-    });
-
-    // This listener is for when devices change (e.g., plugging in headphones).
-    const handleDeviceChange = () => {
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-            setSpeakerDevices(devices.filter(d => d.kind === 'audiooutput'));
-        });
-    };
-    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    if (userHasInteracted && !audioContext) {
+      const context = new AudioContext();
+      setAudioContext(context);
+      setAudioDestination(context.createMediaStreamDestination());
+    }
     return () => {
-        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close().catch(console.error);
+      }
     };
-  }, []);
+  }, [userHasInteracted, audioContext]);
 
   useEffect(() => {
-    // This effect sets the audio output device for the ReactPlayer.
-    const player = playerRef.current?.getInternalPlayer();
-    // The 'setSinkId' function is available on HTMLMediaElement (like <video> or <audio>).
-    if (player && 'setSinkId' in player && typeof (player as any).setSinkId === 'function') {
-        try {
-            (player as any).setSinkId(selectedSpeakerId);
-        } catch (error) {
-            console.error('Failed to set audio output device:', error);
-            toast({
-                variant: 'destructive',
-                title: 'Audio Output Error',
-                description: 'Could not switch the audio output device for the player.',
-            });
-        }
+    const player = playerRef.current?.getInternalPlayer() as HTMLMediaElement;
+    if (player && audioContext && audioDestination) {
+      const sourceNode = audioContext.createMediaElementSource(player);
+      sourceNode.connect(audioDestination);
+      return () => {
+        sourceNode.disconnect();
+      };
     }
-  }, [selectedSpeakerId, currentTrack, toast]);
-
+  }, [audioContext, audioDestination, currentTrack, room?.isPlaying]);
   
   const togglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
@@ -316,46 +299,51 @@ function RoomPageContent() {
 
   useEffect(() => {
     if (user && !isUserLoading && firestore && params.roomId && !livekitToken) {
-      let isCancelled = false;
+        let isCancelled = false;
 
-      const setupUserInRoom = async () => {
-          try {
-              const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
-              const participantData = {
-                  uid: user.uid,
-                  displayName: user.displayName,
-                  photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-                  isSpeaking: false,
-              };
-              // Wait for the user document to be created before proceeding.
-              await setDoc(userInRoomRef, participantData, { merge: true });
+        const setupUserInRoom = async () => {
+            try {
+                if (!userInRoomRef) return;
+                const participantData = {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                    isSpeaking: false,
+                };
+                
+                // Use non-blocking setDoc which will attempt to create the document
+                setDocumentNonBlocking(userInRoomRef, participantData, { merge: true });
 
-              const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
-              const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
-              if (!isCancelled) {
-                  setLivekitToken(token);
-              }
-          } catch (e: any) {
-              console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
-              toast({
-                  variant: 'destructive',
-                  title: 'Connection Failed',
-                  description: e.message || 'Could not join the room.',
-              });
-          }
-      };
-      
-      setupUserInRoom();
-      
-      const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
-      return () => {
-        isCancelled = true;
-        deleteDoc(userInRoomRef).catch(err => {
-            console.error("Failed to clean up user document in room:", err);
-        });
-      };
+                const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
+                const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
+                if (!isCancelled) {
+                    setLivekitToken(token);
+                }
+            } catch (e: any) {
+                console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
+                if (!isCancelled) {
+                  toast({
+                      variant: 'destructive',
+                      title: 'Connection Failed',
+                      description: e.message || 'Could not join the room.',
+                  });
+                }
+            }
+        };
+
+        setupUserInRoom();
+
+        return () => {
+            isCancelled = true;
+            if(userInRoomRef) {
+                deleteDoc(userInRoomRef).catch(err => {
+                    console.error("Failed to clean up user document in room:", err);
+                });
+            }
+        };
     }
-  }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken]);
+  }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef]);
+
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading || !livekitToken || !livekitUrl;
@@ -372,7 +360,7 @@ function RoomPageContent() {
                     { !room && !isRoomLoading && (
                         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
                             <h2 className="text-2xl font-bold">Room not found</h2>
-                            <p className="text-muted-foreground">This room may have been deleted or you may not have permission to view it.</p>
+                            <p className="text-muted-foreground">{roomError?.message || "This room may have been deleted or you may not have permission to view it."}</p>
                             <Button asChild>
                                 <a href="/">Go to Dashboard</a>
                             </Button>
@@ -407,7 +395,7 @@ function RoomPageContent() {
                             serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
-                            audio={true}
+                            audio={false} // Initially connect without mic to publish custom track
                             video={false}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
@@ -425,11 +413,11 @@ function RoomPageContent() {
                                 showMusicIcon={true}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                                <div className="grid grid-cols-12 gap-6">
-                                    <div className='col-span-12 lg:col-span-8'>
-                                        <UserList roomId={params.roomId} />
+                               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    <div className="lg:col-span-2">
+                                        <UserList roomId={params.roomId} jukeboxAudioStream={audioDestination?.stream ?? null}/>
                                     </div>
-                                    <div className='col-span-12 lg:col-span-4 space-y-6'>
+                                    <div className="lg:col-span-1 space-y-6">
                                         <MusicPlayerCard 
                                             currentTrack={currentTrack}
                                             progress={progress}
@@ -462,9 +450,7 @@ function RoomPageContent() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="mt-auto pt-6 space-y-4">
-                                    <p className="text-xs text-muted-foreground mb-2">DEBUG: ReactPlayer</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                <div className="hidden">
                                       <ReactPlayer
                                         ref={playerRef}
                                         url={currentTrack?.url || ''}
@@ -472,26 +458,18 @@ function RoomPageContent() {
                                         onProgress={(p) => setProgress(p.playedSeconds)}
                                         onDuration={setDuration}
                                         onEnded={handlePlayNext}
-                                        controls={true}
-                                        width="100%"
-                                        height="60px"
+                                        controls={false}
+                                        width="1px"
+                                        height="1px"
+                                        config={{
+                                            youtube: {
+                                                playerVars: {
+                                                    // This is important for some browsers to allow audio capture
+                                                    origin: typeof window !== 'undefined' ? window.location.origin : ''
+                                                }
+                                            }
+                                        }}
                                       />
-                                      <div className="flex items-center gap-4">
-                                          <Label htmlFor="player-output" className="text-muted-foreground">Output</Label>
-                                          <Select onValueChange={setSelectedSpeakerId} value={selectedSpeakerId}>
-                                              <SelectTrigger id="player-output" className="flex-1">
-                                                  <SelectValue placeholder="Select an output device" />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                  {speakerDevices.map(device => (
-                                                      <SelectItem key={device.deviceId} value={device.deviceId}>
-                                                          {device.label}
-                                                      </SelectItem>
-                                                  ))}
-                                              </SelectContent>
-                                          </Select>
-                                      </div>
-                                    </div>
                                 </div>
                             </main>
                         </LiveKitRoom>
