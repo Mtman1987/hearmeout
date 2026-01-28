@@ -277,6 +277,7 @@ function RoomPageContent() {
                   uid: user.uid,
                   displayName: user.displayName,
                   photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                  isSpeaking: false,
               };
               await setDoc(userInRoomRef, participantData, { merge: true });
 
@@ -375,54 +376,59 @@ function RoomPageContent() {
                                 isConnected={true}
                                 showMusicIcon={true}
                             />
-                            <main className="flex-1 p-4 md:p-6 overflow-y-auto grid grid-cols-12 gap-6">
-                                <div className='col-span-12 lg:col-span-8'>
-                                    <UserList roomId={params.roomId} />
+                            <main className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col">
+                                <div className="grid grid-cols-12 gap-6">
+                                    <div className='col-span-12 lg:col-span-8'>
+                                        <UserList roomId={params.roomId} />
+                                    </div>
+                                    <div className='col-span-12 lg:col-span-4 space-y-6'>
+                                        <MusicPlayerCard 
+                                            currentTrack={currentTrack}
+                                            progress={progress}
+                                            duration={duration}
+                                            playing={!!room.isPlaying}
+                                            isPlayerControlAllowed={true} // Local user is always the controller
+                                            onPlayPause={handlePlayPause}
+                                            onPlayNext={handlePlayNext}
+                                            onPlayPrev={handlePlayPrev}
+                                            onSeek={handleSeek}
+                                            activePanels={activePanels}
+                                            onTogglePanel={togglePanel}
+                                        />
+                                        {activePanels.playlist && (
+                                            <PlaylistPanel 
+                                                playlist={room.playlist || []}
+                                                currentTrackId={room.currentTrackId || ''}
+                                                isPlayerControlAllowed={true}
+                                                onPlaySong={handlePlaySong}
+                                                onRemoveSong={handleRemoveSong}
+                                                onClearPlaylist={handleClearPlaylist}
+                                            />
+                                        )}
+                                        {activePanels.add && (
+                                            <AddMusicPanel 
+                                                onAddItems={handleAddItems}
+                                                onClose={() => togglePanel('add')}
+                                                canAddMusic={true}
+                                            />
+                                        )}
+                                    </div>
                                 </div>
-                                <div className='col-span-12 lg:col-span-4 space-y-6'>
-                                     <MusicPlayerCard 
-                                        currentTrack={currentTrack}
-                                        progress={progress}
-                                        duration={duration}
-                                        playing={!!room.isPlaying}
-                                        isPlayerControlAllowed={true} // Local user is always the controller
-                                        onPlayPause={handlePlayPause}
-                                        onPlayNext={handlePlayNext}
-                                        onPlayPrev={handlePlayPrev}
-                                        onSeek={handleSeek}
-                                        activePanels={activePanels}
-                                        onTogglePanel={togglePanel}
+                                <div className="mt-auto pt-6">
+                                    <p className="text-xs text-muted-foreground mb-2">DEBUG: ReactPlayer</p>
+                                    <ReactPlayer
+                                      ref={playerRef}
+                                      url={currentTrack?.url || ''}
+                                      playing={!!room?.isPlaying && userHasInteracted}
+                                      onProgress={(p) => setProgress(p.playedSeconds)}
+                                      onDuration={setDuration}
+                                      onEnded={handlePlayNext}
+                                      controls={true}
+                                      width="100%"
+                                      height="60px"
                                     />
-                                     {activePanels.playlist && (
-                                        <PlaylistPanel 
-                                            playlist={room.playlist || []}
-                                            currentTrackId={room.currentTrackId || ''}
-                                            isPlayerControlAllowed={true}
-                                            onPlaySong={handlePlaySong}
-                                            onRemoveSong={handleRemoveSong}
-                                            onClearPlaylist={handleClearPlaylist}
-                                        />
-                                    )}
-                                    {activePanels.add && (
-                                        <AddMusicPanel 
-                                            onAddItems={handleAddItems}
-                                            onClose={() => togglePanel('add')}
-                                            canAddMusic={true}
-                                        />
-                                    )}
                                 </div>
                             </main>
-                            <div>
-                               <ReactPlayer
-                                  ref={playerRef}
-                                  url={currentTrack?.url || ''}
-                                  playing={!!room?.isPlaying}
-                                  onProgress={(p) => setProgress(p.playedSeconds)}
-                                  onDuration={setDuration}
-                                  onEnded={handlePlayNext}
-                                  controls={true}
-                               />
-                            </div>
                         </LiveKitRoom>
                     )}
                 </div>
