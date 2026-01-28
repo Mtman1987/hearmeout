@@ -1,7 +1,8 @@
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import Playlist, { type PlaylistItem } from "./Playlist";
+import Playlist from "./Playlist";
+import type { PlaylistItem } from "@/types/playlist";
 import { ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

@@ -21,7 +21,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
-import { type PlaylistItem } from "./Playlist";
+import { type PlaylistItem } from "@/types/playlist";
 import {
   Tooltip,
   TooltipContent,

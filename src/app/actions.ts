@@ -3,7 +3,7 @@
 import { moderateContent } from "@/ai/flows/sentiment-based-moderation";
 import type { ModerateContentOutput } from "@/ai/flows/sentiment-based-moderation";
 import { getYoutubeInfo as getYoutubeInfoFlow } from "@/ai/flows/get-youtube-info-flow";
-import type { PlaylistItem } from "@/app/rooms/[roomId]/_components/Playlist";
+import type { PlaylistItem } from "@/types/playlist";
 import { AccessToken } from 'livekit-server-sdk';
 import { sendControlEmbed } from '@/bots/discord-bot';
 

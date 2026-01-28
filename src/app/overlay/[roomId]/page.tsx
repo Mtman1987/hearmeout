@@ -8,7 +8,7 @@ import Image from 'next/image';
 import { Music, Mic, LoaderCircle } from 'lucide-react';
 import placeholderData from '@/lib/placeholder-images.json';
 import { cn } from '@/lib/utils';
-import type { PlaylistItem } from '@/app/rooms/[roomId]/_components/Playlist';
+import type { PlaylistItem } from '@/types/playlist';
 
 interface RoomUser {
   id: string;

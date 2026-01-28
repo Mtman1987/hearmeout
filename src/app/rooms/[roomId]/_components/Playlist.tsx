@@ -4,15 +4,7 @@ import { Music, Trash2 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-
-export type PlaylistItem = {
-  id: string;
-  title: string;
-  artist: string;
-  artId: string;
-  url: string;
-  duration: number;
-};
+import type { PlaylistItem } from "@/types/playlist";
 
 export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed, onRemoveSong }: { 
     playlist: PlaylistItem[], 

@@ -2,7 +2,7 @@
 
 import { db } from '@/firebase/admin';
 import { YouTube } from 'youtube-sr';
-import { PlaylistItem } from "@/app/rooms/[roomId]/_components/Playlist";
+import { PlaylistItem } from "@/types/playlist";
 
 // A simple deterministic hash function to select album art from the existing set
 function simpleHash(str: string): number {

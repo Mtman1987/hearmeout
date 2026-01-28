@@ -14,7 +14,7 @@ import {YouTube} from 'youtube-sr';
 import YoutubeMp3Downloader from 'youtube-mp3-downloader';
 import path from 'path';
 import fs from 'fs';
-import { PlaylistItem } from '@/app/rooms/[roomId]/_components/Playlist';
+import { PlaylistItem } from '@/types/playlist';
 
 // --- Types and Schemas ---
 
@@ -23,7 +23,16 @@ const GetYoutubeInfoInputSchema = z.object({
 });
 export type GetYoutubeInfoInput = z.infer<typeof GetYoutubeInfoInputSchema>;
 
-const GetYoutubeInfoOutputSchema = z.array(PlaylistItem);
+const PlaylistItemSchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    artist: z.string(),
+    artId: z.string(),
+    url: z.string(),
+    duration: z.number(),
+});
+
+const GetYoutubeInfoOutputSchema = z.array(PlaylistItemSchema);
 export type GetYoutubeInfoOutput = z.infer<typeof GetYoutubeInfoOutputSchema>;
 
 

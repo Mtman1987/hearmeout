@@ -31,7 +31,7 @@ import {
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
-import { PlaylistItem } from './_components/Playlist';
+import { PlaylistItem } from "@/types/playlist";
 import ReactPlayer from 'react-player/youtube';
 
 

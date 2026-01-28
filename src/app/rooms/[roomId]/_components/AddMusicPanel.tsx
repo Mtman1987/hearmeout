@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Youtube, Upload, LoaderCircle } from "lucide-react";
-import type { PlaylistItem } from "./Playlist";
+import type { PlaylistItem } from "@/types/playlist";
 import { getYoutubeInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
