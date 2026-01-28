@@ -8,10 +8,11 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
+import * as LivekitClient from 'livekit-client';
 
 const initialPlaylist: PlaylistItem[] = [
   { id: "1", title: "Golden Hour", artist: "JVKE", artId: "album-art-1", url: "https://www.youtube.com/watch?v=c9scA_s1d4A" },
@@ -121,9 +122,17 @@ export default function UserList({ roomId }: { roomId: string }) {
   // The <LiveKitRoom> component handles the initial publication. This effect handles changes.
   useEffect(() => {
     if (localParticipant && activeMicId) {
-      const audioOptions = { deviceId: activeMicId };
-      localParticipant.setMicrophoneEnabled(true, audioOptions);
+      const audioOptions: LivekitClient.AudioCaptureOptions = { deviceId: activeMicId };
+      const enableMicrophone = async () => {
+          await localParticipant.setMicrophoneEnabled(true, audioOptions);
+      };
+      enableMicrophone();
     }
+     return () => {
+      // In development with React.StrictMode, components mount, unmount, and remount.
+      // We should NOT disable the microphone here on unmount, as that causes instability.
+      // The LiveKitRoom component's unmount will handle the final cleanup.
+    };
   }, [localParticipant, activeMicId]);
 
 
@@ -156,6 +165,10 @@ export default function UserList({ roomId }: { roomId: string }) {
   const handlePlayNext = () => {
     if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
+    if (currentIndex === -1) { // If track not found, play first song
+        handlePlaySong(room.playlist[0].id);
+        return;
+    }
     const nextIndex = (currentIndex + 1) % room.playlist.length;
     handlePlaySong(room.playlist[nextIndex].id);
   };
@@ -286,6 +299,7 @@ export default function UserList({ roomId }: { roomId: string }) {
               setDuration={setDuration}
               activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
+              onPlayNext={handlePlayNext}
             />
           )}
 
@@ -313,5 +327,3 @@ export default function UserList({ roomId }: { roomId: string }) {
     </>
   );
 }
-
-    

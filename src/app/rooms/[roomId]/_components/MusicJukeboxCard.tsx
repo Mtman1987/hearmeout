@@ -35,9 +35,10 @@ interface MusicJukeboxCardProps {
   setDuration: (duration: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
+  onPlayNext: () => void;
 }
 
-export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, activePanels, onTogglePanel }: MusicJukeboxCardProps) {
+export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, activePanels, onTogglePanel, onPlayNext }: MusicJukeboxCardProps) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
@@ -83,6 +84,12 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, a
         updateDocumentNonBlocking(roomRef, { currentTrackProgress: 0 });
     }
   };
+
+  const handleEnded = () => {
+    if (isHost) {
+      onPlayNext();
+    }
+  };
   
   const handleVolumeChange = (value: number[]) => {
     setVolume(value[0]);
@@ -107,6 +114,7 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, a
             volume={volume}
             onDuration={handleDuration}
             onProgress={handleProgress}
+            onEnded={handleEnded}
             progressInterval={1000}
             width="1px"
             height="1px"
