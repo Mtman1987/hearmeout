@@ -20,7 +20,7 @@ export const AudioVisualizer = ({ isSpeaking }: { isSpeaking: boolean }) => {
   }, [isSpeaking]);
 
   return (
-    <div className="flex h-8 flex-1 items-end gap-1">
+    <div className="flex h-8 w-full items-end gap-1">
       {[...Array(12)].map((_, i) => (
         <div
           key={i}
