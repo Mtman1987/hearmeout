@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, 'react';
 import {
   Headphones,
   Mic,
@@ -16,7 +16,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks } from '@livekit/components-react';
+import { useTracks, AudioTrack } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -99,27 +99,28 @@ export default function UserCard({
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const { isSpeaking, name, identity, audioLevel } = participant;
   
-  const [volume, setVolume] = useState(isLocal ? 0 : 0.8);
-  const [isMutedByMe, setIsMutedByMe] = useState(volume === 0);
+  const [volume, setVolume] = React.useState(1);
+  const [isMutedByMe, setIsMutedByMe] = React.useState(false);
   const lastNonZeroVolume = React.useRef(volume);
-  const audioEl = useRef<HTMLAudioElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    if (isLocal) return;
     if (volume > 0) {
         lastNonZeroVolume.current = volume;
         setIsMutedByMe(false);
     } else {
         setIsMutedByMe(true);
     }
-  }, [volume]);
+  }, [volume, isLocal]);
   
   const toggleMuteByMe = () => {
-    setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current || 0.8));
+    if (isLocal) return;
+    setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current || 1));
   };
 
 
@@ -130,52 +131,30 @@ export default function UserCard({
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (userInRoomRef && isSpeaking !== firestoreUser?.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
   }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
 
-  const audioTrackRef = useTracks(
+  const tracks = useTracks(
       [LivekitClient.Track.Source.Microphone], 
       { participant }
-  ).find((t) => t.publication.kind === 'audio');
+  );
 
   const isMuted = firestoreUser?.isMuted ?? false;
 
-  // This effect syncs the LiveKit track's state FROM the Firestore state.
-  useEffect(() => {
-    const micTrack = audioTrackRef?.publication.track;
-    if (isLocal && micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
-      if (micTrack.isMuted !== isMuted) {
-          micTrack.setMuted(isMuted);
-      }
+  // This effect syncs the LiveKit track's state FROM the Firestore state for the local user.
+  React.useEffect(() => {
+    if (isLocal) {
+        const micTrack = tracks[0]?.publication.track;
+        if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
+          if (micTrack.isMuted !== isMuted) {
+              micTrack.setMuted(isMuted);
+          }
+        }
     }
-  }, [isLocal, audioTrackRef, isMuted]);
-
-  // This effect replaces the <AudioTrack> component.
-  // It manually attaches the remote participant's audio stream to an <audio> element.
-  useEffect(() => {
-    if (isLocal) return; // Never attach a local track to an audio element.
-
-    const track = audioTrackRef?.publication.track;
-    const el = audioEl.current;
-    if (track && el) {
-      track.attach(el);
-    }
-    return () => {
-      if (track && el) {
-        track.detach(el);
-      }
-    };
-  }, [audioTrackRef, isLocal]);
-
-  // Effect to control volume directly on the audio element.
-  useEffect(() => {
-    if (audioEl.current) {
-      audioEl.current.volume = volume;
-    }
-  }, [volume]);
+  }, [isLocal, tracks, isMuted]);
   
   const handleToggleMic = async () => {
     if (isLocal && userInRoomRef) {
@@ -210,7 +189,13 @@ export default function UserCard({
 
   return (
     <>
-      {!isLocal && <audio ref={audioEl} autoPlay />}
+      {!isLocal && (
+        <AudioTrack
+          participant={participant}
+          source={LivekitClient.Track.Source.Microphone}
+          volume={volume}
+        />
+      )}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">

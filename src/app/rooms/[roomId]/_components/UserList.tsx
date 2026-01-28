@@ -120,25 +120,16 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
-    // This effect manages the microphone track based on the activeMicId
     if (!localParticipant || !activeMicId) {
       return;
     }
-    
-    // Options for the track
     const audioOptions: LivekitClient.AudioCaptureOptions = { deviceId: activeMicId };
-
-    // The `setMicrophoneEnabled` function with `audioOptions` handles everything:
-    // - It creates and publishes a track if not already present.
-    // - It replaces the track if the deviceId changes.
-    // We just need to make sure to disable it on cleanup.
     localParticipant.setMicrophoneEnabled(true, audioOptions);
-
-    return () => {
-      // On cleanup, disable the microphone. This will unpublish the track.
-      // This is crucial for React 18 Strict Mode's double-useEffect behavior.
-      localParticipant.setMicrophoneEnabled(false);
-    };
+    // NOTE: The cleanup function that called setMicrophoneEnabled(false) has been removed.
+    // This is because in React 18's Strict Mode, it causes a fast mount/unmount/remount cycle
+    // that leads to a disconnect/reconnect loop and track publishing errors.
+    // The &lt;LiveKitRoom&gt; component handles the unpublishing of tracks when the
+    // component unmounts for good (e.g., navigating away from the page).
   }, [localParticipant, activeMicId]);
 
   useEffect(() => {
@@ -207,7 +198,7 @@ export default function UserList({ roomId }: { roomId: string }) {
     if (!isDj || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> &amp; { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
