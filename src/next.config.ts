@@ -1,5 +1,2 @@
-
-// This file is a duplicate and is not needed. 
+// This file is a duplicate and has been removed to prevent build conflicts.
 // The correct configuration is in the root next.config.ts file.
-// This file has been cleared to prevent build conflicts.
-
