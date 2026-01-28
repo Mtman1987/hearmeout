@@ -100,10 +100,6 @@ export default function UserCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // State for remote participants' volume
-  const [volume, setVolume] = useState(1);
-  const [isMutedForUser, setIsMutedForUser] = useState(false);
-  
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
 
   const userInRoomRef = useMemoFirebase(() => {
@@ -143,14 +139,6 @@ export default function UserCard({
   const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
   const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
-  const handleVolumeChange = (value: number[]) => {
-      const newVolume = value[0];
-      setVolume(newVolume);
-      if (newVolume > 0 && isMutedForUser) {
-          setIsMutedForUser(false);
-      }
-  };
-  
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
         toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
@@ -171,11 +159,10 @@ export default function UserCard({
     }
   };
 
-  const effectiveVolume = isMutedForUser ? 0 : volume;
 
   return (
     <>
-      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={!isLocal ? effectiveVolume : undefined} />}
+      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
@@ -309,20 +296,6 @@ export default function UserCard({
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
                 <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
-                {!isLocal && (
-                    <div className="flex items-center gap-2 pt-2">
-                        <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setIsMutedForUser(!isMutedForUser)} aria-label={isMutedForUser ? "Unmute" : "Mute"}>
-                            {isMutedForUser ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                        </Button>
-                        <Slider
-                            aria-label="Volume"
-                            value={[isMutedForUser ? 0 : volume]}
-                            onValueChange={handleVolumeChange}
-                            max={1}
-                            step={0.05}
-                        />
-                    </div>
-                )}
             </div>
         </CardContent>
       </Card>
