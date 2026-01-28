@@ -1,8 +1,7 @@
-
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRoomContext } from '@livekit/components-react';
-import { RoomEvent, enumerateDevices, type MediaDeviceKind } from 'livekit-client';
+import { RoomEvent, type MediaDeviceKind } from 'livekit-client';
 
 type UseAudioDeviceProps = {
   kind: 'audioinput' | 'audiooutput';
@@ -15,7 +14,7 @@ export function useAudioDevice({ kind }: UseAudioDeviceProps) {
 
   const getDevices = useCallback(async () => {
     try {
-        const allDevices = await enumerateDevices();
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
         const filteredDevices = allDevices.filter((d) => d.kind === kind);
         setDevices(filteredDevices);
 
