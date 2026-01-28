@@ -9,11 +9,12 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 import {YouTube} from 'youtube-sr';
 import YoutubeMp3Downloader from 'youtube-mp3-downloader';
 import path from 'path';
 import fs from 'fs';
+import { PlaylistItem } from '@/app/rooms/[roomId]/_components/Playlist';
 
 // --- Types and Schemas ---
 
@@ -22,17 +23,7 @@ const GetYoutubeInfoInputSchema = z.object({
 });
 export type GetYoutubeInfoInput = z.infer<typeof GetYoutubeInfoInputSchema>;
 
-const PlaylistItemSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  artist: z.string(),
-  artId: z.string(),
-  url: z.string(), // This will be the public URL to the downloaded MP3
-  duration: z.number(),
-});
-export type PlaylistItem = z.infer<typeof PlaylistItemSchema>;
-
-const GetYoutubeInfoOutputSchema = z.array(PlaylistItemSchema);
+const GetYoutubeInfoOutputSchema = z.array(PlaylistItem);
 export type GetYoutubeInfoOutput = z.infer<typeof GetYoutubeInfoOutputSchema>;
 
 
@@ -81,16 +72,23 @@ function selectArtId(videoId: string): string {
 
 /**
  * Wraps the youtube-mp3-downloader in a Promise to be used with async/await.
+ * This is necessary because the library uses event emitters (.on('finished', ...))
+ * instead of returning a promise directly.
  * @param videoId The ID of the YouTube video to download.
  * @returns A Promise that resolves with the PlaylistItem data.
  */
 function downloadVideoAsPromise(videoId: string, title: string): Promise<PlaylistItem> {
     return new Promise((resolve, reject) => {
+        // Start the download
         YD.download(videoId, `${videoId}.mp3`);
 
-        YD.on("finished", (err, data) => {
+        const onFinished = (err: any, data: any) => {
             // The 'finished' event triggers for ANY completed download, so we must check the videoId.
             if (data && data.videoId === videoId) {
+                // Cleanup listeners to prevent memory leaks
+                YD.removeListener("finished", onFinished);
+                YD.removeListener("error", onError);
+                
                 const publicUrl = `/audio/${path.basename(data.file)}`;
                 resolve({
                     id: data.videoId,
@@ -102,15 +100,23 @@ function downloadVideoAsPromise(videoId: string, title: string): Promise<Playlis
                     duration: data.stats.runtime || 0,
                 });
             }
-        });
+        };
 
-        YD.on("error", (error, data) => {
-            // The 'error' event also triggers for any download, so check the videoId.
+        const onError = (error: any, data: any) => {
+             // The 'error' event also triggers for any download, so check the videoId.
             if (data && data.videoId === videoId) {
+                // Cleanup listeners to prevent memory leaks
+                YD.removeListener("finished", onFinished);
+                YD.removeListener("error", onError);
+                
                 console.error(`Download failed for ${videoId}:`, error);
-                reject(new Error(`Failed to download audio for video ${videoId}.`));
+                reject(new Error(`Failed to download audio for video ${videoId}. It may be region-locked or private.`));
             }
-        });
+        };
+
+        // Attach the listeners
+        YD.on("finished", onFinished);
+        YD.on("error", onError);
     });
 }
 
@@ -154,19 +160,40 @@ const getYoutubeInfoFlow = ai.defineFlow(
         }
         
         // 2. Create a download promise for each video
+        // We use Promise.allSettled to ensure that even if one download fails, the others can continue.
         const downloadPromises = videosToDownload.map(video =>
             downloadVideoAsPromise(video.id, video.title)
         );
 
-        // 3. Wait for all downloads to complete
-        const results = await Promise.all(downloadPromises);
+        // 3. Wait for all downloads to settle
+        const settledResults = await Promise.allSettled(downloadPromises);
+        
+        const successfulDownloads: PlaylistItem[] = [];
+        settledResults.forEach(result => {
+            if (result.status === 'fulfilled') {
+                successfulDownloads.push(result.value);
+            } else {
+                // Log the error for debugging but don't crash the whole flow
+                console.error("A song failed to download:", result.reason);
+            }
+        });
 
-        return results;
+        // 4. Return only the successfully downloaded songs
+        if (successfulDownloads.length === 0) {
+            // This will be caught by the client and shown as a toast.
+            throw new Error('Failed to download any songs from the request. They may be private or region-locked.');
+        }
+
+        return successfulDownloads;
 
     } catch (error) {
         console.error('An error occurred in the getYoutubeInfoFlow:', error);
         // Throwing the error will propagate it to the client-side caller.
-        throw new Error('Failed to process song request.');
+        // Re-throw a more user-friendly message.
+        if (error instanceof Error) {
+            throw new Error(error.message || 'Failed to process song request.');
+        }
+        throw new Error('An unknown error occurred while processing the song request.');
     }
   }
 );
