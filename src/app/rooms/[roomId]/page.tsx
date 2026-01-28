@@ -157,7 +157,6 @@ function RoomHeader({
     djId,
     onClaimDJ,
     onRelinquishDJ,
-    onTogglePlayer,
 }: {
     roomName: string,
     onToggleChat: () => void,
@@ -166,7 +165,6 @@ function RoomHeader({
     djId: string | undefined,
     onClaimDJ: () => void,
     onRelinquishDJ: () => void,
-    onTogglePlayer: () => void,
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -209,15 +207,15 @@ function RoomHeader({
 
             <div className="flex flex-initial items-center justify-end space-x-2">
                 {isDJ ? (
-                     <Tooltip>
+                    <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" onClick={onTogglePlayer}>
+                            <Button variant="outline" size="icon" onClick={onRelinquishDJ}>
                                 <Music className="h-4 w-4" />
-                                <span className="sr-only">Toggle Music Player</span>
+                                <span className="sr-only">Stop being the DJ</span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Toggle Music Player</p>
+                            <p>Stop being the DJ</p>
                         </TooltipContent>
                     </Tooltip>
                 ) : !djId ? (
@@ -233,19 +231,6 @@ function RoomHeader({
                         </TooltipContent>
                     </Tooltip>
                 ) : null}
-                 {isDJ && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={onRelinquishDJ}>
-                                <X className="h-4 w-4" />
-                                <span className="sr-only">Stop being the DJ</span>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Stop being the DJ</p>
-                        </TooltipContent>
-                    </Tooltip>
-                )}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="outline" size="icon" onClick={handlePostToDiscord}>
@@ -374,6 +359,7 @@ function RoomPageContent() {
         djId: user.uid,
         djDisplayName: user.displayName || 'Anonymous DJ'
     });
+    setIsPlayerVisible(true);
   }, [roomRef, user, toast, userHasInteracted]);
 
   const handleRelinquishDJ = useCallback(() => {
@@ -550,7 +536,6 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
-                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -594,10 +579,9 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
-                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-                                {isPlayerVisible && isDJ && (
+                                {isPlayerVisible && (
                                     <div className="flex flex-col lg:flex-row gap-6">
                                         <div className="w-full lg:w-1/3 shrink-0">
                                             <MusicPlayerCard
