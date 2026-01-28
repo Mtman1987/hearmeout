@@ -203,16 +203,45 @@ const getYoutubeInfoFlow = ai.defineFlow(
             });
 
         } else {
+            // Search with the official API, but get more results
             const searchResponse = await youtube.search.list({
                 part: ['snippet'],
                 q: input.url,
-                maxResults: 1,
+                maxResults: 10, // Get more results to choose from
                 type: ['video']
             });
-            const searchResult = searchResponse.data.items?.[0];
-            if (!searchResult || !searchResult.id?.videoId || !searchResult.snippet?.title) {
+
+            if (!searchResponse.data.items || searchResponse.data.items.length === 0) {
                 throw new Error(`No video found for query: "${input.url}"`);
             }
+
+            // Heuristics to find the "best" match
+            const items = searchResponse.data.items;
+            let bestMatch = items[0]; // Default to the first result
+
+            // Prefer official videos, avoid common non-official types
+            const officialVideo = items.find(item => item.snippet?.title.toLowerCase().includes('official music video'));
+            const goodMatch = items.find(item => 
+                !item.snippet?.title.toLowerCase().includes('cover') &&
+                !item.snippet?.title.toLowerCase().includes('lyrics') &&
+                !item.snippet?.title.toLowerCase().includes('live') &&
+                !item.snippet?.title.toLowerCase().includes('remix')
+            );
+            
+            if (officialVideo) {
+                bestMatch = officialVideo;
+            } else if (goodMatch) {
+                bestMatch = goodMatch;
+            }
+            
+            // If no good match was found, bestMatch remains items[0]
+            const searchResult = bestMatch;
+
+            if (!searchResult || !searchResult.id?.videoId || !searchResult.snippet?.title) {
+                // This case should be rare now
+                throw new Error(`No usable video found for query: "${input.url}"`);
+            }
+
             videosToDownload.push({ 
                 id: searchResult.id.videoId, 
                 title: searchResult.snippet.title,
@@ -251,6 +280,9 @@ const getYoutubeInfoFlow = ai.defineFlow(
             // Check for API-specific error messages
             if (error.message.includes('API key not valid')) {
                 throw new Error('The YouTube API key is invalid. Please check the server configuration.');
+            }
+            if ((error as any).response?.data?.error?.message) {
+                throw new Error(`YouTube API Error: ${(error as any).response.data.error.message}`);
             }
             throw new Error(error.message || 'Failed to process song request.');
         }
