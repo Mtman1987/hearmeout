@@ -48,7 +48,7 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
 
     useEffect(() => {
         const publishTrack = async () => {
-            if (!localParticipant || !playerRef.current) return;
+            if (!localParticipant || !playerRef.current || !url) return;
 
             // Stop any existing tracks before publishing a new one
             if (trackPublicationRef.current) {
@@ -93,6 +93,8 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
             }
         };
     }, [localParticipant, url]); // Re-publish when the URL changes
+
+    if (!url) return null;
 
     return (
         <div className="hidden">
@@ -162,6 +164,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const isDj = user?.uid === room?.djId;
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
+  const canShowMusicPanels = jukeboxTrackRef || isDj;
   
   const handleMicDeviceChange = (deviceId: string) => {
       setMicDevice(deviceId);
@@ -327,9 +330,9 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   return (
     <>
-      {isDj && isClient && currentTrack && (
+      {isDj && isClient && (
         <JukeboxStreamer 
-            url={currentTrack.url}
+            url={currentTrack?.url || ''}
             isPlaying={room?.isPlaying || false}
             onEnded={handlePlayNext}
             onDuration={setDuration}
@@ -358,7 +361,7 @@ export default function UserList({ roomId }: { roomId: string }) {
             
             <div className={isDj ? "lg:col-span-2" : "lg:col-span-3"}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {activePanels.playlist && (
+                    {canShowMusicPanels && activePanels.playlist && (
                         <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
                             <PlaylistPanel
                                 playlist={room?.playlist || []}
@@ -371,7 +374,7 @@ export default function UserList({ roomId }: { roomId: string }) {
                         </div>
                     )}
 
-                    {activePanels.add && (
+                    {canShowMusicPanels && activePanels.add && (
                         <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
                             <AddMusicPanel
                                 onAddItems={handleAddItems}
