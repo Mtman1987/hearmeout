@@ -213,6 +213,8 @@ function RoomPageContent() {
   }, [firestore, params.roomId]);
 
   const { data: room, isLoading: isRoomLoading } = useDoc<RoomData>(roomRef);
+  
+  const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
 
   useEffect(() => {
     // This effect populates the speaker devices dropdown.
@@ -248,10 +250,8 @@ function RoomPageContent() {
             });
         }
     }
-  }, [selectedSpeakerId, toast]);
+  }, [selectedSpeakerId, currentTrack, toast]);
 
-
-  const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
   
   const togglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
@@ -316,11 +316,11 @@ function RoomPageContent() {
 
   useEffect(() => {
     if (user && !isUserLoading && firestore && params.roomId && !livekitToken) {
-      const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
       let isCancelled = false;
 
       const setupUserInRoom = async () => {
           try {
+              const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
               const participantData = {
                   uid: user.uid,
                   displayName: user.displayName,
@@ -347,13 +347,12 @@ function RoomPageContent() {
       
       setupUserInRoom();
       
+      const userInRoomRef = doc(firestore, 'rooms', params.roomId, 'users', user.uid);
       return () => {
         isCancelled = true;
-        if (userInRoomRef) {
-            deleteDoc(userInRoomRef).catch(err => {
-                console.error("Failed to clean up user document in room:", err);
-            });
-        }
+        deleteDoc(userInRoomRef).catch(err => {
+            console.error("Failed to clean up user document in room:", err);
+        });
       };
     }
   }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken]);
@@ -425,7 +424,7 @@ function RoomPageContent() {
                                 isConnected={true}
                                 showMusicIcon={true}
                             />
-                            <main className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col">
+                            <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                 <div className="grid grid-cols-12 gap-6">
                                     <div className='col-span-12 lg:col-span-8'>
                                         <UserList roomId={params.roomId} />
@@ -465,31 +464,33 @@ function RoomPageContent() {
                                 </div>
                                 <div className="mt-auto pt-6 space-y-4">
                                     <p className="text-xs text-muted-foreground mb-2">DEBUG: ReactPlayer</p>
-                                    <ReactPlayer
-                                      ref={playerRef}
-                                      url={currentTrack?.url || ''}
-                                      playing={!!room?.isPlaying && userHasInteracted}
-                                      onProgress={(p) => setProgress(p.playedSeconds)}
-                                      onDuration={setDuration}
-                                      onEnded={handlePlayNext}
-                                      controls={true}
-                                      width="100%"
-                                      height="60px"
-                                    />
-                                    <div className="flex items-center gap-4">
-                                        <Label htmlFor="player-output" className="text-muted-foreground">Player Output</Label>
-                                        <Select onValueChange={setSelectedSpeakerId} value={selectedSpeakerId}>
-                                            <SelectTrigger id="player-output" className="w-[350px]">
-                                                <SelectValue placeholder="Select an output device" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {speakerDevices.map(device => (
-                                                    <SelectItem key={device.deviceId} value={device.deviceId}>
-                                                        {device.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                      <ReactPlayer
+                                        ref={playerRef}
+                                        url={currentTrack?.url || ''}
+                                        playing={!!room?.isPlaying && userHasInteracted}
+                                        onProgress={(p) => setProgress(p.playedSeconds)}
+                                        onDuration={setDuration}
+                                        onEnded={handlePlayNext}
+                                        controls={true}
+                                        width="100%"
+                                        height="60px"
+                                      />
+                                      <div className="flex items-center gap-4">
+                                          <Label htmlFor="player-output" className="text-muted-foreground">Output</Label>
+                                          <Select onValueChange={setSelectedSpeakerId} value={selectedSpeakerId}>
+                                              <SelectTrigger id="player-output" className="flex-1">
+                                                  <SelectValue placeholder="Select an output device" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                  {speakerDevices.map(device => (
+                                                      <SelectItem key={device.deviceId} value={device.deviceId}>
+                                                          {device.label}
+                                                      </SelectItem>
+                                                  ))}
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
                                     </div>
                                 </div>
                             </main>
