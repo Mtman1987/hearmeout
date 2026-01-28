@@ -98,60 +98,38 @@ export default function UserList({ roomId }: { roomId: string }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {participants.map((participant) => {
               const isLocal = participant.sid === localParticipant?.sid;
-              // When the user joins, their card will render as the Jukebox.
-              const isActingAsJukebox = isLocal;
 
-              // Do not render the user's original card if they are the jukebox
-              if (isLocal && isActingAsJukebox && participants.length > 1) {
-                  const regularUser = { ...participant };
-                  // We render a normal card for the user that is silent
-                  return <UserCard
-                      key={regularUser.sid + "-clone"}
-                      participant={regularUser}
+              // The local user will always appear as the Jukebox for now.
+              // Other participants will appear as normal users.
+              if (isLocal) {
+                 return (
+                    <UserCard
+                      key={participant.sid}
+                      participant={participant}
                       isLocal={true}
-                      isHost={regularUser.identity === room?.ownerId}
+                      isHost={participant.identity === room?.ownerId}
                       roomId={roomId}
-                      isActingAsJukebox={false}
+                      isActingAsJukebox={true} // This ensures the card renders as the Jukebox
                       micDevices={micDevices}
                       speakerDevices={speakerDevices}
                       activeMicId={activeMicId}
                       activeSpeakerId={activeSpeakerId}
                       onMicDeviceChange={handleMicDeviceChange}
                       onSpeakerDeviceChange={handleSpeakerDeviceChange}
-                   />;
-              }
-              
-              // Render Jukebox card for the local participant
-              if(isLocal){
-                return (
-                    <UserCard
-                    key={participant.sid}
-                    participant={participant}
-                    isLocal={true}
-                    isHost={participant.identity === room?.ownerId}
-                    roomId={roomId}
-                    isActingAsJukebox={true}
-                    micDevices={micDevices}
-                    speakerDevices={speakerDevices}
-                    activeMicId={activeMicId}
-                    activeSpeakerId={activeSpeakerId}
-                    onMicDeviceChange={handleMicDeviceChange}
-                    onSpeakerDeviceChange={handleSpeakerDeviceChange}
                     />
                 )
+              } else {
+                return (
+                  <UserCard
+                    key={participant.sid}
+                    participant={participant}
+                    isLocal={false}
+                    isHost={participant.identity === room?.ownerId}
+                    roomId={roomId}
+                    isActingAsJukebox={false}
+                  />
+                )
               }
-
-              // Render normal cards for all other participants
-              return (
-                <UserCard
-                  key={participant.sid}
-                  participant={participant}
-                  isLocal={false}
-                  isHost={participant.identity === room?.ownerId}
-                  roomId={roomId}
-                  isActingAsJukebox={false}
-                />
-              )
             })
           }
         </div>
