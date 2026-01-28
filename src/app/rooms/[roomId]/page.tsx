@@ -289,14 +289,11 @@ function RoomPageContent() {
 
     return () => {
         isCancelled = true;
-        if (userInRoomRef) {
-            deleteDocumentNonBlocking(userInRoomRef);
-        }
     };
   }, [user, isUserLoading, params.roomId, voiceToken, userInRoomRef, toast, userHasInteracted]);
-
+  
   useEffect(() => {
-    const handleUnload = () => {
+    const handleBeforeUnload = () => {
         if (roomRef && isDJ) {
              updateDocumentNonBlocking(roomRef, {
                 djId: '',
@@ -304,20 +301,22 @@ function RoomPageContent() {
                 isPlaying: false,
             });
         }
-    }
-    window.addEventListener('beforeunload', handleUnload);
-    return () => {
-        window.removeEventListener('beforeunload', handleUnload);
         if (userInRoomRef) {
             deleteDocumentNonBlocking(userInRoomRef);
         }
-        handleUnload();
-    }
-  }, [roomRef, isDJ, userInRoomRef]);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        // This will be called on component unmount (e.g., navigating away)
+        handleBeforeUnload();
+    };
+}, [roomRef, isDJ, userInRoomRef]);
+
   
   // --- DJ Player Logic ---
    const currentTrack = room?.playlist?.find((t: any) => t.id === room.currentTrackId);
-   const [playerVolume, setPlayerVolume] = useState(0.5);
 
     const handlePlayPause = useCallback((playing: boolean) => {
         if (roomRef) updateDocumentNonBlocking(roomRef, { isPlaying: playing });
@@ -446,6 +445,7 @@ function RoomPageContent() {
                                 toast({ variant: 'destructive', title: 'Connection Error', description: err.message, });
                             }}
                         >
+                             {isDJ && <JukeboxConnection roomData={room} />}
                             <RoomHeader
                                 roomName={room.name}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
@@ -460,23 +460,17 @@ function RoomPageContent() {
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
                                 {isDJ && (
                                     <>
-                                        <JukeboxConnection roomData={room} roomRef={roomRef!} />
                                         <div className="flex flex-col lg:flex-row gap-6">
                                             <div className="lg:w-1/3 shrink-0">
                                                 <MusicPlayerCard
                                                     currentTrack={currentTrack}
-                                                    progress={0} // Progress is handled by individual clients now
-                                                    duration={currentTrack?.duration || 0}
                                                     playing={!!room.isPlaying}
                                                     isPlayerControlAllowed={true}
                                                     onPlayPause={handlePlayPause}
                                                     onPlayNext={handlePlayNext}
                                                     onPlayPrev={handlePlayPrev}
-                                                    onSeek={() => {}} // Seeking is disabled in broadcast model
                                                     onTogglePanel={togglePanel}
                                                     activePanels={activePanels}
-                                                    playerVolume={playerVolume}
-                                                    onVolumeChange={setPlayerVolume}
                                                 />
                                             </div>
                                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
