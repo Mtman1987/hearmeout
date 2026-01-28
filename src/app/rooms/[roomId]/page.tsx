@@ -5,8 +5,9 @@ import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
+  useRoomContext,
 } from '@livekit/components-react';
-import * as LivekitClient from 'livekit-client';
+import { Track, ConnectionState, type MediaStreamTrack } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -49,10 +50,10 @@ interface RoomData {
  * publishing and unpublishing the music audio track based on the room's state.
  */
 function JukeboxOrchestrator({ musicAudioTrack, isPlaying }: { musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
-    const room = LivekitClient.useRoomContext();
+    const room = useRoomContext();
 
     useEffect(() => {
-        const musicTrackPublication = room.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
+        const musicTrackPublication = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
 
         if (!musicAudioTrack) {
             if (musicTrackPublication?.track) {
@@ -63,7 +64,7 @@ function JukeboxOrchestrator({ musicAudioTrack, isPlaying }: { musicAudioTrack: 
 
         if (isPlaying && !musicTrackPublication) {
             room.localParticipant.publishTrack(musicAudioTrack, {
-                source: LivekitClient.Track.Source.ScreenShareAudio,
+                source: Track.Source.ScreenShareAudio,
                 name: 'JukeboxAudio'
             });
         } else if (!isPlaying && musicTrackPublication) {
@@ -100,19 +101,19 @@ function ConnectionStatusIndicator() {
     let statusText = '';
 
     switch (connectionState) {
-        case LivekitClient.ConnectionState.Connected:
+        case ConnectionState.Connected:
             indicatorClass = 'bg-green-500';
             statusText = 'Connected';
             break;
-        case LivekitClient.ConnectionState.Connecting:
+        case ConnectionState.Connecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Connecting';
             break;
-        case LivekitClient.ConnectionState.Disconnected:
+        case ConnectionState.Disconnected:
             indicatorClass = 'bg-red-500';
             statusText = 'Disconnected';
             break;
-        case LivekitClient.ConnectionState.Reconnecting:
+        case ConnectionState.Reconnecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Reconnecting';
             break;
@@ -203,7 +204,7 @@ function RoomHeader({
                                 variant="outline" 
                                 size="icon" 
                                 onClick={isDJ ? onRelinquishDJ : onClaimDJ} 
-                                className={cn(!isDJ && "animate-pulse", djId && !isDJ && "hidden")}
+                                className={cn((!djId || isDJ) ? "visible" : "invisible")}
                                 >
                                 <Music className="h-4 w-4" />
                             </Button>
@@ -329,6 +330,7 @@ function RoomPageContent() {
         toast({ title: 'Action Required', description: 'Please join the voice chat before becoming the DJ.' });
         return;
     }
+    setActivePanels({ playlist: true, add: true });
     updateDocumentNonBlocking(roomRef, {
         djId: user.uid,
         djDisplayName: user.displayName || 'Anonymous DJ'
@@ -337,6 +339,7 @@ function RoomPageContent() {
 
   const handleRelinquishDJ = useCallback(() => {
     if (!roomRef || !isDJ) return;
+    setActivePanels({ playlist: false, add: false });
     updateDocumentNonBlocking(roomRef, {
         djId: '',
         djDisplayName: '',
