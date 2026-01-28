@@ -419,14 +419,6 @@ function RoomPageContent() {
     };
 }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, jukeboxToken, userInRoomRef, room, isDJ]);
 
-  useEffect(() => {
-    return () => {
-        if (userInRoomRef) {
-            LivekitClient.Room.disconnectAll();
-        }
-    }
-  }, [userInRoomRef]);
-
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading || !livekitToken || !livekitUrl;
 
