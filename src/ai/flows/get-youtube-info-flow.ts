@@ -15,6 +15,7 @@ import YoutubeMp3Downloader from 'youtube-mp3-downloader';
 import path from 'path';
 import fs from 'fs';
 import { PlaylistItem } from '@/types/playlist';
+import { google } from 'googleapis';
 
 // --- Types and Schemas ---
 
@@ -141,6 +142,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
   async (input) => {
     try {
         let videosToDownload: { id: string, title: string }[] = [];
+        const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
         // 1. Determine if input is a URL or a search query
         if (YouTube.isPlaylist(input.url)) {
@@ -158,12 +160,30 @@ const getYoutubeInfoFlow = ai.defineFlow(
              videosToDownload.push({ id: video.id, title: video.title });
 
         } else {
-            const searchResults = await YouTube.search(input.url, { limit: 1, type: 'video' });
-            if (!searchResults[0] || !searchResults[0].id || !searchResults[0].title) {
+            // Use the official YouTube Data API for searching
+            if (!YOUTUBE_API_KEY) {
+                throw new Error('YouTube API key is not configured on the server. Please add YOUTUBE_API_KEY to your .env file.');
+            }
+
+            const youtube = google.youtube({
+                version: 'v3',
+                auth: YOUTUBE_API_KEY
+            });
+
+            const searchResponse = await youtube.search.list({
+                part: ['snippet'],
+                q: input.url,
+                maxResults: 1,
+                type: ['video']
+            });
+
+            const searchResults = searchResponse.data.items;
+
+            if (!searchResults || searchResults.length === 0 || !searchResults[0].id?.videoId || !searchResults[0].snippet?.title) {
                 throw new Error(`No video found for query: "${input.url}"`);
             }
             const video = searchResults[0];
-            videosToDownload.push({ id: video.id, title: video.title });
+            videosToDownload.push({ id: video.id.videoId, title: video.snippet.title });
         }
 
         if (videosToDownload.length === 0) {
