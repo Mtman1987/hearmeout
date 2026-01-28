@@ -85,11 +85,16 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
-        // For debugging, we will log the raw error and not use the custom error wrapper.
-        console.error("useCollection snapshot error:", error);
-        setError(error);
+        const path = (memoizedTargetRefOrQuery as InternalQuery)._query.path.canonicalString();
+        const contextualError = new FirestorePermissionError({
+          operation: 'list',
+          path: path,
+        })
+        setError(contextualError);
         setData(null);
         setIsLoading(false);
+        // trigger global error propagation
+        errorEmitter.emit('permission-error', contextualError);
       }
     );
 
