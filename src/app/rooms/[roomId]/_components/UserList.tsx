@@ -16,16 +16,14 @@ export interface RoomData {
 
 export default function UserList({ 
     roomId,
-    isPlaying,
     onTogglePanel,
     activePanels,
 }: { 
     roomId: string, 
-    isPlaying: boolean,
     onTogglePanel: (panel: 'playlist' | 'add') => void;
     activePanels: { playlist: boolean, add: boolean };
 }) {
-  const { firestore, user } = useFirebase();
+  const { firestore } = useFirebase();
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -39,6 +37,8 @@ export default function UserList({
 
   const jukeboxParticipant = remoteParticipants.find(p => p.identity.endsWith('-jukebox'));
   const voiceParticipants = remoteParticipants.filter(p => !p.identity.endsWith('-jukebox'));
+
+  const isDjPresent = !!room?.djId;
 
   return (
     <>
@@ -57,7 +57,7 @@ export default function UserList({
           )}
 
           {/* Card for Jukebox */}
-          {jukeboxParticipant && isPlaying && (
+          {jukeboxParticipant && isDjPresent && (
              <UserCard
               key={jukeboxParticipant.sid}
               participant={jukeboxParticipant}

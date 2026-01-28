@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 import { PlaylistItem } from './_components/Playlist';
 import ReactPlayer from 'react-player';
@@ -298,7 +298,7 @@ function RoomPageContent() {
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const [isPlayerVisible, setIsPlayerVisible] = useState(false);
   
-  const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
+  const [activePanels, setActivePanels] = useState({ playlist: false, add: false });
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
@@ -601,7 +601,6 @@ function RoomPageContent() {
                                     <div className="lg:col-span-2">
                                         <UserList 
                                             roomId={params.roomId}
-                                            isPlaying={!!room?.isPlaying}
                                             activePanels={activePanels}
                                             onTogglePanel={togglePanel}
                                         />
