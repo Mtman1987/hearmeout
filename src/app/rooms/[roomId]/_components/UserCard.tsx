@@ -189,31 +189,6 @@ export default function UserCard({
         setIsDeleting(false);
     }
   };
-  
-  if (isActingAsJukebox) {
-    return (
-      <Card className="flex flex-col h-full">
-        <CardContent className="p-4 flex flex-col gap-4 flex-grow">
-            <div className="flex items-start gap-4">
-                <div className="relative">
-                    <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarFallback>
-                          <Music className="h-8 w-8" />
-                        </AvatarFallback>
-                    </Avatar>
-                </div>
-                <div className="flex-1 min-w-0">
-                    <p className="font-bold text-lg truncate">Jukebox</p>
-                    <p className="text-sm text-muted-foreground">Connected</p>
-                </div>
-            </div>
-            <div className="space-y-2 flex-grow flex flex-col justify-end">
-                <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
-            </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
 
   return (
@@ -227,8 +202,16 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
-                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                        {isActingAsJukebox ? (
+                            <AvatarFallback>
+                                <Music className="h-8 w-8" />
+                            </AvatarFallback>
+                        ) : (
+                            <>
+                                <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                                <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                            </>
+                        )}
                     </Avatar>
                      {isMuted && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
