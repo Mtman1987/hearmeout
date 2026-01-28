@@ -16,7 +16,10 @@ if (!livekitUrl || !livekitApiKey || !livekitApiSecret || !targetRoomId) {
 }
 
 const roomService = new RoomServiceClient(livekitUrl, livekitApiKey, livekitApiSecret);
-const room = new Room(roomService, targetRoomId, { name: 'Jukebox' });
+const room = new Room(roomService, targetRoomId, {
+    name: 'Jukebox',
+    identity: 'jukebox', // CRITICAL FIX: Identify the bot as 'jukebox'
+});
 
 let currentTrack: LocalTrack | null = null;
 let currentStream: PassThrough | null = null;
@@ -28,6 +31,7 @@ async function connectToRoom() {
         console.log(`Attempting to connect to LiveKit room: ${targetRoomId}`);
         await room.connect();
         console.log(`Successfully connected to room: ${room.name}`);
+        console.log(`Bot connected with identity: ${room.localParticipant.identity}`);
         
         // Listen for remote participants disconnecting
         room.on(RoomEvent.ParticipantDisconnected, (participant) => {
