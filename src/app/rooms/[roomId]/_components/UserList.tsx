@@ -16,12 +16,16 @@ export interface RoomData {
 
 export default function UserList({ 
     roomId,
-    isPlaying
+    isPlaying,
+    onTogglePanel,
+    activePanels,
 }: { 
     roomId: string, 
-    isPlaying: boolean
+    isPlaying: boolean,
+    onTogglePanel: (panel: 'playlist' | 'add') => void;
+    activePanels: { playlist: boolean, add: boolean };
 }) {
-  const { firestore } = useFirebase();
+  const { firestore, user } = useFirebase();
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -32,6 +36,7 @@ export default function UserList({
   }, [firestore, roomId]);
 
   const { data: room } = useDoc<RoomData>(roomRef);
+  const isJukeboxVisible = isPlaying;
 
   return (
     <>
@@ -50,14 +55,16 @@ export default function UserList({
           )}
 
           {/* Card for Jukebox (Music Stream from Local User) */}
-          {localParticipant && isPlaying && (
+          {localParticipant && isJukeboxVisible && (
             <UserCard
               key={`${localParticipant.sid}-music`}
               participant={localParticipant}
               isLocal={true}
-              isHost={false} // The Jukebox itself can't be a host
+              isHost={false} 
               roomId={roomId}
               audioType="music"
+              onTogglePanel={onTogglePanel}
+              activePanels={activePanels}
             />
           )}
 

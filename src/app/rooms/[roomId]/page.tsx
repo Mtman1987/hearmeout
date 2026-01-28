@@ -15,7 +15,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Copy, MessageSquare, X, Music, LoaderCircle, Headphones } from 'lucide-react';
+import { Copy, MessageSquare, X, LoaderCircle, Headphones } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 import { PlaylistItem } from './_components/Playlist';
 import ReactPlayer from 'react-player';
@@ -93,12 +93,10 @@ const DiscordIcon = () => (
 function RoomHeader({ 
     roomName, 
     onToggleChat, 
-    showMusicIcon,
     isConnected,
 } : { 
     roomName: string, 
     onToggleChat: () => void, 
-    showMusicIcon: boolean,
     isConnected: boolean,
 }) {
     const { isMobile } = useSidebar();
@@ -206,13 +204,16 @@ function RoomPageContent() {
   }, [firestore, params.roomId]);
 
   const { data: room, isLoading: isRoomLoading, error: roomError } = useDoc<RoomData>(roomRef);
+
   const userInRoomRef = useMemoFirebase(() => {
     if (!firestore || !params.roomId || !user) return null;
     return doc(firestore, 'rooms', params.roomId, 'users', user.uid);
   }, [firestore, params.roomId, user]);
   
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
+  const isDJ = user?.uid === room?.ownerId;
 
+  // Create audio context after user interaction
   useEffect(() => {
     if (userHasInteracted && !audioContext) {
       const context = new AudioContext();
@@ -226,140 +227,37 @@ function RoomPageContent() {
     };
   }, [userHasInteracted, audioContext]);
 
+  // Connect ReactPlayer to audio destination
   useEffect(() => {
-    const player = playerRef.current?.getInternalPlayer() as HTMLMediaElement;
+    const player = playerRef.current?.getInternalPlayer() as HTMLAudioElement;
     if (player && audioContext && audioDestination) {
-      try {
-        const sourceNode = audioContext.createMediaElementSource(player);
-        sourceNode.connect(audioDestination);
-        return () => {
-          sourceNode.disconnect();
-        };
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'InvalidStateError')) {
-          console.error("Error connecting audio source:", error);
+      // Create a source node from the media element.
+      const sourceNode = audioContext.createMediaElementSource(player);
+      // Connect the source to our stream destination.
+      sourceNode.connect(audioDestination);
+      return () => {
+        // Disconnect when component unmounts or track changes.
+        try {
+          sourceNode.disconnect(audioDestination);
+        } catch (e) {
+          // Ignore errors on disconnect, which can happen during hot-reloads.
         }
-      }
+      };
     }
   }, [audioContext, audioDestination, currentTrack, room?.isPlaying]);
-  
-  const togglePanel = (panel: 'playlist' | 'add') => {
-    setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
-  };
 
-  const handlePlayPause = useCallback((playing: boolean) => {
-    if (!roomRef) return;
-    updateDocumentNonBlocking(roomRef, { isPlaying: playing });
-  }, [roomRef]);
-
-  const handlePlayNext = useCallback(() => {
-    if (!room || !roomRef) return;
-    const { playlist, currentTrackId } = room;
-    if (!playlist || playlist.length === 0) return;
-    const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
-    const nextIndex = (currentIndex + 1) % playlist.length;
-    updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[nextIndex].id, isPlaying: true });
-  }, [room, roomRef]);
-
-  const handlePlayPrev = useCallback(() => {
-    if (!room || !roomRef) return;
-    const { playlist, currentTrackId } = room;
-    if (!playlist || playlist.length === 0) return;
-    const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
-    const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-    updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[prevIndex].id, isPlaying: true });
-  }, [room, roomRef]);
-
-  const handlePlaySong = useCallback((songId: string) => {
-    if (!roomRef) return;
-    updateDocumentNonBlocking(roomRef, { currentTrackId: songId, isPlaying: true });
-  }, [roomRef]);
-  
-  const handleRemoveSong = useCallback((songId: string) => {
-    if (!room || !roomRef) return;
-    const newPlaylist = room.playlist.filter(s => s.id !== songId);
-    updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
-  }, [room, roomRef]);
-  
-  const handleClearPlaylist = useCallback(() => {
-    if (!roomRef) return;
-    updateDocumentNonBlocking(roomRef, { playlist: [], currentTrackId: '', isPlaying: false });
-  }, [roomRef]);
-
-  const handleAddItems = useCallback((items: PlaylistItem[]) => {
-      if (!roomRef || !room) return;
-      const currentPlaylist = room.playlist || [];
-      const newPlaylist = [...currentPlaylist, ...items];
-      const updates: any = { playlist: newPlaylist };
-      if (!room.isPlaying && !room.currentTrackId && items.length > 0) {
-          updates.currentTrackId = items[0].id;
-          updates.isPlaying = true;
-      }
-      updateDocumentNonBlocking(roomRef, updates);
-  }, [room, roomRef]);
-
-  const handleSeek = (seconds: number) => {
-    if (playerRef.current) {
-        playerRef.current.seekTo(seconds, 'seconds');
-    }
-  };
-
- useEffect(() => {
-    if (isUserLoading || !user || !firestore || !params.roomId || livekitToken) return;
-
-    let isCancelled = false;
-
-    const setupUserAndToken = async () => {
-        try {
-            if (userInRoomRef) {
-                await setDocumentNonBlocking(userInRoomRef, {
-                    uid: user.uid,
-                    displayName: user.displayName,
-                    photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-                    isSpeaking: false,
-                }, { merge: true });
-            }
-
-            const metadataForToken = JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` });
-            const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
-            
-            if (!isCancelled) {
-                setLivekitToken(token);
-            }
-        } catch (e: any) {
-            console.error('[RoomPage] Failed to setup user in room or get LiveKit token', e);
-            if (!isCancelled) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Connection Failed',
-                    description: e.message || 'Could not join the room.',
-                });
-            }
-        }
-    };
-
-    setupUserAndToken();
-
-    return () => {
-        isCancelled = true;
-        if (userInRoomRef) {
-            deleteDoc(userInRoomRef).catch(err => {
-                console.warn("Failed to clean up user document in room on dismount:", err);
-            });
-        }
-    };
-}, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef]);
 
   const { localParticipant } = useLocalParticipant();
-  const jukeboxAudioTrack = audioDestination?.stream.getAudioTracks()[0] ?? null;
+  const musicAudioTrack = audioDestination?.stream.getAudioTracks()[0] ?? null;
 
+  // Publish/unpublish music track based on playback state
   useEffect(() => {
-    if (!localParticipant) return;
-    
+    if (!localParticipant || !musicAudioTrack || !isDJ) return;
+
     const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
 
-    if (room?.isPlaying && jukeboxAudioTrack && !musicTrackPublication) {
-        localParticipant.publishTrack(jukeboxAudioTrack, {
+    if (room?.isPlaying && !musicTrackPublication) {
+        localParticipant.publishTrack(musicAudioTrack, {
             source: LivekitClient.Track.Source.ScreenShareAudio,
             name: 'JukeboxAudio'
         });
@@ -368,8 +266,131 @@ function RoomPageContent() {
             localParticipant.unpublishTrack(musicTrackPublication.track);
         }
     }
-  }, [localParticipant, jukeboxAudioTrack, room?.isPlaying]);
+  }, [localParticipant, musicAudioTrack, room?.isPlaying, isDJ]);
+  
+  const togglePanel = (panel: 'playlist' | 'add') => {
+    setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
+  };
 
+  const handlePlayPause = useCallback((playing: boolean) => {
+    if (!roomRef || !isDJ) return;
+    updateDocumentNonBlocking(roomRef, { isPlaying: playing });
+  }, [roomRef, isDJ]);
+
+  const handlePlayNext = useCallback(() => {
+    if (!room || !roomRef || !isDJ) return;
+    const { playlist, currentTrackId } = room;
+    if (!playlist || playlist.length === 0) return;
+    const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
+    const nextIndex = (currentIndex + 1) % playlist.length;
+    updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[nextIndex].id, isPlaying: true });
+  }, [room, roomRef, isDJ]);
+
+  const handlePlayPrev = useCallback(() => {
+    if (!room || !roomRef || !isDJ) return;
+    const { playlist, currentTrackId } = room;
+    if (!playlist || playlist.length === 0) return;
+    const currentIndex = playlist.findIndex(t => t.id === currentTrackId);
+    const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+    updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[prevIndex].id, isPlaying: true });
+  }, [room, roomRef, isDJ]);
+
+  const handlePlaySong = useCallback((songId: string) => {
+    if (!roomRef || !isDJ) return;
+    updateDocumentNonBlocking(roomRef, { currentTrackId: songId, isPlaying: true });
+  }, [roomRef, isDJ]);
+  
+  const handleRemoveSong = useCallback((songId: string) => {
+    if (!room || !roomRef || !isDJ) return;
+    const newPlaylist = room.playlist.filter(s => s.id !== songId);
+    updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
+  }, [room, roomRef, isDJ]);
+  
+  const handleClearPlaylist = useCallback(() => {
+    if (!roomRef || !isDJ) return;
+    updateDocumentNonBlocking(roomRef, { playlist: [], currentTrackId: '', isPlaying: false });
+  }, [roomRef, isDJ]);
+
+  const handleAddItems = useCallback((items: PlaylistItem[]) => {
+      if (!roomRef || !room || !isDJ) return;
+      const currentPlaylist = room.playlist || [];
+      const newPlaylist = [...currentPlaylist, ...items];
+      const updates: any = { playlist: newPlaylist };
+      if (!room.isPlaying && !room.currentTrackId && items.length > 0) {
+          updates.currentTrackId = items[0].id;
+          updates.isPlaying = true;
+      }
+      updateDocumentNonBlocking(roomRef, updates);
+  }, [room, roomRef, isDJ]);
+
+  const handleSeek = (seconds: number) => {
+    if (playerRef.current && isDJ) {
+        playerRef.current.seekTo(seconds, 'seconds');
+    }
+  };
+
+ useEffect(() => {
+    if (isUserLoading || !user || !firestore || !params.roomId || livekitToken || !room) return;
+
+    let isCancelled = false;
+
+    const setupUserAndToken = async () => {
+        try {
+            // Wait for the user document to be created before continuing.
+            // This listener will fire once immediately with the current state.
+            const unsub = onSnapshot(userInRoomRef!, (docSnap) => {
+                if (docSnap.exists() || isCancelled) {
+                    unsub(); // Stop listening once we have the document.
+                    
+                    if (isCancelled) return;
+
+                    generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }))
+                        .then(token => {
+                            if (!isCancelled) setLivekitToken(token);
+                        })
+                        .catch(e => {
+                            if (!isCancelled) {
+                                console.error('[RoomPage] Failed to get LiveKit token', e);
+                                toast({ variant: 'destructive', title: 'Connection Failed', description: e.message || 'Could not join the room.' });
+                            }
+                        });
+                }
+            });
+
+            // If the listener doesn't fire because the doc doesn't exist, create it.
+            // This prevents a race condition on first join.
+            if (userInRoomRef) {
+                await setDocumentNonBlocking(userInRoomRef, {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                }, { merge: true });
+            }
+
+        } catch (e: any) {
+            if (!isCancelled) {
+                console.error('[RoomPage] Failed to setup user in room', e);
+                toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not initialize user in room.' });
+            }
+        }
+    };
+
+    setupUserAndToken();
+
+    return () => {
+        isCancelled = true;
+    };
+}, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef, room]);
+
+  useEffect(() => {
+    return () => {
+        if (userInRoomRef) {
+             // When the component unmounts (user leaves), delete their document from the room.
+             // This is not awaited, it's a fire-and-forget cleanup operation.
+            LivekitClient.Room.disconnectAll();
+        }
+    }
+  }, [userInRoomRef]);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading || !livekitToken || !livekitUrl;
@@ -405,7 +426,6 @@ function RoomPageContent() {
                                 roomName={room?.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={false}
-                                showMusicIcon={true}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -423,6 +443,13 @@ function RoomPageContent() {
                             connect={true}
                             audio={true} 
                             video={false}
+                            onDisconnected={() => {
+                                // When disconnected, delete the user's document from the room
+                                if (userInRoomRef) {
+                                    // Not awaited, fire-and-forget
+                                    // deleteDoc(userInRoomRef);
+                                }
+                            }}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
                                 toast({
@@ -436,35 +463,36 @@ function RoomPageContent() {
                                 roomName={room.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={true}
-                                showMusicIcon={true}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div className="lg:col-span-1">
+                                    <div className="lg:col-span-2">
                                         <UserList 
                                             roomId={params.roomId}
                                             isPlaying={!!room?.isPlaying}
-                                        />
-                                    </div>
-                                    <div className="lg:col-span-1 space-y-6">
-                                        <MusicPlayerCard 
-                                            currentTrack={currentTrack}
-                                            progress={progress}
-                                            duration={duration}
-                                            playing={!!room.isPlaying}
-                                            isPlayerControlAllowed={true}
-                                            onPlayPause={handlePlayPause}
-                                            onPlayNext={handlePlayNext}
-                                            onPlayPrev={handlePlayPrev}
-                                            onSeek={handleSeek}
                                             activePanels={activePanels}
                                             onTogglePanel={togglePanel}
                                         />
+                                    </div>
+                                    <div className="lg:col-span-2 space-y-6">
+                                        {isDJ && (
+                                            <MusicPlayerCard 
+                                                currentTrack={currentTrack}
+                                                progress={progress}
+                                                duration={duration}
+                                                playing={!!room.isPlaying}
+                                                isPlayerControlAllowed={isDJ}
+                                                onPlayPause={handlePlayPause}
+                                                onPlayNext={handlePlayNext}
+                                                onPlayPrev={handlePlayPrev}
+                                                onSeek={handleSeek}
+                                            />
+                                        )}
                                         {activePanels.playlist && (
                                             <PlaylistPanel 
                                                 playlist={room.playlist || []}
                                                 currentTrackId={room.currentTrackId || ''}
-                                                isPlayerControlAllowed={true}
+                                                isPlayerControlAllowed={isDJ}
                                                 onPlaySong={handlePlaySong}
                                                 onRemoveSong={handleRemoveSong}
                                                 onClearPlaylist={handleClearPlaylist}
@@ -474,30 +502,32 @@ function RoomPageContent() {
                                             <AddMusicPanel 
                                                 onAddItems={handleAddItems}
                                                 onClose={() => togglePanel('add')}
-                                                canAddMusic={true}
+                                                canAddMusic={isDJ}
                                             />
                                         )}
                                     </div>
                                 </div>
-                                <div className="hidden">
-                                      <ReactPlayer
-                                        ref={playerRef}
-                                        url={currentTrack?.url || ''}
-                                        playing={!!room?.isPlaying && userHasInteracted}
-                                        onProgress={(p) => setProgress(p.playedSeconds)}
-                                        onDuration={setDuration}
-                                        onEnded={handlePlayNext}
-                                        controls={false}
-                                        width="1px"
-                                        height="1px"
-                                        config={{
-                                            youtube: {
-                                                playerVars: {
-                                                    origin: typeof window !== 'undefined' ? window.location.origin : ''
+                                <div className='hidden'>
+                                     {isDJ && (
+                                        <ReactPlayer
+                                            ref={playerRef}
+                                            url={currentTrack?.url || ''}
+                                            playing={!!room?.isPlaying && userHasInteracted}
+                                            onProgress={(p) => setProgress(p.playedSeconds)}
+                                            onDuration={setDuration}
+                                            onEnded={handlePlayNext}
+                                            controls={false}
+                                            width="1px"
+                                            height="1px"
+                                            config={{
+                                                youtube: {
+                                                    playerVars: {
+                                                        origin: typeof window !== 'undefined' ? window.location.origin : ''
+                                                    }
                                                 }
-                                            }
-                                        }}
-                                      />
+                                            }}
+                                        />
+                                     )}
                                 </div>
                             </main>
                         </LiveKitRoom>

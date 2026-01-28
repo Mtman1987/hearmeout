@@ -15,9 +15,7 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  Youtube,
   Music,
-  ListMusic,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -37,8 +35,6 @@ type MusicPlayerCardProps = {
   onPlayNext: () => void;
   onPlayPrev: () => void;
   onSeek: (seconds: number) => void;
-  activePanels: { playlist: boolean, add: boolean };
-  onTogglePanel: (panel: 'playlist' | 'add') => void;
 };
 
 export default function MusicPlayerCard({
@@ -51,8 +47,6 @@ export default function MusicPlayerCard({
   onPlayNext,
   onPlayPrev,
   onSeek,
-  activePanels,
-  onTogglePanel,
 }: MusicPlayerCardProps) {
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -98,31 +92,6 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
-        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-          <div className="flex items-center gap-2 ml-auto">
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant={activePanels.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
-                          <ListMusic className="h-4 w-4" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                      <p>Up Next</p>
-                  </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant={activePanels.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel('add')} aria-label="Add Music" className="h-8 w-8">
-                          <Youtube className="h-4 w-4" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                      <p>Add Music</p>
-                  </TooltipContent>
-              </Tooltip>
-          </div>
-        </div>
-
         <div className="pt-2">
             <Slider
                 value={[duration > 0 ? progress / duration : 0]}

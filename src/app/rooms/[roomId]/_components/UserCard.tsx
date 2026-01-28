@@ -1,6 +1,6 @@
 'use client';
 
-import React, 'useEffect, useRef, useState' from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Headphones,
   Mic,
@@ -14,13 +14,15 @@ import {
   UserX,
   Volume2,
   VolumeX,
-  LoaderCircle
+  LoaderCircle,
+  Youtube,
+  ListMusic,
 } from 'lucide-react';
-import { useTracks, AudioTrack, useTrack } from '@livekit/components-react';
+import { useTracks, AudioTrack, useTrack, useAudioDevice, useRoomContext } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
-import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -45,11 +47,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { SpeakingIndicator } from "./SpeakingIndicator";
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 interface RoomParticipantData {
   id: string;
@@ -64,15 +80,20 @@ export default function UserCard({
     isHost,
     roomId,
     audioType,
+    onTogglePanel,
+    activePanels,
 }: {
     participant: LivekitClient.Participant;
     isLocal: boolean;
     isHost?: boolean;
     roomId: string;
     audioType: 'voice' | 'music';
+    onTogglePanel?: (panel: 'playlist' | 'add') => void;
+    activePanels?: { playlist: boolean, add: boolean };
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
+  const room = useRoomContext();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
@@ -82,6 +103,9 @@ export default function UserCard({
   const [isMutedByMe, setIsMutedByMe] = React.useState(false);
   const lastNonZeroVolume = React.useRef(volume);
   
+  const { devices: audioInputDevices, activeDeviceId: activeAudioInputDeviceId, setDevice: setAudioInputDevice } = useAudioDevice({ kind: 'audioinput' });
+  const { devices: audioOutputDevices, activeDeviceId: activeAudioOutputDeviceId, setDevice: setAudioOutputDevice } = useAudioDevice({ kind: 'audiooutput' });
+
   const trackSource = isJukeboxCard ? LivekitClient.Track.Source.ScreenShareAudio : LivekitClient.Track.Source.Microphone;
   const tracks = useTracks([trackSource], { participant });
   const audioTrackRef = tracks[0];
@@ -122,7 +146,10 @@ export default function UserCard({
     return doc(firestore, 'rooms', roomId, 'users', identity);
   }, [firestore, roomId, identity]);
 
-  const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
+  const { data: firestoreUser, isLoading: isFirestoreUserLoading } = useDoc<RoomParticipantData>(userInRoomRef, {
+      // Don't re-render on server-side speaking changes. LiveKit is the source of truth.
+      ignoreUpdates: (data) => 'isSpeaking' in data
+  });
   
   const handleToggleMic = async () => {
     if (isLocal && !isJukeboxCard) {
@@ -143,6 +170,7 @@ export default function UserCard({
     };
     setIsDeleting(true);
     try {
+        await room.disconnect();
         const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
@@ -187,7 +215,30 @@ export default function UserCard({
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-lg truncate">{displayName}</p>
-                    {isLocal && !isJukeboxCard ? (
+                    {isJukeboxCard ? (
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant={activePanels?.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
+                                        <ListMusic className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Up Next</p>
+                                </TooltipContent>
+                            </Tooltip>
+                             <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant={activePanels?.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('add')} aria-label="Add Music" className="h-8 w-8">
+                                        <Youtube className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Add Music</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                    ) : (isLocal) ? (
                          <div className="flex items-center gap-1 text-muted-foreground">
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -197,6 +248,52 @@ export default function UserCard({
                                 </TooltipTrigger>
                                 <TooltipContent><p>{isMuted ? 'Unmute' : 'Mute'}</p></TooltipContent>
                             </Tooltip>
+
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                                        <Headphones className="h-4 w-4" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80">
+                                    <div className="grid gap-4">
+                                        <div className="space-y-2">
+                                            <h4 className="font-medium leading-none">Audio Settings</h4>
+                                            <p className="text-sm text-muted-foreground">
+                                                Manage your input and output devices.
+                                            </p>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor="mic-select">Microphone</Label>
+                                                <Select value={activeAudioInputDeviceId} onValueChange={setAudioInputDevice}>
+                                                    <SelectTrigger id="mic-select" className="col-span-2">
+                                                        <SelectValue placeholder="Select an input" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {audioInputDevices.map((device) => (
+                                                            <SelectItem key={device.deviceId} value={device.deviceId}>{device.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                             <div className="grid grid-cols-3 items-center gap-4">
+                                                <Label htmlFor="speaker-select">Speakers</Label>
+                                                <Select value={activeAudioOutputDeviceId} onValueChange={setAudioOutputDevice}>
+                                                    <SelectTrigger id="speaker-select" className="col-span-2">
+                                                        <SelectValue placeholder="Select an output" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {audioOutputDevices.map((device) => (
+                                                            <SelectItem key={device.deviceId} value={device.deviceId}>{device.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
 
                             {isHost && (
                                 <DropdownMenu>
@@ -214,7 +311,7 @@ export default function UserCard({
                             )}
                          </div>
                     ): (
-                        isHost && !isJukeboxCard && (
+                        isHost && (
                            <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
