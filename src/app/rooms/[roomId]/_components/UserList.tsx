@@ -31,6 +31,9 @@ export default function UserList({ roomId }: { roomId: string }) {
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
   
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
@@ -73,6 +76,43 @@ export default function UserList({ roomId }: { roomId: string }) {
   const isDj = user?.uid === room?.djId;
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
+  // Effect to manage the playback timer
+  useEffect(() => {
+    if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+    }
+
+    if (room?.isPlaying && currentTrack) {
+        progressIntervalRef.current = setInterval(() => {
+            setPlaybackProgress(prev => {
+                if (currentTrack.duration && prev >= currentTrack.duration) {
+                    clearInterval(progressIntervalRef.current!);
+                    progressIntervalRef.current = null;
+                    if (isDj) {
+                        handlePlayNext();
+                    }
+                    return currentTrack.duration;
+                }
+                return prev + 1;
+            });
+        }, 1000);
+    }
+
+    return () => {
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+        }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.isPlaying, currentTrack, isDj]);
+
+  // Effect to reset progress when the track changes
+  useEffect(() => {
+      setPlaybackProgress(0);
+  }, [currentTrack?.id]);
+
+
   const handleMicDeviceChange = (deviceId: string) => {
       setMicDevice(deviceId);
       try {
@@ -142,16 +182,19 @@ export default function UserList({ roomId }: { roomId: string }) {
     updateDocumentNonBlocking(roomRef, { isPlaying: playing });
   }
 
-  const handlePlayNext = () => {
-    if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
-    const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
+  const handlePlayNext = useCallback(() => {
+    if (!isDj || !roomRef || !room?.playlist || room.playlist.length === 0) return;
+    const currentTrackId = room.currentTrackId;
+    const currentIndex = currentTrackId ? room.playlist.findIndex(t => t.id === currentTrackId) : -1;
+    
     if (currentIndex === -1) { 
-        if (room.playlist.length > 0) handlePlaySong(room.playlist[0].id);
+        handlePlaySong(room.playlist[0].id);
         return;
     }
     const nextIndex = (currentIndex + 1) % room.playlist.length;
     handlePlaySong(room.playlist[nextIndex].id);
-  };
+  }, [isDj, roomRef, room?.playlist]);
+
 
   const handlePlayPrev = () => {
      if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
@@ -219,8 +262,8 @@ export default function UserList({ roomId }: { roomId: string }) {
               <div className="lg:col-span-1 h-full">
                 <MusicPlayerCard
                   currentTrack={currentTrack}
-                  progress={0}
-                  duration={0}
+                  progress={playbackProgress}
+                  duration={currentTrack?.duration || 0}
                   playing={room?.isPlaying || false}
                   isPlayerControlAllowed={isDj}
                   onPlayPause={handlePlayPause}
@@ -270,7 +313,11 @@ export default function UserList({ roomId }: { roomId: string }) {
             trackRef={jukeboxAudioTrack}
             activePanels={activePanels}
             onTogglePanel={handleTogglePanel}
-            onPlayNext={() => {}}
+            onPlayNext={() => {
+                if (isDj) {
+                    handlePlayNext();
+                }
+            }}
           />
 
           {humanParticipants.map((participant) => {

@@ -52,6 +52,7 @@ export async function addSongToPlaylist(songQuery: string, roomId: string, reque
                 artist: video.channel?.name || 'Unknown Artist',
                 url: video.url,
                 artId: selectArtId(video.id!),
+                duration: video.duration / 1000,
             }));
 
         } else {
@@ -65,6 +66,7 @@ export async function addSongToPlaylist(songQuery: string, roomId: string, reque
                 artist: video.channel?.name || 'Unknown Artist',
                 url: video.url,
                 artId: selectArtId(video.id),
+                duration: video.duration / 1000,
             });
         }
     } else {
@@ -79,6 +81,7 @@ export async function addSongToPlaylist(songQuery: string, roomId: string, reque
             artist: video.channel?.name || 'Unknown Artist',
             url: video.url,
             artId: selectArtId(video.id!),
+            duration: video.duration / 1000,
         });
     }
     

@@ -23,6 +23,7 @@ const PlaylistItemSchema = z.object({
     artist: z.string(),
     artId: z.string(),
     url: z.string(),
+    duration: z.number(),
 });
 
 const GetYoutubeInfoOutputSchema = z.array(PlaylistItemSchema);
@@ -71,6 +72,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
           artist: video.channel?.name || 'Unknown Artist',
           url: video.url,
           artId: selectArtId(video.id!),
+          duration: video.duration / 1000,
         }));
 
       } else {
@@ -83,6 +85,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
           artist: video.channel?.name || 'Unknown Artist',
           url: video.url,
           artId: selectArtId(video.id),
+          duration: video.duration / 1000,
         }];
       }
     } catch (error) {

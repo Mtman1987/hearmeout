@@ -68,6 +68,7 @@ export default function MusicPlayerCard({
   const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
   
   const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) return '0:00';
     const floorSeconds = Math.floor(seconds);
     const min = Math.floor(floorSeconds / 60);
     const sec = floorSeconds % 60;
@@ -140,13 +141,14 @@ export default function MusicPlayerCard({
 
         <div className="pt-2">
             <Slider
-                value={[0]}
+                value={[duration > 0 ? progress / duration : 0]}
                 max={1}
+                step={0.01}
                 disabled={true}
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{formatTime(0)}</span>
-                <span>{formatTime(0)}</span>
+                <span>{formatTime(progress)}</span>
+                <span>{formatTime(duration)}</span>
             </div>
         </div>
        

@@ -11,6 +11,7 @@ export type PlaylistItem = {
   artist: string;
   artId: string;
   url: string;
+  duration: number;
 };
 
 export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed, onRemoveSong }: { 
