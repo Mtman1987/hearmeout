@@ -16,6 +16,8 @@ import {
   SkipBack,
   SkipForward,
   Music,
+  Youtube,
+  ListMusic,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -35,6 +37,8 @@ type MusicPlayerCardProps = {
   onPlayNext: () => void;
   onPlayPrev: () => void;
   onSeek: (seconds: number) => void;
+  onTogglePanel?: (panel: 'playlist' | 'add') => void;
+  activePanels?: { playlist: boolean, add: boolean };
 };
 
 export default function MusicPlayerCard({
@@ -47,6 +51,8 @@ export default function MusicPlayerCard({
   onPlayNext,
   onPlayPrev,
   onSeek,
+  onTogglePanel,
+  activePanels,
 }: MusicPlayerCardProps) {
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -66,7 +72,7 @@ export default function MusicPlayerCard({
   return (
     <Card className="flex flex-col h-full">
       <CardHeader>
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-4">
             <div className="relative w-16 h-16 shrink-0">
               {albumArt ? (
                   <Image
@@ -89,6 +95,30 @@ export default function MusicPlayerCard({
                 </CardTitle>
                 <p className="text-muted-foreground text-sm truncate">{currentTrack ? `${currentTrack.title} - ${currentTrack.artist}` : "No song selected"}</p>
             </div>
+            {isPlayerControlAllowed && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant={activePanels?.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
+                                <ListMusic className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Up Next</p>
+                        </TooltipContent>
+                    </Tooltip>
+                     <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant={activePanels?.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('add')} aria-label="Add Music" className="h-8 w-8">
+                                <Youtube className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Add Music</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            )}
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">

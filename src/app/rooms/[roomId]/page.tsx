@@ -166,7 +166,7 @@ function RoomHeader({
     isDJ: boolean,
     djId: string | undefined,
     onClaimDJ: () => void,
-    onRelinquishDJ: () => void,
+    onRelinquishDJ: () => void;
     isPlayerVisible: boolean;
     onTogglePlayer: () => void;
 }) {
@@ -610,6 +610,8 @@ function RoomPageContent() {
                                                     onPlayNext={handlePlayNext}
                                                     onPlayPrev={handlePlayPrev}
                                                     onSeek={handleSeek}
+                                                    onTogglePanel={togglePanel}
+                                                    activePanels={activePanels}
                                                 />
                                             </div>
                                             {(activePanels.playlist || activePanels.add) && (
