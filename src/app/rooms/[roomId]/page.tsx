@@ -7,7 +7,7 @@ import {
   LiveKitRoom,
   useConnectionState,
 } from '@livekit/components-react';
-import { ConnectionState } from 'livekit-client';
+import * as LivekitClient from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -38,19 +38,19 @@ function ConnectionStatusIndicator() {
     let statusText = '';
 
     switch (connectionState) {
-        case ConnectionState.Connected:
+        case LivekitClient.ConnectionState.Connected:
             indicatorClass = 'bg-green-500';
             statusText = 'Connected';
             break;
-        case ConnectionState.Connecting:
+        case LivekitClient.ConnectionState.Connecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Connecting';
             break;
-        case ConnectionState.Disconnected:
+        case LivekitClient.ConnectionState.Disconnected:
             indicatorClass = 'bg-red-500';
             statusText = 'Disconnected';
             break;
-        case ConnectionState.Reconnecting:
+        case LivekitClient.ConnectionState.Reconnecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Reconnecting';
             break;
@@ -281,54 +281,51 @@ function RoomPageContent() {
           chatOpen && "md:mr-[28rem]"
         )}>
             <SidebarInset>
-                <LiveKitRoom
-                  serverUrl={livekitUrl!}
-                  token={livekitToken}
-                  connect={userHasInteracted && !isLoading}
-                  audio={false}
-                  video={false}
-                  onError={(err) => {
-                      console.error("LiveKit connection error:", err);
-                      toast({
-                          variant: 'destructive',
-                          title: 'Connection Error',
-                          description: err.message,
-                      });
-                  }}
-                >
-                    <div className="flex flex-col h-screen relative">
-                        <RoomHeader
-                            roomName={room?.name || 'Loading room...'}
-                            onToggleChat={() => setChatOpen(!chatOpen)}
-                            onMusicIconClick={handleMusicIconClick}
-                            showMusicIcon={showMusicIcon}
-                        />
-
-                        { isLoading ? (
-                          <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
-                              <div className="flex flex-col items-center gap-4 text-center">
-                                <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
-                                <p className="text-muted-foreground">Connecting to room...</p>
-                              </div>
-                          </main>
-                        ) : (
-                          <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                              <UserList roomId={params.roomId} isDj={isDj} />
-                          </main>
-                        ) }
-
-                        {!userHasInteracted && !isLoading && (
-                          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
-                              <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
-                              <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
-                              <Button size="lg" onClick={() => setUserHasInteracted(true)}>
+                <div className="flex flex-col h-screen relative">
+                    { isLoading ? (
+                        <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
+                            <div className="flex flex-col items-center gap-4 text-center">
+                            <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
+                            <p className="text-muted-foreground">Connecting to room...</p>
+                            </div>
+                        </main>
+                    ) : !userHasInteracted ? (
+                        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
+                            <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
+                            <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
+                            <Button size="lg" onClick={() => setUserHasInteracted(true)}>
                                 <Headphones className="mr-2 h-5 w-5" />
                                 Join Voice Chat
-                              </Button>
-                          </div>
-                        )}
-                    </div>
-                </LiveKitRoom>
+                            </Button>
+                        </div>
+                    ) : (
+                        <LiveKitRoom
+                            serverUrl={livekitUrl!}
+                            token={livekitToken}
+                            connect={true}
+                            audio={false}
+                            video={false}
+                            onError={(err) => {
+                                console.error("LiveKit connection error:", err);
+                                toast({
+                                    variant: 'destructive',
+                                    title: 'Connection Error',
+                                    description: err.message,
+                                });
+                            }}
+                        >
+                            <RoomHeader
+                                roomName={room?.name || 'Loading room...'}
+                                onToggleChat={() => setChatOpen(!chatOpen)}
+                                onMusicIconClick={handleMusicIconClick}
+                                showMusicIcon={showMusicIcon}
+                            />
+                            <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+                                <UserList roomId={params.roomId} isDj={isDj} />
+                            </main>
+                        </LiveKitRoom>
+                    )}
+                </div>
             </SidebarInset>
         </div>
 
