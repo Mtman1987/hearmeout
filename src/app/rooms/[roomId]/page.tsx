@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
 } from '@livekit/components-react';
-import { ConnectionState, RoomEvent } from 'livekit-client';
+import { ConnectionState, Track } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -234,6 +234,8 @@ function RoomPageContent() {
   
   const isDJ = !!user && !!room?.djId && user.uid === room.djId;
   const isOwner = !!user && !!room?.ownerId && user.uid === room.ownerId;
+  const djAudioRef = useRef<HTMLAudioElement>(null);
+
 
   const handleClaimDJ = useCallback(() => {
     if (!roomRef || !user) {
@@ -260,7 +262,9 @@ function RoomPageContent() {
   }, [roomRef, isDJ]);
   
   useEffect(() => {
-    if (isUserLoading || !user || !params.roomId || voiceToken || !userHasInteracted) return;
+    if (isUserLoading || !user || !params.roomId || !userHasInteracted || voiceToken) {
+        return;
+    }
 
     let isCancelled = false;
 
@@ -309,18 +313,12 @@ function RoomPageContent() {
 
     return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
-        // This will be called on component unmount (e.g., navigating away)
         handleBeforeUnload();
     };
-}, [roomRef, isDJ, userInRoomRef]);
+  }, [roomRef, isDJ, userInRoomRef]);
 
   
-  // --- DJ Player Logic ---
-   const currentTrack = room?.playlist?.find((t: any) => t.id === room.currentTrackId);
-
-    const handlePlayPause = useCallback((playing: boolean) => {
-        if (roomRef) updateDocumentNonBlocking(roomRef, { isPlaying: playing });
-    }, [roomRef]);
+    const currentTrack = room?.playlist?.find((t: any) => t.id === room.currentTrackId);
 
     const handlePlayNext = useCallback(() => {
         if (!room || !roomRef) return;
@@ -370,6 +368,26 @@ function RoomPageContent() {
     const togglePanel = (panel: 'playlist' | 'add') => {
         setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
     };
+
+    const handlePlayPause = useCallback((playing: boolean) => {
+        if (roomRef) updateDocumentNonBlocking(roomRef, { isPlaying: playing });
+    }, [roomRef]);
+
+    useEffect(() => {
+        if (!isDJ || !djAudioRef.current) return;
+        const audio = djAudioRef.current;
+        const shouldBePlaying = room?.isPlaying && currentTrack?.streamUrl;
+    
+        if (shouldBePlaying) {
+            if (audio.src !== currentTrack.streamUrl) {
+                audio.src = currentTrack.streamUrl;
+            }
+            audio.play().catch(e => console.error("DJ local player failed to play:", e));
+        } else {
+            audio.pause();
+        }
+    }, [isDJ, room?.isPlaying, currentTrack]);
+
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading;
@@ -434,77 +452,87 @@ function RoomPageContent() {
                             </div>
                         </>
                     ) : (
-                        <LiveKitRoom
-                            serverUrl={livekitUrl}
-                            token={voiceToken}
-                            connect={true}
-                            audio={true} 
-                            video={false}
-                            onError={(err) => {
-                                console.error("LiveKit connection error:", err);
-                                toast({ variant: 'destructive', title: 'Connection Error', description: err.message, });
-                            }}
-                        >
-                             {isDJ && <JukeboxConnection roomData={room} />}
-                            <RoomHeader
-                                roomName={room.name}
-                                onToggleChat={() => setChatOpen(!chatOpen)}
-                                isDJ={isDJ}
-                                djId={room.djId}
-                                isOwner={isOwner}
-                                onClaimDJ={handleClaimDJ}
-                                onRelinquishDJ={handleRelinquishDJ}
-                                showDJButton={!!user && (!room.djId || isDJ)}
-                            />
-                            
-                            <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-                                {isDJ && (
-                                    <>
-                                        <div className="flex flex-col lg:flex-row gap-6">
-                                            <div className="lg:w-1/3 shrink-0">
-                                                <MusicPlayerCard
-                                                    currentTrack={currentTrack}
-                                                    playing={!!room.isPlaying}
-                                                    isPlayerControlAllowed={true}
-                                                    onPlayPause={handlePlayPause}
-                                                    onPlayNext={handlePlayNext}
-                                                    onPlayPrev={handlePlayPrev}
-                                                    onTogglePanel={togglePanel}
-                                                    activePanels={activePanels}
-                                                />
-                                            </div>
-                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                                                {activePanels.playlist && (
-                                                    <div className={cn({ 'md:col-span-2': !activePanels.add })}>
-                                                        <PlaylistPanel
-                                                            playlist={room.playlist || []}
-                                                            currentTrackId={room.currentTrackId || ''}
-                                                            isPlayerControlAllowed={true}
-                                                            onPlaySong={handlePlaySong}
-                                                            onRemoveSong={handleRemoveSong}
-                                                            onClearPlaylist={handleClearPlaylist}
-                                                        />
-                                                    </div>
-                                                )}
-                                                {activePanels.add && (
-                                                    <div className={cn({ 'md:col-span-2': !activePanels.playlist })}>
-                                                        <AddMusicPanel
-                                                            onAddItems={handleAddItems}
-                                                            onClose={() => {}}
-                                                            canAddMusic={true}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
-                                <UserList 
-                                    roomId={params.roomId}
+                        <>
+                           {isDJ && (
+                                <audio 
+                                    ref={djAudioRef}
+                                    onEnded={handlePlayNext}
+                                    style={{ display: 'none' }}
+                                    crossOrigin="anonymous"
                                 />
-                            </main>
-                        </LiveKitRoom>
+                            )}
+                            <LiveKitRoom
+                                serverUrl={livekitUrl}
+                                token={voiceToken}
+                                connect={true}
+                                audio={true} 
+                                video={false}
+                                onError={(err) => {
+                                    console.error("LiveKit connection error:", err);
+                                    toast({ variant: 'destructive', title: 'Connection Error', description: err.message, });
+                                }}
+                            >
+                                {isDJ && <JukeboxConnection roomData={room} />}
+                                <RoomHeader
+                                    roomName={room.name}
+                                    onToggleChat={() => setChatOpen(!chatOpen)}
+                                    isDJ={isDJ}
+                                    djId={room.djId}
+                                    isOwner={isOwner}
+                                    onClaimDJ={handleClaimDJ}
+                                    onRelinquishDJ={handleRelinquishDJ}
+                                    showDJButton={!!user && (!room.djId || isDJ)}
+                                />
+                                
+                                <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
+                                    {isDJ && (
+                                        <>
+                                            <div className="flex flex-col lg:flex-row gap-6">
+                                                <div className="lg:w-1/3 shrink-0">
+                                                    <MusicPlayerCard
+                                                        currentTrack={currentTrack}
+                                                        playing={!!room.isPlaying}
+                                                        isPlayerControlAllowed={true}
+                                                        onPlayPause={handlePlayPause}
+                                                        onPlayNext={handlePlayNext}
+                                                        onPlayPrev={handlePlayPrev}
+                                                        onTogglePanel={togglePanel}
+                                                        activePanels={activePanels}
+                                                    />
+                                                </div>
+                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                                                    {activePanels.playlist && (
+                                                        <div className={cn({ 'md:col-span-2': !activePanels.add })}>
+                                                            <PlaylistPanel
+                                                                playlist={room.playlist || []}
+                                                                currentTrackId={room.currentTrackId || ''}
+                                                                isPlayerControlAllowed={true}
+                                                                onPlaySong={handlePlaySong}
+                                                                onRemoveSong={handleRemoveSong}
+                                                                onClearPlaylist={handleClearPlaylist}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {activePanels.add && (
+                                                        <div className={cn({ 'md:col-span-2': !activePanels.playlist })}>
+                                                            <AddMusicPanel
+                                                                onAddItems={handleAddItems}
+                                                                onClose={() => {}}
+                                                                canAddMusic={true}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <UserList 
+                                        roomId={params.roomId}
+                                    />
+                                </main>
+                            </LiveKitRoom>
+                        </>
                     )}
                 </div>
             </SidebarInset>
