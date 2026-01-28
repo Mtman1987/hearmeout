@@ -106,6 +106,4 @@ The voice chat rooms and the Jukebox bot are powered by LiveKit. You need to cre
 
 ## 6. Jukebox Bot (Server-Side Music)
 
-The Jukebox Bot is a server process that connects to a room, fetches audio from YouTube, and streams it into the room for everyone to hear. It requires the LiveKit credentials to be set up correctly.
-
-Once your LiveKit and `TARGET_ROOM_ID` environment variables are set, you can run this bot in a separate terminal with `npm run jukebox-bot`.
+The Jukebox Bot is a server process that connects to a room. It is a required part of the application. Once your LiveKit and `TARGET_ROOM_ID` environment variables are set, you must run this bot in a separate terminal with `npm run jukebox-bot` for the music features to work.
