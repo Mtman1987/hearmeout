@@ -1,6 +1,7 @@
 'use server';
 /**
- * @fileOverview A flow to fetch information about YouTube videos and playlists.
+ * @fileOverview A flow to fetch information about YouTube videos and playlists,
+ * download them as MP3s, and return their public URLs.
  *
  * - getYoutubeInfo - A function that fetches data for a given YouTube URL.
  * - GetYoutubeInfoInput - The input type for the getYoutubeInfo function.
@@ -10,9 +11,14 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {YouTube} from 'youtube-sr';
+import YoutubeMp3Downloader from 'youtube-mp3-downloader';
+import path from 'path';
+import fs from 'fs';
+
+// --- Types and Schemas ---
 
 const GetYoutubeInfoInputSchema = z.object({
-  url: z.string().describe('The YouTube URL for a video or playlist.'),
+  url: z.string().describe('The YouTube URL or search query for a video or playlist.'),
 });
 export type GetYoutubeInfoInput = z.infer<typeof GetYoutubeInfoInputSchema>;
 
@@ -21,20 +27,39 @@ const PlaylistItemSchema = z.object({
   title: z.string(),
   artist: z.string(),
   artId: z.string(),
-  url: z.string(),
+  url: z.string(), // This will be the public URL to the downloaded MP3
   duration: z.number(),
 });
-
 export type PlaylistItem = z.infer<typeof PlaylistItemSchema>;
 
 const GetYoutubeInfoOutputSchema = z.array(PlaylistItemSchema);
 export type GetYoutubeInfoOutput = z.infer<typeof GetYoutubeInfoOutputSchema>;
+
+
+// --- Main exported function ---
 
 export async function getYoutubeInfo(
   input: GetYoutubeInfoInput
 ): Promise<GetYoutubeInfoOutput> {
   return getYoutubeInfoFlow(input);
 }
+
+
+// --- Downloader Configuration ---
+
+const audioOutputPath = path.join(process.cwd(), 'public', 'audio');
+fs.mkdirSync(audioOutputPath, { recursive: true });
+
+const YD = new YoutubeMp3Downloader({
+    ffmpegPath: "ffmpeg", // Assumes FFmpeg is in PATH.
+    outputPath: audioOutputPath,
+    youtubeVideoQuality: "highestaudio",
+    queueParallelism: 3, // Download 3 songs in parallel
+    progressTimeout: 1000,
+});
+
+
+// --- Helper Functions ---
 
 // A simple deterministic hash function to select album art
 function simpleHash(str: string): number {
@@ -49,12 +74,48 @@ function simpleHash(str: string): number {
 
 function selectArtId(videoId: string): string {
   const artIds = ['album-art-1', 'album-art-2', 'album-art-3'];
-  if (!videoId) {
-    return artIds[0];
-  }
+  if (!videoId) return artIds[0];
   const hash = simpleHash(videoId);
   return artIds[hash % artIds.length];
 }
+
+/**
+ * Wraps the youtube-mp3-downloader in a Promise to be used with async/await.
+ * @param videoId The ID of the YouTube video to download.
+ * @returns A Promise that resolves with the PlaylistItem data.
+ */
+function downloadVideoAsPromise(videoId: string, title: string): Promise<PlaylistItem> {
+    return new Promise((resolve, reject) => {
+        YD.download(videoId, `${videoId}.mp3`);
+
+        YD.on("finished", (err, data) => {
+            // The 'finished' event triggers for ANY completed download, so we must check the videoId.
+            if (data && data.videoId === videoId) {
+                const publicUrl = `/audio/${path.basename(data.file)}`;
+                resolve({
+                    id: data.videoId,
+                    title: data.videoTitle || title,
+                    artist: data.artist || 'Unknown Artist',
+                    url: publicUrl,
+                    artId: selectArtId(data.videoId),
+                    // duration is not provided by this library, default to 0
+                    duration: data.stats.runtime || 0,
+                });
+            }
+        });
+
+        YD.on("error", (error, data) => {
+            // The 'error' event also triggers for any download, so check the videoId.
+            if (data && data.videoId === videoId) {
+                console.error(`Download failed for ${videoId}:`, error);
+                reject(new Error(`Failed to download audio for video ${videoId}.`));
+            }
+        });
+    });
+}
+
+
+// --- Genkit Flow Definition ---
 
 const getYoutubeInfoFlow = ai.defineFlow(
   {
@@ -62,52 +123,50 @@ const getYoutubeInfoFlow = ai.defineFlow(
     inputSchema: GetYoutubeInfoInputSchema,
     outputSchema: GetYoutubeInfoOutputSchema,
   },
-  async input => {
+  async (input) => {
     try {
-      if (YouTube.isPlaylist(input.url)) {
-        const playlist = await YouTube.getPlaylist(input.url, {
-          fetchAll: true,
-        });
-        if (!playlist || playlist.videos.length === 0) return [];
+        let videosToDownload: { id: string, title: string }[] = [];
 
-        return playlist.videos
-          .filter(video => video.id && video.title && video.duration)
-          .map((video): PlaylistItem => {
-            return {
-              id: video.id!,
-              title: video.title!,
-              artist: video.channel?.name || 'Unknown Artist',
-              url: video.url,
-              artId: selectArtId(video.id!),
-              duration: video.duration / 1000,
-            };
-          });
-      } else {
-        const isUrl = YouTube.isYouTube(input.url, {checkVideo: true});
-        const video = isUrl
-          ? await YouTube.getVideo(input.url)
-          : (await YouTube.search(input.url, {limit: 1, type: 'video'}))[0];
+        // 1. Determine if input is a URL or a search query
+        if (YouTube.isYouTube(input.url, { checkPlaylist: true })) {
+            const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
+            if (!playlist || playlist.videos.length === 0) return [];
+            videosToDownload = playlist.videos
+                .filter(v => v.id && v.title)
+                .map(v => ({ id: v.id!, title: v.title! }));
 
-        if (!video || !video.id || !video.title || !video.duration) {
-          throw new Error(`Could not find a valid video for "${input.url}"`);
+        } else if (YouTube.isYouTube(input.url, { checkVideo: true })) {
+             const video = await YouTube.getVideo(input.url);
+             if (!video || !video.id || !video.title) throw new Error('Could not find video info.');
+             videosToDownload.push({ id: video.id, title: video.title });
+
+        } else {
+            const searchResults = await YouTube.search(input.url, { limit: 1, type: 'video' });
+            if (!searchResults[0] || !searchResults[0].id || !searchResults[0].title) {
+                throw new Error(`No video found for query: "${input.url}"`);
+            }
+            const video = searchResults[0];
+            videosToDownload.push({ id: video.id, title: video.title });
         }
 
-        return [
-          {
-            id: video.id,
-            title: video.title,
-            artist: video.channel?.name || 'Unknown Artist',
-            url: video.url,
-            artId: selectArtId(video.id),
-            duration: video.duration / 1000,
-          },
-        ];
-      }
+        if (videosToDownload.length === 0) {
+             throw new Error('No videos found to download.');
+        }
+        
+        // 2. Create a download promise for each video
+        const downloadPromises = videosToDownload.map(video =>
+            downloadVideoAsPromise(video.id, video.title)
+        );
+
+        // 3. Wait for all downloads to complete
+        const results = await Promise.all(downloadPromises);
+
+        return results;
+
     } catch (error) {
-      console.error('Failed to fetch YouTube data:', error);
-      // For now, we'll throw an error to indicate that the operation failed.
-      // Your ripping API can be integrated here.
-      throw new Error('Could not fetch video or playlist data from YouTube.');
+        console.error('An error occurred in the getYoutubeInfoFlow:', error);
+        // Throwing the error will propagate it to the client-side caller.
+        throw new Error('Failed to process song request.');
     }
   }
 );
