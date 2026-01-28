@@ -19,15 +19,11 @@ export default function UserList({
     isPlaying,
     onTogglePanel,
     activePanels,
-    jukeboxVolume,
-    onJukeboxVolumeChange,
 }: { 
     roomId: string, 
     isPlaying: boolean,
     onTogglePanel: (panel: 'playlist' | 'add') => void;
     activePanels: { playlist: boolean, add: boolean };
-    jukeboxVolume: number;
-    onJukeboxVolumeChange: (volume: number) => void;
 }) {
   const { firestore, user } = useFirebase();
   
@@ -40,7 +36,9 @@ export default function UserList({
   }, [firestore, roomId]);
 
   const { data: room } = useDoc<RoomData>(roomRef);
-  const isJukeboxVisible = isPlaying;
+
+  const jukeboxParticipant = remoteParticipants.find(p => p.identity.endsWith('-jukebox'));
+  const voiceParticipants = remoteParticipants.filter(p => !p.identity.endsWith('-jukebox'));
 
   return (
     <>
@@ -54,35 +52,33 @@ export default function UserList({
               isLocal={true}
               isHost={localParticipant.identity === room?.ownerId}
               roomId={roomId}
-              audioType="voice"
+              isJukebox={false}
             />
           )}
 
-          {/* Card for Jukebox (Music Stream from Local User) */}
-          {localParticipant && isJukeboxVisible && (
-            <UserCard
-              key={`${localParticipant.sid}-music`}
-              participant={localParticipant}
-              isLocal={true}
+          {/* Card for Jukebox */}
+          {jukeboxParticipant && isPlaying && (
+             <UserCard
+              key={jukeboxParticipant.sid}
+              participant={jukeboxParticipant}
+              isLocal={false}
               isHost={false} 
               roomId={roomId}
-              audioType="music"
+              isJukebox={true}
               onTogglePanel={onTogglePanel}
               activePanels={activePanels}
-              jukeboxVolume={jukeboxVolume}
-              onJukeboxVolumeChange={onJukeboxVolumeChange}
             />
           )}
 
           {/* Cards for Remote Users */}
-          {remoteParticipants.map((participant) => (
+          {voiceParticipants.map((participant) => (
             <UserCard
               key={participant.sid}
               participant={participant}
               isLocal={false}
               isHost={participant.identity === room?.ownerId}
               roomId={roomId}
-              audioType="voice"
+              isJukebox={false}
             />
           ))}
         </div>

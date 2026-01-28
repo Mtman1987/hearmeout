@@ -43,6 +43,63 @@ interface RoomData {
   isPlaying?: boolean;
 }
 
+
+// This component establishes a silent, background connection for the Jukebox identity.
+function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying, isDJ }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean, isDJ: boolean }) {
+
+    const onConnected = useCallback(async (room: LivekitClient.Room) => {
+        if (!musicAudioTrack) return;
+        
+        const musicTrackPublication = room.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
+
+        if (isPlaying && !musicTrackPublication) {
+            await room.localParticipant.publishTrack(musicAudioTrack, {
+                source: LivekitClient.Track.Source.ScreenShareAudio,
+                name: 'JukeboxAudio'
+            });
+        }
+    }, [musicAudioTrack, isPlaying]);
+
+    const onDisconnected = useCallback(async (room: LivekitClient.Room) => {
+        await room.localParticipant.unpublishAllTracks();
+    }, []);
+
+    // Effect to publish/unpublish track when playing state changes
+    const { localParticipant } = useLocalParticipant();
+    useEffect(() => {
+        if (!localParticipant || !musicAudioTrack || !isDJ) return;
+
+        const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
+        
+        if (isPlaying && !musicTrackPublication) {
+            localParticipant.publishTrack(musicAudioTrack, {
+                source: LivekitClient.Track.Source.ScreenShareAudio,
+                name: 'JukeboxAudio'
+            });
+        } else if (!isPlaying && musicTrackPublication) {
+             if (musicTrackPublication.track) {
+                localParticipant.unpublishTrack(musicTrackPublication.track);
+            }
+        }
+
+    }, [localParticipant, musicAudioTrack, isPlaying, isDJ]);
+
+
+    return (
+        <LiveKitRoom
+            serverUrl={serverUrl}
+            token={token}
+            connect={true}
+            audio={false}
+            video={false}
+            onConnected={onConnected}
+            onDisconnected={onDisconnected}
+        >
+            {/* This component renders no UI */}
+        </LiveKitRoom>
+    )
+}
+
 function ConnectionStatusIndicator() {
     const connectionState = useConnectionState();
 
@@ -187,15 +244,16 @@ function RoomPageContent() {
   
   const [chatOpen, setChatOpen] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | undefined>(undefined);
+  const [jukeboxToken, setJukeboxToken] = useState<string | undefined>(undefined);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [jukeboxVolume, setJukeboxVolume] = useState(0.5);
-
+  
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [audioDestination, setAudioDestination] = useState<MediaStreamAudioDestinationNode | null>(null);
+  const [jukeboxVolume, setJukeboxVolume] = useState(0.5);
 
   const playerRef = useRef<ReactPlayer>(null);
 
@@ -216,7 +274,7 @@ function RoomPageContent() {
 
   // Create audio context after user interaction
   useEffect(() => {
-    if (userHasInteracted && !audioContext) {
+    if (userHasInteracted && !audioContext && isDJ) {
       const context = new AudioContext();
       setAudioContext(context);
       setAudioDestination(context.createMediaStreamDestination());
@@ -226,49 +284,27 @@ function RoomPageContent() {
         audioContext.close().catch(console.error);
       }
     };
-  }, [userHasInteracted, audioContext]);
+  }, [userHasInteracted, audioContext, isDJ]);
 
   // Connect ReactPlayer to audio destination
   useEffect(() => {
     const player = playerRef.current?.getInternalPlayer() as HTMLAudioElement;
-    if (player && audioContext && audioDestination) {
-      // Create a source node from the media element.
+    if (player && audioContext && audioDestination && isDJ) {
       const sourceNode = audioContext.createMediaElementSource(player);
-      // Connect the source to our stream destination.
       sourceNode.connect(audioDestination);
       return () => {
-        // Disconnect when component unmounts or track changes.
         try {
           sourceNode.disconnect(audioDestination);
         } catch (e) {
-          // Ignore errors on disconnect, which can happen during hot-reloads.
+          // Ignore errors on disconnect
         }
       };
     }
-  }, [audioContext, audioDestination, currentTrack, room?.isPlaying]);
+  }, [audioContext, audioDestination, currentTrack, room?.isPlaying, isDJ]);
 
 
-  const { localParticipant } = useLocalParticipant();
   const musicAudioTrack = audioDestination?.stream.getAudioTracks()[0] ?? null;
 
-  // Publish/unpublish music track based on playback state
-  useEffect(() => {
-    if (!localParticipant || !musicAudioTrack || !isDJ) return;
-
-    const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
-
-    if (room?.isPlaying && !musicTrackPublication) {
-        localParticipant.publishTrack(musicAudioTrack, {
-            source: LivekitClient.Track.Source.ScreenShareAudio,
-            name: 'JukeboxAudio'
-        });
-    } else if (!room?.isPlaying && musicTrackPublication) {
-        if (musicTrackPublication.track) {
-            localParticipant.unpublishTrack(musicTrackPublication.track);
-        }
-    }
-  }, [localParticipant, musicAudioTrack, room?.isPlaying, isDJ]);
-  
   const togglePanel = (panel: 'playlist' | 'add') => {
     setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   };
@@ -337,8 +373,7 @@ function RoomPageContent() {
 
     const setupUserAndToken = async () => {
         try {
-            // This is the race condition fix: ensure the doc exists before proceeding.
-            const ensureDocExists = new Promise<void>((resolve) => {
+            await new Promise<void>((resolve) => {
                 if (!userInRoomRef) return resolve();
                 const unsub = onSnapshot(userInRoomRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -353,24 +388,25 @@ function RoomPageContent() {
                 }, { merge: true });
             });
 
-            await ensureDocExists;
-
             if (isCancelled) return;
 
+            // Generate token for the main user
             generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }))
                 .then(token => {
                     if (!isCancelled) setLivekitToken(token);
-                })
-                .catch(e => {
-                    if (!isCancelled) {
-                        console.error('[RoomPage] Failed to get LiveKit token', e);
-                        toast({ variant: 'destructive', title: 'Connection Failed', description: e.message || 'Could not join the room.' });
-                    }
                 });
+
+            // If user is the DJ, generate a separate token for the Jukebox identity
+            if (isDJ) {
+                 generateLiveKitToken(params.roomId, `${user.uid}-jukebox`, 'Jukebox', JSON.stringify({ isJukebox: true }))
+                    .then(token => {
+                        if (!isCancelled) setJukeboxToken(token);
+                    });
+            }
 
         } catch (e: any) {
             if (!isCancelled) {
-                console.error('[RoomPage] Failed to setup user in room', e);
+                console.error('[RoomPage] Failed to setup user/tokens', e);
                 toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not initialize user in room.' });
             }
         }
@@ -381,13 +417,11 @@ function RoomPageContent() {
     return () => {
         isCancelled = true;
     };
-}, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef, room]);
+}, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, jukeboxToken, userInRoomRef, room, isDJ]);
 
   useEffect(() => {
     return () => {
         if (userInRoomRef) {
-             // When the component unmounts (user leaves), delete their document from the room.
-             // This is not awaited, it's a fire-and-forget cleanup operation.
             LivekitClient.Room.disconnectAll();
         }
     }
@@ -438,19 +472,22 @@ function RoomPageContent() {
                             </div>
                         </div>
                     ) : ( room && userHasInteracted && livekitUrl && livekitToken &&
+                        <>
+                        {isDJ && jukeboxToken && (
+                            <JukeboxConnection 
+                                token={jukeboxToken}
+                                serverUrl={livekitUrl}
+                                musicAudioTrack={musicAudioTrack}
+                                isPlaying={!!room?.isPlaying}
+                                isDJ={isDJ}
+                            />
+                        )}
                         <LiveKitRoom
                             serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
                             audio={true} 
                             video={false}
-                            onDisconnected={() => {
-                                // When disconnected, delete the user's document from the room
-                                if (userInRoomRef) {
-                                    // Not awaited, fire-and-forget
-                                    // deleteDoc(userInRoomRef);
-                                }
-                            }}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
                                 toast({
@@ -473,8 +510,6 @@ function RoomPageContent() {
                                             isPlaying={!!room?.isPlaying}
                                             activePanels={activePanels}
                                             onTogglePanel={togglePanel}
-                                            jukeboxVolume={jukeboxVolume}
-                                            onJukeboxVolumeChange={setJukeboxVolume}
                                         />
                                     </div>
                                     <div className="lg:col-span-2 space-y-6">
@@ -535,6 +570,7 @@ function RoomPageContent() {
                                 </div>
                             </main>
                         </LiveKitRoom>
+                        </>
                     )}
                 </div>
             </SidebarInset>
