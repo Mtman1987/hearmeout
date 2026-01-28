@@ -32,7 +32,7 @@ export interface RoomData {
 }
 
 
-// This new component contains the hidden ReactPlayer and handles publishing its audio stream.
+// This component contains the hidden ReactPlayer and handles publishing its audio stream.
 // It only renders for the DJ.
 const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: { 
     url: string;
@@ -42,88 +42,73 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
     onProgress: (progress: number) => void;
 }) => {
     const { localParticipant } = useLocalParticipant();
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const streamRef = useRef<MediaStream | null>(null);
+    const playerRef = useRef<ReactPlayer>(null);
     const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
 
     useEffect(() => {
         const publishTrack = async () => {
-            if (!localParticipant || !audioRef.current) return;
+            if (!localParticipant || !playerRef.current) return;
 
             // Stop any existing tracks before publishing a new one
             if (trackPublicationRef.current) {
                 await localParticipant.unpublishTrack(trackPublicationRef.current.track);
                 trackPublicationRef.current = null;
             }
-             if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
+            
+            // Get the internal player element
+            const internalPlayer = playerRef.current.getInternalPlayer();
+            if (!internalPlayer || typeof (internalPlayer as any).captureStream !== 'function') {
+                console.error("Could not capture stream from the player.");
+                return;
             }
 
             try {
                 // @ts-ignore - captureStream is available on HTMLMediaElement
-                const stream = audioRef.current.captureStream();
+                const stream = internalPlayer.captureStream();
                 const audioTrack = stream.getAudioTracks()[0];
-                streamRef.current = stream;
 
                 if (audioTrack) {
                     const publication = await localParticipant.publishTrack(audioTrack, {
                         name: 'jukebox-audio',
-                        source: LivekitClient.Track.Source.Unknown,
+                        source: LivekitClient.Track.Source.Unknown, // Use Unknown to differentiate from user mic
                     });
                     trackPublicationRef.current = publication;
+                    console.log("Jukebox audio track published:", publication);
                 }
             } catch (e) {
                 console.error("Failed to capture and publish jukebox track:", e);
             }
         };
-
-        // We need a short delay to allow the ReactPlayer to initialize its internal player
-        const timeoutId = setTimeout(() => {
-            publishTrack();
-        }, 500);
+        
+        // Let the player initialize, then publish the track
+        const timeoutId = setTimeout(publishTrack, 1000);
 
         return () => {
             clearTimeout(timeoutId);
             if (localParticipant && trackPublicationRef.current) {
+                console.log("Unpublishing jukebox audio track.");
                 localParticipant.unpublishTrack(trackPublicationRef.current.track);
                 trackPublicationRef.current = null;
-            }
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
             }
         };
     }, [localParticipant, url]); // Re-publish when the URL changes
 
     return (
         <div className="hidden">
-            {/* We render a standard <audio> element to have more reliable stream capturing */}
             <ReactPlayer
+                ref={playerRef}
                 url={url}
                 playing={isPlaying}
                 onEnded={onEnded}
                 onDuration={onDuration}
                 onProgress={(state) => onProgress(state.playedSeconds)}
-                muted={true} // Muted on DJ's side, audio comes back via LiveKit
+                muted={true} // Muted on DJ's side, audio comes back via LiveKit stream
                 width="1px"
                 height="1px"
                 config={{
-                    youtube: {
-                        playerVars: { controls: 0, disablekb: 1 },
-                        embedOptions: {
-                             // This is a conceptual representation. The key is to get a playable media element.
-                            playerapiid: 'ytplayer-jukebox',
-                        }
-                    },
+                    youtube: { playerVars: { controls: 0, disablekb: 1 } },
                 }}
-                // This is a trick to get a reference to the underlying audio/video element if possible
-                // It might require inspecting the ReactPlayer component's output
-                // For now, we'll assume a separate audio element can be linked.
-                // In a more robust solution, we'd use a library that gives direct access to the media element.
             />
-             <audio ref={audioRef} src={url} controls style={{display: 'none'}} />
-
         </div>
     );
 };
