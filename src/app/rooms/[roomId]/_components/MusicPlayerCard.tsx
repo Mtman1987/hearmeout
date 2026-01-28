@@ -149,16 +149,6 @@ export default function MusicPlayerCard({
                       <p>Add Music</p>
                   </TooltipContent>
               </Tooltip>
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={onForceJukeboxRestart} aria-label="Restart Jukebox Stream" className="h-8 w-8">
-                          <Music className="h-4 w-4" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                      <p>Restart Jukebox Stream</p>
-                  </TooltipContent>
-              </Tooltip>
           </div>
         </div>
 
