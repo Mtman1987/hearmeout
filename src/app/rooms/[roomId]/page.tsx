@@ -290,6 +290,7 @@ function RoomPageContent() {
   const [activePanels, setActivePanels] = useState({ playlist: false, add: false });
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [playerVolume, setPlayerVolume] = useState(0.5);
   
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [audioDestination, setAudioDestination] = useState<MediaStreamAudioDestinationNode | null>(null);
@@ -612,6 +613,8 @@ function RoomPageContent() {
                                                     onSeek={handleSeek}
                                                     onTogglePanel={togglePanel}
                                                     activePanels={activePanels}
+                                                    playerVolume={playerVolume}
+                                                    onVolumeChange={setPlayerVolume}
                                                 />
                                             </div>
                                             {(activePanels.playlist || activePanels.add) && (
@@ -658,6 +661,7 @@ function RoomPageContent() {
                                             onDuration={setDuration}
                                             onEnded={handlePlayNext}
                                             controls={false}
+                                            volume={playerVolume}
                                             width="1px"
                                             height="1px"
                                             config={{

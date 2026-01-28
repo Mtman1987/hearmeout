@@ -18,6 +18,9 @@ import {
   Music,
   Youtube,
   ListMusic,
+  Volume1,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -26,6 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AudioVisualizer } from "./AudioVisualizer";
 
 type MusicPlayerCardProps = {
   currentTrack: PlaylistItem | undefined;
@@ -39,6 +43,8 @@ type MusicPlayerCardProps = {
   onSeek: (seconds: number) => void;
   onTogglePanel?: (panel: 'playlist' | 'add') => void;
   activePanels?: { playlist: boolean, add: boolean };
+  playerVolume: number;
+  onVolumeChange: (volume: number) => void;
 };
 
 export default function MusicPlayerCard({
@@ -53,6 +59,8 @@ export default function MusicPlayerCard({
   onSeek,
   onTogglePanel,
   activePanels,
+  playerVolume,
+  onVolumeChange,
 }: MusicPlayerCardProps) {
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -68,6 +76,20 @@ export default function MusicPlayerCard({
     const sec = floorSeconds % 60;
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
+
+  const lastNonZeroVolume = React.useRef(playerVolume);
+    React.useEffect(() => {
+        if (playerVolume > 0) {
+            lastNonZeroVolume.current = playerVolume;
+        }
+    }, [playerVolume]);
+
+    const toggleMute = () => {
+        if (!isPlayerControlAllowed) return;
+        onVolumeChange(playerVolume > 0 ? 0 : lastNonZeroVolume.current || 0.5);
+    };
+
+    const VolumeIcon = playerVolume > 0.5 ? Volume2 : playerVolume > 0 ? Volume1 : VolumeX;
 
   return (
     <Card className="flex flex-col h-full">
@@ -122,12 +144,15 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
+        
+        {currentTrack && <div className="px-2 pb-2"><AudioVisualizer isSpeaking={playing} /></div>}
+
         <div className="pt-2">
             <Slider
                 value={[duration > 0 ? progress / duration : 0]}
                 max={1}
                 step={0.01}
-                disabled={!isPlayerControlAllowed}
+                disabled={!isPlayerControlAllowed || !currentTrack}
                 onValueChange={(value) => onSeek(value[0] * duration)}
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -167,6 +192,27 @@ export default function MusicPlayerCard({
                     <p>Next</p>
                 </TooltipContent>
             </Tooltip>
+        </div>
+        
+        <div className="flex items-center gap-2 pt-2">
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={toggleMute} disabled={!isPlayerControlAllowed || !currentTrack} className="h-8 w-8">
+                        <VolumeIcon className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                 <TooltipContent>
+                    <p>{playerVolume > 0 ? 'Mute' : 'Unmute'}</p>
+                </TooltipContent>
+            </Tooltip>
+            <Slider
+                aria-label="Player Volume"
+                value={[playerVolume]}
+                onValueChange={(value) => onVolumeChange(value[0])}
+                disabled={!isPlayerControlAllowed || !currentTrack}
+                max={1}
+                step={0.05}
+            />
         </div>
       </CardContent>
     </Card>
