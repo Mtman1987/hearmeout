@@ -1,6 +1,6 @@
-# Bot Setup Guide
+# Bot & App Setup Guide
 
-This guide details how to get credentials for the HearMeOut Firebase backend, Twitch bot, and Discord bot.
+This guide details how to get credentials for the HearMeOut Firebase backend, Twitch bot, Discord bot, and LiveKit voice chat.
 
 ## 1. Firebase Service Account
 
@@ -87,3 +87,19 @@ To enable Discord integration, you need to create a Discord Application and add 
 3.  Go to the channel in your server where you want the bot to post messages.
 4.  Right-click on the channel name in the channel list and click **"Copy Channel ID"**.
 5.  In your `.env` file, paste this ID as the value for `DISCORD_CHANNEL_ID`.
+
+## 5. LiveKit Credentials (for Voice Chat)
+
+The voice chat rooms are powered by LiveKit. You need to create a free LiveKit Cloud account and get API keys.
+
+1.  **Go to LiveKit Cloud:** [https://cloud.livekit.io/](https://cloud.livekit.io/) and sign up or log in.
+2.  Create a new project if you don't have one already.
+3.  In your project's dashboard, go to **Settings**.
+4.  Under the "API Keys" section, you will find your **API Key** and **API Secret**.
+5.  Under "General", you will find the **WebSocket URL**.
+
+### Adding Credentials to `.env`:
+
+-   `NEXT_PUBLIC_LIVEKIT_URL`: Paste the **WebSocket URL** here.
+-   `LIVEKIT_API_KEY`: Paste the **API Key** here.
+-   `LIVEKIT_API_SECRET`: Paste the **API Secret** here.
