@@ -206,15 +206,15 @@ const DiscordIcon = () => (
 );
 
 function RoomContent({ room, roomId }: { room: RoomData; roomId: string }) {
-    const { user, isUserLoading } = useFirebase();
+    const { user, isUserLoading, firestore } = useFirebase();
     const { toast } = useToast();
     const [chatOpen, setChatOpen] = useState(false);
     const [voiceToken, setVoiceToken] = useState<string | undefined>(undefined);
     const [activePanels, setActivePanels] = useState({ playlist: true, add: true });
     const [volume, setVolume] = useState(0.5);
 
-    const roomRef = useMemoFirebase(() => doc(useFirebase().firestore, 'rooms', roomId), [roomId]);
-    const userInRoomRef = useMemoFirebase(() => user ? doc(useFirebase().firestore, 'rooms', roomId, 'users', user.uid) : null, [roomId, user]);
+    const roomRef = useMemoFirebase(() => doc(firestore, 'rooms', roomId), [firestore, roomId]);
+    const userInRoomRef = useMemoFirebase(() => user ? doc(firestore, 'rooms', roomId, 'users', user.uid) : null, [firestore, roomId, user]);
 
     const isDJ = !!user && !!room.djId && user.uid === room.djId;
     const isOwner = !!user && !!room.ownerId && user.uid === room.ownerId;

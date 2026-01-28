@@ -143,9 +143,11 @@ const getYoutubeInfoFlow = ai.defineFlow(
         let videosToDownload: { id: string, title: string }[] = [];
 
         // 1. Determine if input is a URL or a search query
-        if (YouTube.isYouTube(input.url, { checkPlaylist: true })) {
+        if (YouTube.isPlaylist(input.url)) {
             const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
-            if (!playlist || playlist.videos.length === 0) return [];
+            if (!playlist || playlist.videos.length === 0) {
+                 return [];
+            }
             videosToDownload = playlist.videos
                 .filter(v => v.id && v.title)
                 .map(v => ({ id: v.id!, title: v.title! }));
