@@ -6,6 +6,7 @@ import {
   LiveKitRoom,
   useConnectionState,
   useLocalParticipant,
+  useRoomContext,
 } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import {
@@ -45,59 +46,58 @@ interface RoomData {
   djDisplayName?: string;
 }
 
+/**
+ * This component lives inside the Jukebox's LiveKitRoom and is responsible for
+ * publishing and unpublishing the music audio track based on the room's state.
+ */
+function JukeboxOrchestrator({ musicAudioTrack, isPlaying }: { musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
+    const room = useRoomContext();
 
-// This component establishes a silent, background connection for the Jukebox identity.
-function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
-
-    const onConnected = useCallback(async (room: LivekitClient.Room) => {
-        if (!musicAudioTrack) return;
-        
+    useEffect(() => {
         const musicTrackPublication = room.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
 
+        if (!musicAudioTrack) {
+            // If there's no track, ensure we unpublish any existing one.
+            if (musicTrackPublication?.track) {
+                 room.localParticipant.unpublishTrack(musicTrackPublication.track);
+            }
+            return;
+        };
+
         if (isPlaying && !musicTrackPublication) {
-            await room.localParticipant.publishTrack(musicAudioTrack, {
-                source: LivekitClient.Track.Source.ScreenShareAudio,
-                name: 'JukeboxAudio'
-            });
-        }
-    }, [musicAudioTrack, isPlaying]);
-
-    const onDisconnected = useCallback(async (room: LivekitClient.Room) => {
-        await room.localParticipant.unpublishAllTracks();
-    }, []);
-
-    // Effect to publish/unpublish track when playing state changes
-    const { localParticipant } = useLocalParticipant();
-    useEffect(() => {
-        if (!localParticipant || !musicAudioTrack) return;
-
-        const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
-        
-        if (isPlaying && !musicTrackPublication) {
-            localParticipant.publishTrack(musicAudioTrack, {
+            room.localParticipant.publishTrack(musicAudioTrack, {
                 source: LivekitClient.Track.Source.ScreenShareAudio,
                 name: 'JukeboxAudio'
             });
         } else if (!isPlaying && musicTrackPublication) {
              if (musicTrackPublication.track) {
-                localParticipant.unpublishTrack(musicTrackPublication.track);
+                room.localParticipant.unpublishTrack(musicTrackPublication.track);
             }
         }
+    }, [room.localParticipant, musicAudioTrack, isPlaying]);
 
-    }, [localParticipant, musicAudioTrack, isPlaying]);
+    return null; // This component renders no UI
+}
 
+
+// This component establishes a silent, background connection for the Jukebox identity.
+function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
+
+    const onDisconnected = useCallback(async (room: LivekitClient.Room) => {
+        console.log('Jukebox disconnected.');
+    }, []);
 
     return (
         <LiveKitRoom
             serverUrl={serverUrl}
             token={token}
             connect={true}
-            audio={false}
-            video={false}
-            onConnected={onConnected}
+            audio={false} // We are not capturing user microphone
+            video={false} // We are not capturing user camera
             onDisconnected={onDisconnected}
         >
-            {/* This component renders no UI */}
+            {/* The orchestrator handles track publishing inside the correct room context */}
+            <JukeboxOrchestrator musicAudioTrack={musicAudioTrack} isPlaying={isPlaying} />
         </LiveKitRoom>
     )
 }
@@ -211,46 +211,29 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                {user && (
-                    <>
-                        {isDJ ? (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" onClick={onRelinquishDJ}>
-                                        <Music className="h-4 w-4" />
-                                        <span className="sr-only">Stop being the DJ</span>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Stop being the DJ</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        ) : !djId ? (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" onClick={onClaimDJ}>
-                                        <Music className="h-4 w-4" />
-                                        <span className="sr-only">Become the DJ</span>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Become the DJ</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        ) : null}
-                         {isDJ && (
-                             <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant={isPlayerVisible ? "secondary" : "outline"} size="icon" onClick={onTogglePlayer}>
-                                        <Music className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{isPlayerVisible ? "Hide Player" : "Show Player"}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        )}
-                    </>
+                 {(isDJ || !djId) && user && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={isDJ ? onRelinquishDJ : onClaimDJ} className={cn(!isDJ && "animate-pulse")}>
+                                <Music className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{isDJ ? 'Stop being the DJ' : 'Become the DJ'}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+                 {isDJ && (
+                     <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant={isPlayerVisible ? "secondary" : "outline"} size="icon" onClick={onTogglePlayer}>
+                                <Music className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{isPlayerVisible ? "Hide Player" : "Show Player"}</p>
+                        </TooltipContent>
+                    </Tooltip>
                 )}
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -476,10 +459,10 @@ function RoomPageContent() {
 
     let isCancelled = false;
 
-    const setupUserAndToken = () => {
+    const setupUserAndToken = async () => {
         try {
             if (userInRoomRef) {
-                setDocumentNonBlocking(userInRoomRef, {
+                await setDocumentNonBlocking(userInRoomRef, {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
@@ -489,17 +472,13 @@ function RoomPageContent() {
             if (isCancelled) return;
 
             // Generate token for the main user
-            generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }))
-                .then(token => {
-                    if (!isCancelled) setLivekitToken(token);
-                });
+            const userToken = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }));
+            if (!isCancelled) setLivekitToken(userToken);
 
             // If user is the DJ, generate a separate token for the Jukebox identity
             if (isDJ) {
-                 generateLiveKitToken(params.roomId, `${user.uid}-jukebox`, 'Jukebox', JSON.stringify({ isJukebox: true }))
-                    .then(token => {
-                        if (!isCancelled) setJukeboxToken(token);
-                    });
+                 const jbToken = await generateLiveKitToken(params.roomId, `${user.uid}-jukebox`, 'Jukebox', JSON.stringify({ isJukebox: true }));
+                 if (!isCancelled) setJukeboxToken(jbToken);
             } else if (jukeboxToken) {
                 setJukeboxToken(undefined); // Clear jukebox token if not DJ
             }
