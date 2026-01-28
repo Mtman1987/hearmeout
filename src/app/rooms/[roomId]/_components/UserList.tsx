@@ -45,14 +45,17 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
     const { localParticipant } = useLocalParticipant();
     const playerRef = useRef<ReactPlayer>(null);
     const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
+    const [isPlayerReady, setIsPlayerReady] = useState(false);
 
     useEffect(() => {
         let isCancelled = false;
         
         const publishTrack = async () => {
-            if (isCancelled || !localParticipant || !playerRef.current) return;
+            if (isCancelled || !localParticipant || !playerRef.current || !isPlayerReady) {
+                return;
+            }
 
-            // Stop any existing tracks before publishing a new one
+            // Unpublish any existing track first to ensure a clean slate.
             if (trackPublicationRef.current) {
                 await localParticipant.unpublishTrack(trackPublicationRef.current.track);
                 trackPublicationRef.current = null;
@@ -86,32 +89,29 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
             }
         };
         
-        // Let the player initialize, then publish the track. The timeout is important
-        // because the internal player might not be ready immediately.
-        const timeoutId = setTimeout(publishTrack, 1000);
+        publishTrack();
 
         return () => {
             isCancelled = true;
-            clearTimeout(timeoutId);
             if (localParticipant && trackPublicationRef.current) {
-                console.log("Unpublishing jukebox audio track.");
+                console.log("Unpublishing jukebox audio track on cleanup.");
                 localParticipant.unpublishTrack(trackPublicationRef.current.track);
                 trackPublicationRef.current = null;
             }
         };
-    }, [localParticipant, url]); // Re-publish when the URL changes
+    }, [localParticipant, url, isPlayerReady]); // Re-publish when the URL or readiness changes
 
-    // We render the player even if URL is empty to allow for stream capture setup
     return (
         <div className="hidden">
             <ReactPlayer
                 ref={playerRef}
                 url={url || ''}
                 playing={isPlaying}
+                onReady={() => setIsPlayerReady(true)}
                 onEnded={onEnded}
                 onDuration={onDuration}
                 onProgress={(state) => onProgress(state.playedSeconds)}
-                muted={true} // Muted on DJ's side, audio comes back via LiveKit stream
+                muted={true}
                 width="1px"
                 height="1px"
                 config={{
@@ -131,9 +131,6 @@ export default function UserList({ roomId }: { roomId: string }) {
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => setIsClient(true), []);
 
   const allParticipants = [
     ...(localParticipant ? [localParticipant] : []),
@@ -170,7 +167,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const isDj = user?.uid === room?.djId;
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  const canShowMusicPanels = jukeboxTrackRef || isDj;
+  const canShowMusicPanels = isDj || jukeboxTrackRef;
   
   const handleForceJukeboxRestart = () => {
     setJukeboxStreamerKey(k => k + 1);
@@ -344,7 +341,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   return (
     <>
-      {isDj && isClient && (
+      {isDj && (
         <JukeboxStreamer 
             key={jukeboxStreamerKey}
             url={currentTrack?.url || ''}
