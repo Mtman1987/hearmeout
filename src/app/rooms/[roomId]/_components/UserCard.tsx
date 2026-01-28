@@ -180,7 +180,7 @@ export default function UserCard({
 
   return (
     <>
-      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={volume} />}
+      {!isLocal && audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={volume} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">

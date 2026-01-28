@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -292,21 +293,7 @@ function RoomPageContent() {
   );
   
   const renderContent = () => (
-    <LiveKitRoom
-        serverUrl={livekitUrl!}
-        token={livekitToken!}
-        connect={userHasInteracted}
-        audio={true}
-        video={false}
-        onError={(err) => {
-            console.error("LiveKit connection error:", err);
-            toast({
-                variant: 'destructive',
-                title: 'Connection Error',
-                description: err.message,
-            });
-        }}
-    >
+    <>
         <RoomHeader
             roomName={room?.name || 'Loading room...'}
             onToggleChat={() => setChatOpen(!chatOpen)}
@@ -314,7 +301,25 @@ function RoomPageContent() {
             showMusicIcon={showMusicIcon}
         />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <UserList roomId={params.roomId} isDj={isDj} />
+            {livekitToken && livekitUrl && (
+                <LiveKitRoom
+                    serverUrl={livekitUrl}
+                    token={livekitToken}
+                    connect={userHasInteracted}
+                    audio={false}
+                    video={false}
+                    onError={(err) => {
+                        console.error("LiveKit connection error:", err);
+                        toast({
+                            variant: 'destructive',
+                            title: 'Connection Error',
+                            description: err.message,
+                        });
+                    }}
+                >
+                    <UserList roomId={params.roomId} isDj={isDj} />
+                </LiveKitRoom>
+            )}
         </main>
         {!userHasInteracted && (
           <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
@@ -326,7 +331,7 @@ function RoomPageContent() {
               </Button>
           </div>
         )}
-    </LiveKitRoom>
+    </>
   );
 
   return (
