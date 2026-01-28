@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
+  useRoomContext,
 } from '@livekit/components-react';
-import { ConnectionState } from 'livekit-client';
+import { ConnectionState, createLocalAudioTrackFromMediaElement, RoomPublication } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -32,7 +33,6 @@ import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDoc
 import { doc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 import { PlaylistItem } from "@/types/playlist";
-import ReactPlayer from 'react-player/youtube';
 
 
 interface RoomData {
@@ -205,13 +205,79 @@ const DiscordIcon = () => (
     </svg>
 );
 
+function MusicStreamer({ 
+    isDJ, 
+    isPlaying, 
+    trackUrl, 
+    onTrackEnd 
+} : { 
+    isDJ: boolean, 
+    isPlaying: boolean, 
+    trackUrl?: string, 
+    onTrackEnd: () => void 
+}) {
+    const room = useRoomContext();
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const [musicPublication, setMusicPublication] = useState<RoomPublication | null>(null);
+
+    useEffect(() => {
+        if (!isDJ || !room || !audioRef.current) return;
+        
+        const audioEl = audioRef.current;
+        let isCleaningUp = false;
+
+        const cleanup = async () => {
+            if (isCleaningUp) return;
+            isCleaningUp = true;
+            audioEl.pause();
+            audioEl.src = '';
+            if (musicPublication && musicPublication.track) {
+                await room.localParticipant.unpublishTrack(musicPublication.track);
+                setMusicPublication(null);
+            }
+        };
+
+        const setup = async () => {
+            await cleanup();
+            isCleaningUp = false;
+
+            if (isPlaying && trackUrl) {
+                try {
+                    audioEl.src = trackUrl;
+                    await audioEl.play();
+                    const track = await createLocalAudioTrackFromMediaElement(audioEl);
+                    const publication = await room.localParticipant.publishTrack(track, {
+                        name: 'music',
+                        source: 'music_bot_audio', 
+                    });
+                    setMusicPublication(publication);
+                } catch (e) {
+                    console.error("Failed to publish music track:", e);
+                }
+            }
+        };
+        
+        setup();
+
+        return () => {
+            cleanup();
+        };
+
+    }, [isDJ, room, isPlaying, trackUrl]);
+
+    return <audio ref={audioRef} onEnded={onTrackEnd} crossOrigin="anonymous" className="hidden"></audio>;
+}
+
+
 function RoomContent({ room, roomId }: { room: RoomData; roomId: string }) {
     const { user, isUserLoading, firestore } = useFirebase();
     const { toast } = useToast();
     const [chatOpen, setChatOpen] = useState(false);
     const [voiceToken, setVoiceToken] = useState<string | undefined>(undefined);
     const [activePanels, setActivePanels] = useState({ playlist: true, add: true });
-    const [volume, setVolume] = useState(0.5);
+    
+    // Local volume for the DJ's player card UI, does not affect published track
+    const [localVolume, setLocalVolume] = useState(0.5); 
 
     const roomRef = useMemoFirebase(() => doc(firestore, 'rooms', roomId), [firestore, roomId]);
     const userInRoomRef = useMemoFirebase(() => user ? doc(firestore, 'rooms', roomId, 'users', user.uid) : null, [firestore, roomId, user]);
@@ -345,25 +411,18 @@ function RoomContent({ room, roomId }: { room: RoomData; roomId: string }) {
               toast({ variant: 'destructive', title: 'Connection Error', description: err.message });
           }}
       >
+        <MusicStreamer 
+            isDJ={isDJ}
+            isPlaying={!!room.isPlaying}
+            trackUrl={currentTrack?.url}
+            onTrackEnd={handlePlayNext}
+        />
         <div className={cn(
             "bg-secondary/30 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width-icon)_+_1rem)] md:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width)_+_1rem)] duration-200 transition-[margin-left,margin-right]",
             chatOpen && "md:mr-[28rem]"
           )}>
               <SidebarInset>
                   <div className="flex flex-col h-screen relative">
-                       <div className="hidden">
-                           <ReactPlayer
-                              url={currentTrack?.url}
-                              playing={room.isPlaying}
-                              volume={volume}
-                              onEnded={isDJ ? handlePlayNext : undefined}
-                              width="1px"
-                              height="1px"
-                              config={{
-                                  youtube: { playerVars: { autoplay: 1, controls: 0 } }
-                              }}
-                           />
-                       </div>
                         <RoomHeader
                             roomName={room.name}
                             onToggleChat={() => setChatOpen(!chatOpen)}
@@ -386,8 +445,8 @@ function RoomContent({ room, roomId }: { room: RoomData; roomId: string }) {
                                                 onPlayPrev={handlePlayPrev}
                                                 onTogglePanel={(panel) => setActivePanels(p => ({ ...p, [panel]: !p[panel] }))}
                                                 activePanels={activePanels}
-                                                volume={volume}
-                                                onVolumeChange={setVolume}
+                                                volume={localVolume}
+                                                onVolumeChange={setLocalVolume}
                                             />
                                         </div>
                                         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
