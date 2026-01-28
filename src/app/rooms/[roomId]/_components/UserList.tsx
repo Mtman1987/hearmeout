@@ -8,10 +8,12 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect, useTracks } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import * as LivekitClient from 'livekit-client';
+import MusicJukeboxCard from "./MusicJukeboxCard";
+
 
 export interface RoomData {
   name: string;
@@ -31,13 +33,19 @@ export default function UserList({ roomId }: { roomId: string }) {
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // LiveKit Hooks
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-
+  
+  const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'jukebox');
   const humanParticipants = [
     ...(localParticipant ? [localParticipant] : []),
-    ...remoteParticipants,
+    ...remoteParticipants.filter(p => p.identity !== 'jukebox'),
   ];
+  
+  const jukeboxTracks = useTracks([LivekitClient.Track.Source.Unknown], { participant: jukeboxParticipant });
+  const jukeboxAudioTrack = jukeboxTracks.find(t => t.publication.kind === 'audio');
+
 
   const { 
     devices: micDevices, 
@@ -286,7 +294,14 @@ export default function UserList({ roomId }: { roomId: string }) {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {/* No Jukebox card for now, focusing on UI */}
+          {jukeboxParticipant && (
+            <MusicJukeboxCard 
+              trackRef={jukeboxAudioTrack}
+              activePanels={activePanels}
+              onTogglePanel={handleTogglePanel}
+              onPlayNext={handlePlayNext}
+            />
+          )}
           {humanParticipants.map((participant) => {
               const isLocal = participant.sid === localParticipant?.sid;
               return (
