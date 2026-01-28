@@ -1,4 +1,3 @@
-
 'use client';
 
 import Image from "next/image";
@@ -19,7 +18,6 @@ import {
   Youtube,
   Music,
   ListMusic,
-  Bot,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -41,11 +39,8 @@ type MusicPlayerCardProps = {
   onSeek: (seconds: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
-  onForceJukeboxRestart: () => void;
 };
 
-// This component is now a "Remote Control" for the host. It only sends commands.
-// The actual audio playback is handled by the server-side Jukebox bot.
 export default function MusicPlayerCard({
   currentTrack,
   progress,
@@ -58,7 +53,6 @@ export default function MusicPlayerCard({
   onSeek,
   activePanels,
   onTogglePanel,
-  onForceJukeboxRestart,
 }: MusicPlayerCardProps) {
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
@@ -126,16 +120,6 @@ export default function MusicPlayerCard({
                       <p>Add Music</p>
                   </TooltipContent>
               </Tooltip>
-               <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant={"ghost"} size="icon" onClick={onForceJukeboxRestart} aria-label="Restart Jukebox Bot" className="h-8 w-8">
-                          <Bot className="h-4 w-4" />
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                      <p>Restart Jukebox Bot</p>
-                  </TooltipContent>
-              </Tooltip>
           </div>
         </div>
 
@@ -144,7 +128,8 @@ export default function MusicPlayerCard({
                 value={[duration > 0 ? progress / duration : 0]}
                 max={1}
                 step={0.01}
-                disabled={true}
+                disabled={!isPlayerControlAllowed}
+                onValueChange={(value) => onSeek(value[0] * duration)}
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>{formatTime(progress)}</span>
