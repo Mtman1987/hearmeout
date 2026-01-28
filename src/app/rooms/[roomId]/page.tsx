@@ -208,7 +208,7 @@ const DiscordIcon = () => (
 function MusicStreamer({ 
     isDJ, 
     isPlaying, 
-    trackUrl, 
+    trackUrl, // This is now a youtube.com URL
     onTrackEnd 
 } : { 
     isDJ: boolean, 
@@ -218,14 +218,55 @@ function MusicStreamer({
 }) {
     const room = useRoomContext();
     const audioRef = useRef<HTMLAudioElement>(null);
-    // Use a ref to hold the publication to avoid re-renders and dependency array issues
     const publicationRef = useRef<RoomPublication | null>(null);
+    const [audioStreamUrl, setAudioStreamUrl] = useState<string | null>(null);
+    const [isFetchingUrl, setIsFetchingUrl] = useState(false);
 
+    // Effect 1: Resolve YouTube URL to a direct audio stream URL
+    useEffect(() => {
+        if (!trackUrl || !isDJ) {
+            setAudioStreamUrl(null);
+            return;
+        }
+
+        let isCancelled = false;
+        const fetchAudioUrl = async () => {
+            setIsFetchingUrl(true);
+            try {
+                const res = await fetch(`/api/youtube-audio?url=${encodeURIComponent(trackUrl)}`);
+                if (!res.ok) {
+                    throw new Error(`Failed to get audio URL: ${await res.text()}`);
+                }
+                const data = await res.json();
+                if (!isCancelled) {
+                    setAudioStreamUrl(data.url);
+                }
+            } catch (error) {
+                console.error(error);
+                if (!isCancelled) {
+                    setAudioStreamUrl(null);
+                }
+            } finally {
+                if (!isCancelled) {
+                    setIsFetchingUrl(false);
+                }
+            }
+        };
+
+        fetchAudioUrl();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [trackUrl, isDJ]);
+
+
+    // Effect 2: Manage LiveKit track publication based on resolved URL and playback state
     useEffect(() => {
         const audioEl = audioRef.current;
-        if (!isDJ || !room || !audioEl) {
-            // If we are not the DJ, ensure everything is unpublished and stopped.
-            if (publicationRef.current) {
+        // Don't do anything if not DJ, no element, or still fetching the URL
+        if (!isDJ || !room || !audioEl || isFetchingUrl) {
+             if (publicationRef.current) {
                 room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
                 publicationRef.current = null;
             }
@@ -234,16 +275,22 @@ function MusicStreamer({
         }
 
         const manageTrack = async () => {
-            // If we should be playing and have a URL
-            if (isPlaying && trackUrl) {
+            // If we should be playing and have a resolved stream URL
+            if (isPlaying && audioStreamUrl) {
                 try {
+                    // This check prevents re-publishing if the track is already published
+                    if (publicationRef.current && audioEl.src === audioStreamUrl) {
+                        if (audioEl.paused) await audioEl.play();
+                        return;
+                    }
+
                     // Unpublish any existing track before publishing a new one
                     if (publicationRef.current) {
                         await room.localParticipant.unpublishTrack(publicationRef.current.track!);
                         publicationRef.current = null;
                     }
 
-                    audioEl.src = trackUrl;
+                    audioEl.src = audioStreamUrl;
                     await audioEl.play();
                     
                     const track = await createLocalAudioTrack({
@@ -272,14 +319,13 @@ function MusicStreamer({
 
         // The main cleanup function for when the component unmounts
         return () => {
-            if (publicationRef.current) {
+            if (room.localParticipant && publicationRef.current) {
                 room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
                 publicationRef.current = null;
             }
         };
-
-    // This effect depends on the core state that dictates playback.
-    }, [isDJ, isPlaying, trackUrl, room]);
+    // This effect now depends on the resolved audioStreamUrl
+    }, [isDJ, isPlaying, audioStreamUrl, room, isFetchingUrl]);
 
     // The audio element itself. It's hidden but drives the WebRTC track.
     return <audio ref={audioRef} onEnded={onTrackEnd} crossOrigin="anonymous" className="hidden"></audio>;
