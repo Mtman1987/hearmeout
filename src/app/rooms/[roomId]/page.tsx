@@ -605,44 +605,48 @@ function RoomPageContent() {
                                 />
                                
                                 {isPlayerVisible && (
-                                    <MusicPlayerCard 
-                                        currentTrack={currentTrack}
-                                        progress={progress}
-                                        duration={duration}
-                                        playing={!!room.isPlaying}
-                                        isPlayerControlAllowed={isDJ}
-                                        onPlayPause={handlePlayPause}
-                                        onPlayNext={handlePlayNext}
-                                        onPlayPrev={handlePlayPrev}
-                                        onSeek={handleSeek}
-                                    />
-                                )}
-
-                                {(activePanels.playlist || activePanels.add) && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        {activePanels.playlist && (
-                                            <div className={cn({ 'lg:col-span-2': !activePanels.add })}>
-                                                <PlaylistPanel 
-                                                    playlist={room.playlist || []}
-                                                    currentTrackId={room.currentTrackId || ''}
-                                                    isPlayerControlAllowed={isDJ}
-                                                    onPlaySong={handlePlaySong}
-                                                    onRemoveSong={handleRemoveSong}
-                                                    onClearPlaylist={handleClearPlaylist}
-                                                />
-                                            </div>
-                                        )}
-                                        {activePanels.add && (
-                                            <div className={cn({ 'lg:col-span-2': !activePanels.playlist })}>
-                                                <AddMusicPanel 
-                                                    onAddItems={handleAddItems}
-                                                    onClose={() => togglePanel('add')}
-                                                    canAddMusic={isDJ}
-                                                />
+                                    <div className="flex flex-col lg:flex-row gap-6">
+                                        <div className="w-full lg:w-1/3 shrink-0">
+                                            <MusicPlayerCard
+                                                currentTrack={currentTrack}
+                                                progress={progress}
+                                                duration={duration}
+                                                playing={!!room.isPlaying}
+                                                isPlayerControlAllowed={isDJ}
+                                                onPlayPause={handlePlayPause}
+                                                onPlayNext={handlePlayNext}
+                                                onPlayPrev={handlePlayPrev}
+                                                onSeek={handleSeek}
+                                            />
+                                        </div>
+                                        {(activePanels.playlist || activePanels.add) && (
+                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                {activePanels.playlist && (
+                                                    <div className={cn({ 'md:col-span-2': !activePanels.add })}>
+                                                        <PlaylistPanel
+                                                            playlist={room.playlist || []}
+                                                            currentTrackId={room.currentTrackId || ''}
+                                                            isPlayerControlAllowed={isDJ}
+                                                            onPlaySong={handlePlaySong}
+                                                            onRemoveSong={handleRemoveSong}
+                                                            onClearPlaylist={handleClearPlaylist}
+                                                        />
+                                                    </div>
+                                                )}
+                                                {activePanels.add && (
+                                                    <div className={cn({ 'md:col-span-2': !activePanels.playlist })}>
+                                                        <AddMusicPanel
+                                                            onAddItems={handleAddItems}
+                                                            onClose={() => togglePanel('add')}
+                                                            canAddMusic={isDJ}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 )}
+
 
                                 <div className='hidden'>
                                      {isDJ && (
