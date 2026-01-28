@@ -248,7 +248,7 @@ function MusicStreamer({
                     const track = await createLocalAudioTrackFromMediaElement(audioEl);
                     const publication = await room.localParticipant.publishTrack(track, {
                         name: 'music',
-                        source: 'music_bot_audio', 
+                        source: 'music_bot_audio'
                     });
                     setMusicPublication(publication);
                 } catch (e) {
