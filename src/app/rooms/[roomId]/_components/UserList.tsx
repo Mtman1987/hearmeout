@@ -58,6 +58,7 @@ export default function UserList({ roomId }: { roomId: string }) {
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
+  const [localProgress, setLocalProgress] = useState(0);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -66,6 +67,11 @@ export default function UserList({ roomId }: { roomId: string }) {
   }, [firestore, roomId]);
 
   const { data: room } = useDoc<RoomData>(roomRef);
+
+  // When the track changes in Firestore, reset the local progress state.
+  useEffect(() => {
+    setLocalProgress(room?.currentTrackProgress || 0);
+  }, [room?.currentTrackId, room?.currentTrackProgress]);
 
   const isDj = user?.uid === room?.djId;
   
@@ -237,6 +243,7 @@ export default function UserList({ roomId }: { roomId: string }) {
   const handleSeek = (seconds: number) => {
       if (isDj && roomRef) {
           updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
+          setLocalProgress(seconds); // Also update local state for immediate feedback
       }
   };
 
@@ -248,7 +255,7 @@ export default function UserList({ roomId }: { roomId: string }) {
               <div className="lg:col-span-1 h-full">
                 <MusicPlayerCard
                   currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
-                  progress={room?.currentTrackProgress || 0}
+                  progress={localProgress}
                   duration={duration}
                   playing={room?.isPlaying || false}
                   isPlayerControlAllowed={isDj}
@@ -297,6 +304,7 @@ export default function UserList({ roomId }: { roomId: string }) {
               isHost={isDj}
               roomRef={roomRef}
               setDuration={setDuration}
+              setLocalProgress={setLocalProgress}
               activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
               onPlayNext={handlePlayNext}

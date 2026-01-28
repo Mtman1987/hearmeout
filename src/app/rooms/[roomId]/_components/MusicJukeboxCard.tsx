@@ -33,17 +33,17 @@ interface MusicJukeboxCardProps {
   isHost: boolean;
   roomRef: DocumentReference | null;
   setDuration: (duration: number) => void;
+  setLocalProgress: (progress: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
   onPlayNext: () => void;
 }
 
-export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, activePanels, onTogglePanel, onPlayNext }: MusicJukeboxCardProps) {
+export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, setLocalProgress, activePanels, onTogglePanel, onPlayNext }: MusicJukeboxCardProps) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
   const playerRef = useRef<ReactPlayer>(null);
-  const lastProgressUpdateTime = useRef(0);
 
   const [volume, setVolume] = useState(0);
   const lastNonZeroVolume = useRef(0.5);
@@ -65,22 +65,17 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, a
     }
   }, [room.currentTrackProgress, isHost]);
 
-  // The Host is the timekeeper for the room
   const handleProgress = (state: { playedSeconds: number }) => {
-    if (isHost && roomRef) {
-        const now = Date.now();
-        // Throttle updates to every 2 seconds to avoid excessive writes
-        if (now - lastProgressUpdateTime.current > 2000) {
-            lastProgressUpdateTime.current = now;
-            updateDocumentNonBlocking(roomRef, { currentTrackProgress: state.playedSeconds });
-        }
+    // This now only updates the local state for the DJ's UI.
+    if (isHost) {
+      setLocalProgress(state.playedSeconds);
     }
   };
 
   const handleDuration = (duration: number) => {
     setDuration(duration);
     if (isHost && roomRef) {
-        // When a new track loads, reset progress for all clients.
+        // When a new track loads, reset progress for all clients to 0.
         updateDocumentNonBlocking(roomRef, { currentTrackProgress: 0 });
     }
   };
