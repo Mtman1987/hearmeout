@@ -18,10 +18,12 @@ export default function UserList({
     roomId,
     onTogglePanel,
     activePanels,
+    isJukeboxVisible,
 }: { 
     roomId: string, 
     onTogglePanel: (panel: 'playlist' | 'add') => void;
     activePanels: { playlist: boolean, add: boolean };
+    isJukeboxVisible: boolean;
 }) {
   const { firestore } = useFirebase();
   
@@ -37,8 +39,6 @@ export default function UserList({
 
   const jukeboxParticipant = remoteParticipants.find(p => p.identity.endsWith('-jukebox'));
   const voiceParticipants = remoteParticipants.filter(p => !p.identity.endsWith('-jukebox'));
-
-  const isDjPresent = !!room?.djId;
 
   return (
     <>
@@ -57,7 +57,7 @@ export default function UserList({
           )}
 
           {/* Card for Jukebox */}
-          {jukeboxParticipant && isDjPresent && (
+          {jukeboxParticipant && isJukeboxVisible && (
              <UserCard
               key={jukeboxParticipant.sid}
               participant={jukeboxParticipant}

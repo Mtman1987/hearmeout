@@ -603,6 +603,7 @@ function RoomPageContent() {
                                             roomId={params.roomId}
                                             activePanels={activePanels}
                                             onTogglePanel={togglePanel}
+                                            isJukeboxVisible={isPlayerVisible}
                                         />
                                     </div>
                                     <div className="lg:col-span-2 space-y-6">
