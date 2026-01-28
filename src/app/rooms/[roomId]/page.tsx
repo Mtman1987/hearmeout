@@ -225,7 +225,13 @@ function RoomPageContent() {
   };
 
   useEffect(() => {
-    if (isUserLoading || !user?.uid || !user.displayName || !firestore || !params.roomId) {
+    // If the user logs out, clear the token to force a re-render to the loading state.
+    if (!user) {
+      setLivekitToken(undefined);
+      return;
+    }
+
+    if (isUserLoading || !user.displayName || !firestore || !params.roomId) {
       return;
     }
 
@@ -262,9 +268,12 @@ function RoomPageContent() {
     
     return () => {
       isCancelled = true;
-      deleteDoc(userInRoomRef).catch(err => {
-          console.error("Failed to clean up user document in room:", err);
-      });
+      // Only delete the user doc if we have a valid ref to it.
+      if (userInRoomRef) {
+          deleteDoc(userInRoomRef).catch(err => {
+              console.error("Failed to clean up user document in room:", err);
+          });
+      }
     };
   }, [user, isUserLoading, params.roomId, firestore, toast]);
 
@@ -303,7 +312,7 @@ function RoomPageContent() {
                             serverUrl={livekitUrl!}
                             token={livekitToken}
                             connect={true}
-                            audio={false}
+                            audio={true}
                             video={false}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
@@ -352,3 +361,5 @@ export default function RoomPage() {
         </SidebarProvider>
     );
 }
+
+    
