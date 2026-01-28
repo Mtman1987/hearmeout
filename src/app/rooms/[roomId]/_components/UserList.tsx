@@ -41,18 +41,19 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   // User microphone and speaker state
   const { 
-    devices: allAudioInputDevices, 
-    activeDeviceId: micDeviceId, 
+    devices: micDevices, 
+    activeDeviceId: activeMicId, 
     setActiveMediaDevice: setMicDevice 
   } = useMediaDeviceSelect({ kind: 'audioinput' });
   
   const { 
-    devices: allAudioOutputDevices, 
+    devices: speakerDevices, 
     activeDeviceId: activeSpeakerId, 
     setActiveMediaDevice: setSpeakerDevice 
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -95,54 +96,58 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   // Effect to set the initial speaker from local storage
   useEffect(() => {
-      if (allAudioOutputDevices.length > 0) {
+      if (speakerDevices.length > 0) {
           const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
-          if (savedSpeakerId && allAudioOutputDevices.some(d => d.deviceId === savedSpeakerId)) {
+          if (savedSpeakerId && speakerDevices.some(d => d.deviceId === savedSpeakerId)) {
               setSpeakerDevice(savedSpeakerId);
           }
       }
-  }, [allAudioOutputDevices, setSpeakerDevice]);
+  }, [speakerDevices, setSpeakerDevice]);
 
   // Effect to set initial microphone from local storage
   useEffect(() => {
-    if (allAudioInputDevices.length > 0) {
+    if (micDevices.length > 0) {
         const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-        if (savedUserMicId && allAudioInputDevices.some(d => d.deviceId === savedUserMicId)) {
+        if (savedUserMicId && micDevices.some(d => d.deviceId === savedUserMicId)) {
             setMicDevice(savedUserMicId);
         }
     }
-  }, [allAudioInputDevices, setMicDevice]);
+  }, [micDevices, setMicDevice]);
 
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
-    if (!localParticipant || !micDeviceId) return;
+    if (!localParticipant || !activeMicId || isPublishing) return;
   
     const setupMicTrack = async () => {
-      const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
-  
-      if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === micDeviceId) {
-        return;
-      }
-  
-      if (existingPublication) {
-        await localParticipant.unpublishTrack(existingPublication.track, true);
-      }
-  
+      setIsPublishing(true);
       try {
-        const track = await LivekitClient.createLocalAudioTrack({ deviceId: micDeviceId });
+        const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+  
+        if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === activeMicId) {
+          setIsPublishing(false);
+          return;
+        }
+  
+        if (existingPublication) {
+          await localParticipant.unpublishTrack(existingPublication.track, true);
+        }
+  
+        const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
         await localParticipant.publishTrack(track, {
           source: LivekitClient.Track.Source.Microphone,
         });
       } catch (e) {
         console.error("Failed to create and publish mic track:", e);
         toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
+      } finally {
+        setIsPublishing(false);
       }
     };
   
     setupMicTrack();
   
-  }, [localParticipant, micDeviceId, toast]);
+  }, [localParticipant, activeMicId, toast, isPublishing]);
 
   useEffect(() => {
     if (room && !room.playlist && canControlMusic && roomRef) {
@@ -312,9 +317,9 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
               participant={localParticipant}
               isHost={user?.uid === room?.ownerId}
               roomId={roomId}
-              micDevices={allAudioInputDevices}
-              speakerDevices={allAudioOutputDevices}
-              activeMicId={micDeviceId || ''}
+              micDevices={micDevices}
+              speakerDevices={speakerDevices}
+              activeMicId={activeMicId || ''}
               activeSpeakerId={activeSpeakerId || ''}
               onMicDeviceChange={handleMicDeviceChange}
               onSpeakerDeviceChange={handleSpeakerDeviceChange}

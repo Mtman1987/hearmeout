@@ -127,6 +127,12 @@ export default function UserCard({
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
+  useEffect(() => {
+    if (userInRoomRef) {
+      updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
+    }
+  }, [isSpeaking, userInRoomRef]);
+
   const audioTrackRef = useTracks(
       [LivekitClient.Track.Source.Microphone], 
       { participant }
@@ -138,7 +144,6 @@ export default function UserCard({
   useEffect(() => {
     if (isLocal) {
         const micTrack = audioTrackRef?.publication.track;
-        // Hyper-defensive check to prevent crashes.
         if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
             if (micTrack.isMuted !== isMuted) {
                 micTrack.setMuted(isMuted);
