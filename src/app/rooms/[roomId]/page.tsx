@@ -157,8 +157,6 @@ function RoomHeader({
     djId,
     onClaimDJ,
     onRelinquishDJ,
-    isPlayerVisible,
-    onTogglePlayer,
 }: {
     roomName: string,
     onToggleChat: () => void,
@@ -167,8 +165,6 @@ function RoomHeader({
     djId: string | undefined,
     onClaimDJ: () => void,
     onRelinquishDJ: () => void;
-    isPlayerVisible: boolean;
-    onTogglePlayer: () => void;
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -211,7 +207,7 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                 {(isDJ || !djId) && user && (
+                 {(user && (!djId || isDJ)) && (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="outline" size="icon" onClick={isDJ ? onRelinquishDJ : onClaimDJ} className={cn(!isDJ && "animate-pulse")}>
@@ -223,18 +219,7 @@ function RoomHeader({
                         </TooltipContent>
                     </Tooltip>
                 )}
-                 {isDJ && (
-                     <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant={isPlayerVisible ? "secondary" : "outline"} size="icon" onClick={onTogglePlayer}>
-                                <Music className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{isPlayerVisible ? "Hide Player" : "Show Player"}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                )}
+                
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="outline" size="icon" onClick={handlePostToDiscord}>
@@ -285,7 +270,6 @@ function RoomPageContent() {
   const [livekitToken, setLivekitToken] = useState<string | undefined>(undefined);
   const [jukeboxToken, setJukeboxToken] = useState<string | undefined>(undefined);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
-  const [isPlayerVisible, setIsPlayerVisible] = useState(false);
   
   const [activePanels, setActivePanels] = useState({ playlist: false, add: false });
   const [progress, setProgress] = useState(0);
@@ -364,12 +348,10 @@ function RoomPageContent() {
         djId: user.uid,
         djDisplayName: user.displayName || 'Anonymous DJ'
     });
-    setIsPlayerVisible(true);
   }, [roomRef, user, toast, userHasInteracted]);
 
   const handleRelinquishDJ = useCallback(() => {
     if (!roomRef || !isDJ) return;
-    setIsPlayerVisible(false);
     updateDocumentNonBlocking(roomRef, {
         djId: '',
         djDisplayName: '',
@@ -456,14 +438,14 @@ function RoomPageContent() {
   }, [room?.isPlaying, duration, isDJ, handlePlayNext]);
 
  useEffect(() => {
-    if (isUserLoading || !user || !firestore || !params.roomId || livekitToken || !room) return;
+    if (isUserLoading || !user || !firestore || !params.roomId || !room) return;
 
     let isCancelled = false;
 
     const setupUserAndToken = async () => {
         try {
             if (userInRoomRef) {
-                await setDocumentNonBlocking(userInRoomRef, {
+                setDocumentNonBlocking(userInRoomRef, {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
@@ -472,16 +454,19 @@ function RoomPageContent() {
 
             if (isCancelled) return;
 
-            // Generate token for the main user
-            const userToken = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }));
-            if (!isCancelled) setLivekitToken(userToken);
+            // Generate token for the main user if it doesn't exist
+            if (!livekitToken) {
+                const userToken = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }));
+                if (!isCancelled) setLivekitToken(userToken);
+            }
 
-            // If user is the DJ, generate a separate token for the Jukebox identity
-            if (isDJ) {
+            // If user is the DJ, generate a separate token for the Jukebox identity if it doesn't exist
+            if (isDJ && !jukeboxToken) {
                  const jbToken = await generateLiveKitToken(params.roomId, `${user.uid}-jukebox`, 'Jukebox', JSON.stringify({ isJukebox: true }));
                  if (!isCancelled) setJukeboxToken(jbToken);
-            } else if (jukeboxToken) {
-                setJukeboxToken(undefined); // Clear jukebox token if not DJ
+            } else if (!isDJ && jukeboxToken) {
+                // If the user is no longer the DJ, clear the jukebox token.
+                setJukeboxToken(undefined);
             }
 
         } catch (e: any) {
@@ -548,8 +533,6 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
-                                isPlayerVisible={isPlayerVisible}
-                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -593,12 +576,10 @@ function RoomPageContent() {
                                 djId={room.djId}
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
-                                isPlayerVisible={isPlayerVisible}
-                                onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
                                 <div className='space-y-6'>
-                                     {isPlayerVisible && (
+                                     {isDJ && (
                                         <div className="flex flex-col lg:flex-row gap-6">
                                             <div className="w-full lg:w-1/3 shrink-0">
                                                 <MusicPlayerCard
@@ -648,7 +629,7 @@ function RoomPageContent() {
                                         roomId={params.roomId}
                                         activePanels={activePanels}
                                         onTogglePanel={togglePanel}
-                                        isJukeboxVisible={isPlayerVisible}
+                                        isJukeboxVisible={isDJ}
                                     />
                                 </div>
                                 <div className='hidden'>
