@@ -75,7 +75,7 @@ async function playTrack(trackId: string, url: string) {
 
         currentTrack = await room.localParticipant.publishTrack(currentStream, {
             name: 'jukebox-audio',
-            source: 'jukebox',
+            source: 'unknown',
             audioPreset: AudioPresets.musicHighQuality,
         });
 
