@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, 'react';
+import React from 'react';
 import {
   Headphones,
   Mic,
@@ -132,10 +132,12 @@ export default function UserCard({
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   React.useEffect(() => {
+    // This effect is responsible for syncing the LiveKit speaking status to Firestore.
     if (userInRoomRef && isSpeaking !== firestoreUser?.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
   }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
+
 
   const tracks = useTracks(
       [LivekitClient.Track.Source.Microphone], 

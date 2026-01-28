@@ -9,7 +9,6 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
-import * as LivekitClient from 'livekit-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -118,19 +117,17 @@ export default function UserList({ roomId }: { roomId: string }) {
   }, [micDevices, setMicDevice]);
 
 
-  // Effect to publish/unpublish the microphone track
+  // This effect ensures the local participant's microphone is enabled with the correct device.
+  // The <LiveKitRoom> component handles the initial publication. This effect handles changes.
   useEffect(() => {
-    if (!localParticipant || !activeMicId) {
-      return;
+    if (localParticipant && activeMicId) {
+      const audioOptions = { deviceId: activeMicId };
+      // setMicrophoneEnabled is idempotent and handles publishing tracks.
+      // The <LiveKitRoom> component handles unpublishing on disconnect.
+      localParticipant.setMicrophoneEnabled(true, audioOptions);
     }
-    const audioOptions: LivekitClient.AudioCaptureOptions = { deviceId: activeMicId };
-    localParticipant.setMicrophoneEnabled(true, audioOptions);
-    // NOTE: The cleanup function that called setMicrophoneEnabled(false) has been removed.
-    // This is because in React 18's Strict Mode, it causes a fast mount/unmount/remount cycle
-    // that leads to a disconnect/reconnect loop and track publishing errors.
-    // The &lt;LiveKitRoom&gt; component handles the unpublishing of tracks when the
-    // component unmounts for good (e.g., navigating away from the page).
   }, [localParticipant, activeMicId]);
+
 
   useEffect(() => {
     if (room && !room.playlist && isDj && roomRef) {
@@ -198,7 +195,7 @@ export default function UserList({ roomId }: { roomId: string }) {
     if (!isDj || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> &amp; { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
@@ -295,20 +292,20 @@ export default function UserList({ roomId }: { roomId: string }) {
           )}
 
           {allParticipants.map((participant) => {
-              const amITheLocalParticipant = participant.sid === localParticipant?.sid;
+              const isLocal = participant.sid === localParticipant?.sid;
               return (
                 <UserCard
                   key={participant.sid}
                   participant={participant}
-                  isLocal={amITheLocalParticipant}
+                  isLocal={isLocal}
                   isHost={participant.identity === room?.ownerId}
                   roomId={roomId}
-                  micDevices={amITheLocalParticipant ? micDevices : undefined}
-                  speakerDevices={amITheLocalParticipant ? speakerDevices : undefined}
-                  activeMicId={amITheLocalParticipant ? activeMicId : ''}
-                  activeSpeakerId={amITheLocalParticipant ? activeSpeakerId : ''}
-                  onMicDeviceChange={amITheLocalParticipant ? handleMicDeviceChange : undefined}
-                  onSpeakerDeviceChange={amITheLocalParticipant ? handleSpeakerDeviceChange : undefined}
+                  micDevices={isLocal ? micDevices : undefined}
+                  speakerDevices={isLocal ? speakerDevices : undefined}
+                  activeMicId={isLocal ? activeMicId : ''}
+                  activeSpeakerId={isLocal ? activeSpeakerId : ''}
+                  onMicDeviceChange={isLocal ? handleMicDeviceChange : undefined}
+                  onSpeakerDeviceChange={isLocal ? handleSpeakerDeviceChange : undefined}
                 />
               )
             })
