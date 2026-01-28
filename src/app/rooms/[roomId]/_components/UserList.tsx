@@ -44,18 +44,6 @@ export default function UserList({
     <>
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Card for Local User's Voice */}
-          {localParticipant && (
-            <UserCard
-              key={`${localParticipant.sid}-voice`}
-              participant={localParticipant}
-              isLocal={true}
-              isHost={localParticipant.identity === room?.ownerId}
-              roomId={roomId}
-              isJukebox={false}
-            />
-          )}
-
           {/* Card for Jukebox */}
           {jukeboxParticipant && isJukeboxVisible && (
              <UserCard
@@ -67,6 +55,18 @@ export default function UserList({
               isJukebox={true}
               onTogglePanel={onTogglePanel}
               activePanels={activePanels}
+            />
+          )}
+
+          {/* Card for Local User's Voice */}
+          {localParticipant && (
+            <UserCard
+              key={`${localParticipant.sid}-voice`}
+              participant={localParticipant}
+              isLocal={true}
+              isHost={localParticipant.identity === room?.ownerId}
+              roomId={roomId}
+              isJukebox={false}
             />
           )}
 
