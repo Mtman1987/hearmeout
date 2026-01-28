@@ -1,3 +1,4 @@
+
 'use client';
 
 import Image from "next/image";
@@ -79,9 +80,9 @@ export default function MusicPlayerCard({
   
   const handleSeekCommit = (value: number[]) => {
     // Seeking a live stream is disabled for now.
-    // if (isPlayerControlAllowed) {
-    //     onSeek(value[0]);
-    // }
+    if (isPlayerControlAllowed) {
+        onSeek(value[0]);
+    }
     setIsSeeking(false);
     // After commit, we want the slider to reflect the actual progress again
     // so we snap it back to the prop value.

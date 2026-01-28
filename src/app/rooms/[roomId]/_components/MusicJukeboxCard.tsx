@@ -22,9 +22,10 @@ interface MusicJukeboxCardProps {
   trackRef: TrackReference | undefined;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
+  onPlayNext: () => void;
 }
 
-export default function MusicJukeboxCard({ trackRef, activePanels, onTogglePanel }: MusicJukeboxCardProps) {
+export default function MusicJukeboxCard({ trackRef, activePanels, onTogglePanel, onPlayNext }: MusicJukeboxCardProps) {
   const [volume, setVolume] = useState(0.5);
   const { volume: trackVolume, isMuted: isTrackMuted } = useTrackVolume(trackRef);
   const lastNonZeroVolume = useRef(0.5);
@@ -50,7 +51,7 @@ export default function MusicJukeboxCard({ trackRef, activePanels, onTogglePanel
 
   return (
     <>
-      {trackRef && <AudioTrack trackRef={trackRef} volume={volume} />}
+      {trackRef && <AudioTrack trackRef={trackRef} onEnded={onPlayNext} volume={volume} />}
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
           <div className="flex items-start gap-4">

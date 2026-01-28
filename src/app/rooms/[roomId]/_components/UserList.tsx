@@ -318,11 +318,12 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   // Manual seek from the DJ's remote control.
   const handleSeek = (seconds: number) => {
-      // Seeking a live stream is complex. For now, we will simply update the local UI.
-      // A more advanced implementation might send a seek command to the streamer.
       if(isDj) {
+        // This is a complex operation in a streaming setup.
+        // For now, we will simply update the local DJ's progress bar.
+        // A full implementation would require sending a 'seek' event to all listeners,
+        // which is beyond the current scope.
         setLocalProgress(seconds);
-        // This is a no-op for now as we don't have a way to seek the stream for all users.
       }
   };
 
@@ -391,6 +392,7 @@ export default function UserList({ roomId }: { roomId: string }) {
               trackRef={jukeboxTrackRef}
               activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
+              onPlayNext={isDj ? handlePlayNext : () => {}}
             />
           )}
 
