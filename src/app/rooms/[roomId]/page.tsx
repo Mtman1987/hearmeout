@@ -28,6 +28,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
@@ -194,6 +202,9 @@ function RoomPageContent() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const [speakerDevices, setSpeakerDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('default');
+
   const playerRef = useRef<ReactPlayer>(null);
 
   const roomRef = useMemoFirebase(() => {
@@ -202,6 +213,43 @@ function RoomPageContent() {
   }, [firestore, params.roomId]);
 
   const { data: room, isLoading: isRoomLoading } = useDoc<RoomData>(roomRef);
+
+  useEffect(() => {
+    // This effect populates the speaker devices dropdown.
+    navigator.mediaDevices.enumerateDevices().then(devices => {
+        setSpeakerDevices(devices.filter(d => d.kind === 'audiooutput'));
+    });
+
+    // This listener is for when devices change (e.g., plugging in headphones).
+    const handleDeviceChange = () => {
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            setSpeakerDevices(devices.filter(d => d.kind === 'audiooutput'));
+        });
+    };
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    // This effect sets the audio output device for the ReactPlayer.
+    const player = playerRef.current?.getInternalPlayer();
+    // The 'setSinkId' function is available on HTMLMediaElement (like <video> or <audio>).
+    if (player && 'setSinkId' in player && typeof (player as any).setSinkId === 'function') {
+        try {
+            (player as any).setSinkId(selectedSpeakerId);
+        } catch (error) {
+            console.error('Failed to set audio output device:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Audio Output Error',
+                description: 'Could not switch the audio output device for the player.',
+            });
+        }
+    }
+  }, [selectedSpeakerId, toast]);
+
 
   const currentTrack = room?.playlist?.find(t => t.id === room.currentTrackId);
   
@@ -279,6 +327,7 @@ function RoomPageContent() {
                   photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
                   isSpeaking: false,
               };
+              // Wait for the user document to be created before proceeding.
               await setDoc(userInRoomRef, participantData, { merge: true });
 
               const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
@@ -414,7 +463,7 @@ function RoomPageContent() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="mt-auto pt-6">
+                                <div className="mt-auto pt-6 space-y-4">
                                     <p className="text-xs text-muted-foreground mb-2">DEBUG: ReactPlayer</p>
                                     <ReactPlayer
                                       ref={playerRef}
@@ -427,6 +476,21 @@ function RoomPageContent() {
                                       width="100%"
                                       height="60px"
                                     />
+                                    <div className="flex items-center gap-4">
+                                        <Label htmlFor="player-output" className="text-muted-foreground">Player Output</Label>
+                                        <Select onValueChange={setSelectedSpeakerId} value={selectedSpeakerId}>
+                                            <SelectTrigger id="player-output" className="w-[350px]">
+                                                <SelectValue placeholder="Select an output device" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {speakerDevices.map(device => (
+                                                    <SelectItem key={device.deviceId} value={device.deviceId}>
+                                                        {device.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                             </main>
                         </LiveKitRoom>
