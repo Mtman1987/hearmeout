@@ -15,7 +15,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Copy, MessageSquare, X, LoaderCircle, Headphones } from 'lucide-react';
+import { Copy, MessageSquare, X, LoaderCircle, Headphones, Music } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
@@ -147,14 +147,18 @@ const DiscordIcon = () => (
 );
 
 
-function RoomHeader({ 
-    roomName, 
-    onToggleChat, 
+function RoomHeader({
+    roomName,
+    onToggleChat,
     isConnected,
-} : { 
-    roomName: string, 
-    onToggleChat: () => void, 
+    isDJ,
+    onTogglePlayer,
+}: {
+    roomName: string,
+    onToggleChat: () => void,
     isConnected: boolean,
+    isDJ: boolean,
+    onTogglePlayer: () => void,
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -196,6 +200,19 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
+                {isDJ && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={onTogglePlayer}>
+                                <Music className="h-4 w-4" />
+                                <span className="sr-only">Toggle Music Player</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Toggle Music Player</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="outline" size="icon" onClick={handlePostToDiscord}>
@@ -246,6 +263,7 @@ function RoomPageContent() {
   const [livekitToken, setLivekitToken] = useState<string | undefined>(undefined);
   const [jukeboxToken, setJukeboxToken] = useState<string | undefined>(undefined);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const [isPlayerVisible, setIsPlayerVisible] = useState(false);
   
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const [progress, setProgress] = useState(0);
@@ -279,11 +297,6 @@ function RoomPageContent() {
       setAudioContext(context);
       setAudioDestination(context.createMediaStreamDestination());
     }
-    return () => {
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close().catch(console.error);
-      }
-    };
   }, [userHasInteracted, audioContext, isDJ]);
 
   // Connect ReactPlayer to audio destination
@@ -365,6 +378,27 @@ function RoomPageContent() {
         playerRef.current.seekTo(seconds, 'seconds');
     }
   };
+
+  useEffect(() => {
+      setProgress(0);
+      setDuration(currentTrack?.duration || 0);
+  }, [currentTrack]);
+  
+  useEffect(() => {
+      if (room?.isPlaying && isDJ) {
+          const interval = setInterval(() => {
+              setProgress(prev => {
+                  const newProgress = prev + 1;
+                  if (newProgress >= duration) {
+                      handlePlayNext();
+                      return 0;
+                  }
+                  return newProgress;
+              });
+          }, 1000);
+          return () => clearInterval(interval);
+      }
+  }, [room?.isPlaying, duration, isDJ, handlePlayNext]);
 
  useEffect(() => {
     if (isUserLoading || !user || !firestore || !params.roomId || livekitToken || !room) return;
@@ -453,6 +487,8 @@ function RoomPageContent() {
                                 roomName={room?.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={false}
+                                isDJ={isDJ}
+                                onTogglePlayer={() => setIsPlayerVisible(p => !p)}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -493,6 +529,8 @@ function RoomPageContent() {
                                 roomName={room.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 isConnected={true}
+                                isDJ={isDJ}
+                                onTogglePlayer={() => setIsPlayerVisible(p => !p)}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -505,7 +543,7 @@ function RoomPageContent() {
                                         />
                                     </div>
                                     <div className="lg:col-span-2 space-y-6">
-                                        {isDJ && (
+                                        {isDJ && isPlayerVisible && (
                                             <MusicPlayerCard 
                                                 currentTrack={currentTrack}
                                                 progress={progress}
