@@ -82,12 +82,14 @@ function RoomHeader({
     roomName, 
     onToggleChat, 
     onMusicIconClick,
-    showMusicIcon 
+    showMusicIcon,
+    isConnected,
 } : { 
     roomName: string, 
     onToggleChat: () => void, 
     onMusicIconClick: () => void,
-    showMusicIcon: boolean
+    showMusicIcon: boolean,
+    isConnected: boolean,
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -125,7 +127,7 @@ function RoomHeader({
 
             <div className="flex-1 flex items-center gap-4 truncate">
                 <h2 className="text-xl font-bold font-headline truncate">{roomName}</h2>
-                <ConnectionStatusIndicator />
+                {isConnected && <ConnectionStatusIndicator />}
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
@@ -315,6 +317,7 @@ function RoomPageContent() {
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 onMusicIconClick={handleMusicIconClick}
                                 showMusicIcon={showMusicIcon}
+                                isConnected={false}
                             />
                             <div className="flex-1 flex flex-col items-center justify-center">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
@@ -346,6 +349,7 @@ function RoomPageContent() {
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 onMusicIconClick={handleMusicIconClick}
                                 showMusicIcon={showMusicIcon}
+                                isConnected={true}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
                                 <UserList roomId={params.roomId} />
