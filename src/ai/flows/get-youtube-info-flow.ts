@@ -10,10 +10,11 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { YouTube } from 'youtube-sr';
+import ytdl from 'ytdl-core';
 import { PlaylistItem } from '@/app/rooms/[roomId]/_components/Playlist';
 
 const GetYoutubeInfoInputSchema = z.object({
-  url: z.string().url().describe('The YouTube URL for a video or playlist.'),
+  url: z.string().describe('The YouTube URL for a video or playlist.'),
 });
 export type GetYoutubeInfoInput = z.infer<typeof GetYoutubeInfoInputSchema>;
 
@@ -66,31 +67,71 @@ const getYoutubeInfoFlow = ai.defineFlow(
         const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
         if (!playlist || playlist.videos.length === 0) return [];
         
-        return playlist.videos.map((video): PlaylistItem => ({
-          id: video.id!,
-          title: video.title || 'Untitled',
-          artist: video.channel?.name || 'Unknown Artist',
-          url: video.url,
-          artId: selectArtId(video.id!),
-          duration: video.duration / 1000,
-        }));
+        // Note: duration from youtube-sr on playlist items can be unreliable.
+        return playlist.videos
+            .filter(video => video.id)
+            .map((video): PlaylistItem => ({
+              id: video.id!,
+              title: video.title || 'Untitled',
+              artist: video.channel?.name || 'Unknown Artist',
+              url: video.url,
+              artId: selectArtId(video.id!),
+              // duration is in ms, convert to seconds. Fallback to 0 if not present.
+              duration: video.duration ? video.duration / 1000 : 0, 
+            }));
 
-      } else {
-        const video = await YouTube.getVideo(input.url);
-        if (!video || !video.id) return [];
+      } else if (ytdl.validateURL(input.url)) {
+        const info = await ytdl.getInfo(input.url);
+        const videoDetails = info.videoDetails;
 
         return [{
-          id: video.id,
-          title: video.title || 'Untitled',
-          artist: video.channel?.name || 'Unknown Artist',
-          url: video.url,
-          artId: selectArtId(video.id),
-          duration: video.duration / 1000,
+          id: videoDetails.videoId,
+          title: videoDetails.title,
+          artist: videoDetails.author.name,
+          url: videoDetails.video_url,
+          artId: selectArtId(videoDetails.videoId),
+          duration: parseInt(videoDetails.lengthSeconds, 10),
         }];
+      } else {
+        // Fallback to youtube-sr for general search if not a valid URL for ytdl
+         const searchResults = await YouTube.search(input.url, { limit: 1, type: 'video' });
+         if (!searchResults || searchResults.length === 0 || !searchResults[0].id) {
+             return [];
+         }
+         const video = searchResults[0];
+         // Get more detailed info using ytdl to ensure duration is correct
+         const info = await ytdl.getInfo(video.url);
+         const videoDetails = info.videoDetails;
+         return [{
+            id: video.id!,
+            title: videoDetails.title,
+            artist: videoDetails.author.name,
+            url: videoDetails.video_url,
+            artId: selectArtId(video.id!),
+            duration: parseInt(videoDetails.lengthSeconds, 10),
+         }];
       }
     } catch (error) {
       console.error('Failed to fetch YouTube data:', error);
-      throw new Error('Could not fetch video or playlist data from YouTube.');
+      // Fallback to a simpler search if ytdl fails for any reason
+       try {
+        const searchResults = await YouTube.search(input.url, { limit: 1, type: 'video' });
+        if (!searchResults || searchResults.length === 0 || !searchResults[0].id) {
+             throw new Error('Could not fetch video or playlist data from YouTube.');
+        }
+        const video = searchResults[0];
+        return [{
+            id: video.id!,
+            title: video.title || "Unknown Title",
+            artist: video.channel?.name || "Unknown Artist",
+            url: video.url,
+            artId: selectArtId(video.id!),
+            duration: video.duration ? video.duration / 1000 : 0
+        }]
+       } catch (searchError) {
+            console.error('Fallback YouTube search failed:', searchError);
+            throw new Error('Could not fetch video or playlist data from YouTube.');
+       }
     }
   }
 );
