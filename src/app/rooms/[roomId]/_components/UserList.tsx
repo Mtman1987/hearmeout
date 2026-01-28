@@ -57,7 +57,11 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
 
             // Unpublish any existing track first to ensure a clean slate.
             if (trackPublicationRef.current) {
-                await localParticipant.unpublishTrack(trackPublicationRef.current.track);
+                try {
+                    await localParticipant.unpublishTrack(trackPublicationRef.current.track);
+                } catch (e) {
+                    console.warn("Failed to unpublish previous track, it may have already been unpublished.", e);
+                }
                 trackPublicationRef.current = null;
             }
             
@@ -95,7 +99,7 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
             isCancelled = true;
             if (localParticipant && trackPublicationRef.current) {
                 console.log("Unpublishing jukebox audio track on cleanup.");
-                localParticipant.unpublishTrack(trackPublicationRef.current.track);
+                localParticipant.unpublishTrack(trackPublicationRef.current.track).catch(e => console.warn("Failed to unpublish jukebox track on cleanup:", e));
                 trackPublicationRef.current = null;
             }
         };
@@ -167,7 +171,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const isDj = user?.uid === room?.djId;
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
-  const canShowMusicPanels = isDj || jukeboxTrackRef;
+  const canShowMusicPanels = isDj || (!!jukeboxTrackRef && (activePanels.add || activePanels.playlist));
   
   const handleForceJukeboxRestart = () => {
     setJukeboxStreamerKey(k => k + 1);
@@ -401,14 +405,13 @@ export default function UserList({ roomId }: { roomId: string }) {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {jukeboxTrackRef && (
-            <MusicJukeboxCard 
-              trackRef={jukeboxTrackRef}
-              activePanels={activePanels}
-              onTogglePanel={handleTogglePanel}
-              onPlayNext={isDj ? handlePlayNext : () => {}}
-            />
-          )}
+          <MusicJukeboxCard 
+            key={jukeboxStreamerKey}
+            trackRef={jukeboxTrackRef}
+            activePanels={activePanels}
+            onTogglePanel={handleTogglePanel}
+            onPlayNext={isDj ? handlePlayNext : () => {}}
+          />
 
           {allParticipants.map((participant) => {
               const isLocal = participant.sid === localParticipant?.sid;
