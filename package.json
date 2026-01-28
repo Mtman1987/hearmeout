@@ -61,7 +61,6 @@
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "tmi.js": "^1.8.5",
-    "ytdl-core": "^4.11.5",
     "youtube-sr": "^4.3.11",
     "zod": "^3.24.2"
   },

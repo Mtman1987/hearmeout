@@ -7,7 +7,6 @@ import {
   MicOff,
   MoreVertical,
   Move,
-  Music,
   Pen,
   ShieldOff,
   Trash2,
@@ -15,8 +14,6 @@ import {
   Volume2,
   VolumeX,
   LoaderCircle,
-  Youtube,
-  ListMusic,
   LogOut,
 } from 'lucide-react';
 import { useTracks, AudioTrack, useRoomContext } from '@livekit/components-react';
@@ -82,17 +79,11 @@ export default function UserCard({
     isLocal,
     isHost,
     roomId,
-    isJukebox,
-    onTogglePanel,
-    activePanels,
 }: {
     participant: LivekitClient.Participant;
     isLocal: boolean;
     isHost?: boolean;
     roomId: string;
-    isJukebox?: boolean;
-    onTogglePanel?: (panel: 'playlist' | 'add') => void;
-    activePanels?: { playlist: boolean, add: boolean };
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
@@ -109,7 +100,7 @@ export default function UserCard({
   const { devices: audioInputDevices, activeDeviceId: activeAudioInputDeviceId, setDevice: setAudioInputDevice } = useAudioDevice({ kind: 'audioinput' });
   const { devices: audioOutputDevices, activeDeviceId: activeAudioOutputDeviceId, setDevice: setAudioOutputDevice } = useAudioDevice({ kind: 'audiooutput' });
 
-  const trackSource = isJukebox ? LivekitClient.Track.Source.ScreenShareAudio : LivekitClient.Track.Source.Microphone;
+  const trackSource = LivekitClient.Track.Source.Microphone;
   const tracks = useTracks([trackSource], { participant });
   const audioTrackRef = tracks[0];
 
@@ -145,25 +136,25 @@ export default function UserCard({
   };
 
   const userInRoomRef = useMemoFirebase(() => {
-    if (!firestore || !roomId || !identity || isJukebox) return null;
+    if (!firestore || !roomId || !identity) return null;
     return doc(firestore, 'rooms', roomId, 'users', identity);
-  }, [firestore, roomId, identity, isJukebox]);
+  }, [firestore, roomId, identity]);
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef, {
       ignoreUpdates: (data) => 'isSpeaking' in data
   });
   
   const handleToggleMic = async () => {
-    if (isLocal && !isJukebox) {
+    if (isLocal) {
         await participant.setMicrophoneEnabled(!participant.isMicrophoneEnabled);
     }
   };
   
-  const isMuted = isJukebox ? false : !participant.isMicrophoneEnabled;
+  const isMuted = !participant.isMicrophoneEnabled;
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = isJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
-  const photoURL = isJukebox ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
+  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
+  const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
   
   const handleLeaveRoom = () => {
     room.disconnect();
@@ -203,18 +194,10 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        {isJukebox ? (
-                            <AvatarFallback>
-                                <Music className="h-8 w-8" />
-                            </AvatarFallback>
-                        ) : (
-                            <>
-                                <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
-                                <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
-                            </>
-                        )}
+                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
-                     {(isMuted && !isJukebox) && (
+                     {isMuted && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
                             <MicOff className="w-3 h-3 text-destructive-foreground" />
                         </div>
@@ -222,30 +205,7 @@ export default function UserCard({
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-lg truncate">{displayName}</p>
-                    {isJukebox ? (
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant={activePanels?.playlist ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('playlist')} aria-label="Toggle Playlist" className="h-8 w-8">
-                                        <ListMusic className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Up Next</p>
-                                </TooltipContent>
-                            </Tooltip>
-                             <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant={activePanels?.add ? "secondary" : "ghost"} size="icon" onClick={() => onTogglePanel?.('add')} aria-label="Add Music" className="h-8 w-8">
-                                        <Youtube className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Add Music</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </div>
-                    ) : (isLocal) ? (
+                    {(isLocal) ? (
                          <div className="flex items-center gap-1 text-muted-foreground">
                             <Tooltip>
                                 <TooltipTrigger asChild>

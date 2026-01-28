@@ -29,7 +29,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AudioVisualizer } from "./AudioVisualizer";
 
 type MusicPlayerCardProps = {
   currentTrack: PlaylistItem | undefined;
@@ -144,8 +143,6 @@ export default function MusicPlayerCard({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
-        
-        {currentTrack && <div className="px-2 pb-2"><AudioVisualizer isSpeaking={playing} /></div>}
 
         <div className="pt-2">
             <Slider
