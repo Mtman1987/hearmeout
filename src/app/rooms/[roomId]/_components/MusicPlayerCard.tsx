@@ -17,6 +17,8 @@ import {
   Music,
   Youtube,
   ListMusic,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -25,6 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Slider } from "@/components/ui/slider";
 
 type MusicPlayerCardProps = {
   currentTrack: PlaylistItem | undefined;
@@ -35,6 +38,8 @@ type MusicPlayerCardProps = {
   onPlayPrev: () => void;
   onTogglePanel?: (panel: 'playlist' | 'add') => void;
   activePanels?: { playlist: boolean, add: boolean };
+  volume: number;
+  onVolumeChange: (volume: number) => void;
 };
 
 export default function MusicPlayerCard({
@@ -46,13 +51,27 @@ export default function MusicPlayerCard({
   onPlayPrev,
   onTogglePanel,
   activePanels,
+  volume,
+  onVolumeChange
 }: MusicPlayerCardProps) {
 
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
+  const isMuted = volume === 0;
+  const lastNonZeroVolume = React.useRef(volume);
+
+  React.useEffect(() => {
+    if(volume > 0) {
+      lastNonZeroVolume.current = volume;
+    }
+  }, [volume])
 
   const handlePlayPause = () => isPlayerControlAllowed && currentTrack && onPlayPause(!playing);
   const handlePlayNextWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayNext();
   const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
+  
+  const toggleMute = () => {
+    onVolumeChange(volume > 0 ? 0 : lastNonZeroVolume.current || 1);
+  };
   
   return (
     <Card className="flex flex-col h-full">
@@ -106,7 +125,7 @@ export default function MusicPlayerCard({
             )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
+      <CardContent className="flex-1 flex flex-col justify-end gap-4 p-3 sm:p-4">
        
         <div className="flex items-center justify-center gap-1">
             <Tooltip>
@@ -141,6 +160,24 @@ export default function MusicPlayerCard({
             </Tooltip>
         </div>
         
+        <div className="flex items-center gap-2 px-2">
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleMute}>
+                        {isMuted ? <VolumeX className="h-4 w-4"/> : <Volume2 className="h-4 w-4"/>}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>{isMuted ? "Unmute" : "Mute"}</p>
+                </TooltipContent>
+            </Tooltip>
+            <Slider
+                value={[volume]}
+                onValueChange={(value) => onVolumeChange(value[0])}
+                max={1}
+                step={0.05}
+            />
+        </div>
       </CardContent>
     </Card>
   );

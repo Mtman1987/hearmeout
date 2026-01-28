@@ -12,7 +12,6 @@ export type PlaylistItem = {
   artId: string;
   url: string;
   duration: number;
-  streamUrl?: string;
 };
 
 export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlayerControlAllowed, onRemoveSong }: { 

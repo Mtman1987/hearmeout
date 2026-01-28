@@ -18,7 +18,6 @@ import { Copy, MessageSquare, X, LoaderCircle, Headphones, Music } from 'lucide-
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import ChatBox from './_components/ChatBox';
-import { JukeboxConnection } from './_components/JukeboxConnection';
 import MusicPlayerCard from './_components/MusicPlayerCard';
 import PlaylistPanel from './_components/PlaylistPanel';
 import AddMusicPanel from './_components/AddMusicPanel';
@@ -33,6 +32,8 @@ import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, setDoc
 import { doc } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 import { PlaylistItem } from './_components/Playlist';
+import ReactPlayer from 'react-player/youtube';
+
 
 interface RoomData {
   id: string;
@@ -95,20 +96,16 @@ function RoomHeader({
     roomName,
     onToggleChat,
     isDJ,
-    djId,
-    isOwner,
     onClaimDJ,
     onRelinquishDJ,
-    showDJButton
+    isOwner,
 }: {
     roomName: string,
     onToggleChat: () => void,
     isDJ: boolean,
-    djId: string | undefined,
-    isOwner: boolean,
     onClaimDJ: () => void,
     onRelinquishDJ: () => void;
-    showDJButton: boolean;
+    isOwner: boolean;
 }) {
     const { isMobile } = useSidebar();
     const params = useParams();
@@ -149,22 +146,20 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
-                {showDJButton && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                             <Button 
-                                variant="outline" 
-                                size="icon" 
-                                onClick={isDJ ? onRelinquishDJ : onClaimDJ}
-                                >
-                                <Music className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{isDJ ? 'Stop being the DJ' : 'Become the DJ'}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                )}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                         <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={isDJ ? onRelinquishDJ : onClaimDJ}
+                            >
+                            <Music className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{isDJ ? 'Stop being the DJ' : 'Become the DJ'}</p>
+                    </TooltipContent>
+                </Tooltip>
                 
                 {isOwner && (
                     <Tooltip>
@@ -219,6 +214,7 @@ function RoomPageContent() {
   const [voiceToken, setVoiceToken] = useState<string | undefined>(undefined);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const [activePanels, setActivePanels] = useState({ playlist: true, add: true });
+  const [volume, setVolume] = useState(0.5);
   
   const roomRef = useMemoFirebase(() => {
       if (!firestore || !params.roomId) return null;
@@ -234,9 +230,7 @@ function RoomPageContent() {
   
   const isDJ = !!user && !!room?.djId && user.uid === room.djId;
   const isOwner = !!user && !!room?.ownerId && user.uid === room.ownerId;
-  const djAudioRef = useRef<HTMLAudioElement>(null);
-
-
+  
   const handleClaimDJ = useCallback(() => {
     if (!roomRef || !user) {
         toast({ variant: 'destructive', title: 'Authentication Error', description: 'You must be signed in to become the DJ.' });
@@ -321,39 +315,39 @@ function RoomPageContent() {
     const currentTrack = room?.playlist?.find((t: any) => t.id === room.currentTrackId);
 
     const handlePlayNext = useCallback(() => {
-        if (!room || !roomRef) return;
+        if (!room || !roomRef || !isDJ) return;
         const { playlist, currentTrackId } = room;
         if (!playlist || playlist.length === 0) return;
         const currentIndex = playlist.findIndex((t: any) => t.id === currentTrackId);
         const nextIndex = (currentIndex + 1) % playlist.length;
         updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[nextIndex].id, isPlaying: true });
-    }, [room, roomRef]);
+    }, [room, roomRef, isDJ]);
 
     const handlePlayPrev = useCallback(() => {
-        if (!room || !roomRef) return;
+        if (!room || !roomRef || !isDJ) return;
         const { playlist, currentTrackId } = room;
         if (!playlist || playlist.length === 0) return;
         const currentIndex = playlist.findIndex((t: any) => t.id === currentTrackId);
         const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
         updateDocumentNonBlocking(roomRef, { currentTrackId: playlist[prevIndex].id, isPlaying: true });
-    }, [room, roomRef]);
+    }, [room, roomRef, isDJ]);
 
     const handlePlaySong = useCallback((songId: string) => {
-        if (roomRef) updateDocumentNonBlocking(roomRef, { currentTrackId: songId, isPlaying: true });
-    }, [roomRef]);
+        if (roomRef && isDJ) updateDocumentNonBlocking(roomRef, { currentTrackId: songId, isPlaying: true });
+    }, [roomRef, isDJ]);
     
     const handleRemoveSong = useCallback((songId: string) => {
-        if (!room || !roomRef) return;
+        if (!room || !roomRef || !isDJ) return;
         const newPlaylist = room.playlist.filter((s: any) => s.id !== songId);
         updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
-    }, [room, roomRef]);
+    }, [room, roomRef, isDJ]);
     
     const handleClearPlaylist = useCallback(() => {
-        if (roomRef) updateDocumentNonBlocking(roomRef, { playlist: [], currentTrackId: '', isPlaying: false });
-    }, [roomRef]);
+        if (roomRef && isDJ) updateDocumentNonBlocking(roomRef, { playlist: [], currentTrackId: '', isPlaying: false });
+    }, [roomRef, isDJ]);
 
     const handleAddItems = useCallback((items: PlaylistItem[]) => {
-        if (!room || !roomRef) return;
+        if (!room || !roomRef || !isDJ) return;
         const currentPlaylist = room.playlist || [];
         const newPlaylist = [...currentPlaylist, ...items];
         const updates: any = { playlist: newPlaylist };
@@ -363,31 +357,15 @@ function RoomPageContent() {
             setActivePanels({ playlist: true, add: true });
         }
         updateDocumentNonBlocking(roomRef, updates);
-    }, [room, roomRef]);
+    }, [room, roomRef, isDJ]);
 
     const togglePanel = (panel: 'playlist' | 'add') => {
         setActivePanels(prev => ({ ...prev, [panel]: !prev[panel] }));
     };
 
     const handlePlayPause = useCallback((playing: boolean) => {
-        if (roomRef) updateDocumentNonBlocking(roomRef, { isPlaying: playing });
-    }, [roomRef]);
-
-    useEffect(() => {
-        if (!isDJ || !djAudioRef.current) return;
-        const audio = djAudioRef.current;
-        const shouldBePlaying = room?.isPlaying && currentTrack?.streamUrl;
-    
-        if (shouldBePlaying) {
-            if (audio.src !== currentTrack.streamUrl) {
-                audio.src = currentTrack.streamUrl;
-            }
-            audio.play().catch(e => console.error("DJ local player failed to play:", e));
-        } else {
-            audio.pause();
-        }
-    }, [isDJ, room?.isPlaying, currentTrack]);
-
+        if (roomRef && isDJ) updateDocumentNonBlocking(roomRef, { isPlaying: playing });
+    }, [roomRef, isDJ]);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading;
@@ -432,6 +410,24 @@ function RoomPageContent() {
         )}>
             <SidebarInset>
                 <div className="flex flex-col h-screen relative">
+                     <div className="hidden">
+                         <ReactPlayer
+                            url={currentTrack?.url}
+                            playing={room.isPlaying}
+                            volume={volume}
+                            onEnded={handlePlayNext}
+                            width="1px"
+                            height="1px"
+                            config={{
+                                youtube: {
+                                    playerVars: {
+                                        autoplay: 1,
+                                        controls: 0,
+                                    }
+                                }
+                            }}
+                         />
+                     </div>
                     {!livekitUrl ? (
                          <div className="flex-1 flex items-center justify-center text-center">
                             <p className="text-destructive">LiveKit URL is not configured.</p>
@@ -453,14 +449,6 @@ function RoomPageContent() {
                         </>
                     ) : (
                         <>
-                           {isDJ && (
-                                <audio 
-                                    ref={djAudioRef}
-                                    onEnded={handlePlayNext}
-                                    style={{ display: 'none' }}
-                                    crossOrigin="anonymous"
-                                />
-                            )}
                             <LiveKitRoom
                                 serverUrl={livekitUrl}
                                 token={voiceToken}
@@ -472,20 +460,17 @@ function RoomPageContent() {
                                     toast({ variant: 'destructive', title: 'Connection Error', description: err.message, });
                                 }}
                             >
-                                {isDJ && <JukeboxConnection roomData={room} />}
                                 <RoomHeader
                                     roomName={room.name}
                                     onToggleChat={() => setChatOpen(!chatOpen)}
                                     isDJ={isDJ}
-                                    djId={room.djId}
-                                    isOwner={isOwner}
                                     onClaimDJ={handleClaimDJ}
                                     onRelinquishDJ={handleRelinquishDJ}
-                                    showDJButton={!!user && (!room.djId || isDJ)}
+                                    isOwner={isOwner}
                                 />
                                 
                                 <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-                                    {isDJ && (
+                                    {isDJ ? (
                                         <>
                                             <div className="flex flex-col lg:flex-row gap-6">
                                                 <div className="lg:w-1/3 shrink-0">
@@ -498,6 +483,8 @@ function RoomPageContent() {
                                                         onPlayPrev={handlePlayPrev}
                                                         onTogglePanel={togglePanel}
                                                         activePanels={activePanels}
+                                                        volume={volume}
+                                                        onVolumeChange={setVolume}
                                                     />
                                                 </div>
                                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
@@ -525,7 +512,15 @@ function RoomPageContent() {
                                                 </div>
                                             </div>
                                         </>
-                                    )}
+                                     ) : (
+                                        room.djDisplayName && (
+                                            <div className="text-center text-muted-foreground py-16">
+                                                <h3 className="text-xl font-semibold">{room.djDisplayName} is the DJ</h3>
+                                                <p className="mt-2">Sit back and enjoy the music!</p>
+                                            </div>
+                                        )
+                                     )
+                                    }
 
                                     <UserList 
                                         roomId={params.roomId}
