@@ -597,7 +597,7 @@ function RoomPageContent() {
                                 onTogglePlayer={() => setIsPlayerVisible(!isPlayerVisible)}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
-                                {isPlayerVisible && (
+                                {isPlayerVisible && isDJ && (
                                     <div className="flex flex-col lg:flex-row gap-6">
                                         <div className="w-full lg:w-1/3 shrink-0">
                                             <MusicPlayerCard
@@ -643,7 +643,7 @@ function RoomPageContent() {
                                     roomId={params.roomId}
                                     activePanels={activePanels}
                                     onTogglePanel={togglePanel}
-                                    isJukeboxVisible={isPlayerVisible}
+                                    isJukeboxVisible={isPlayerVisible && isDJ}
                                 />
                                 <div className='hidden'>
                                      {isDJ && (

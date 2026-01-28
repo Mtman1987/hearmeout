@@ -6,6 +6,8 @@ import { useFirebase, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
 import '@livekit/components-styles';
+import { Card, CardContent } from "@/components/ui/card";
+import { LoaderCircle } from "lucide-react";
 
 export interface RoomData {
   name: string;
@@ -45,17 +47,26 @@ export default function UserList({
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card for Jukebox */}
-          {jukeboxParticipant && isJukeboxVisible && (
-             <UserCard
-              key={jukeboxParticipant.sid}
-              participant={jukeboxParticipant}
-              isLocal={false}
-              isHost={false} 
-              roomId={roomId}
-              isJukebox={true}
-              onTogglePanel={onTogglePanel}
-              activePanels={activePanels}
-            />
+          {isJukeboxVisible && (
+            jukeboxParticipant ? (
+              <UserCard
+                key={jukeboxParticipant.sid}
+                participant={jukeboxParticipant}
+                isLocal={false}
+                isHost={false} 
+                roomId={roomId}
+                isJukebox={true}
+                onTogglePanel={onTogglePanel}
+                activePanels={activePanels}
+              />
+            ) : (
+              <Card className="flex flex-col h-full">
+                <CardContent className="p-4 flex flex-col gap-4 flex-grow items-center justify-center">
+                    <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-muted-foreground text-sm">Connecting Jukebox...</p>
+                </CardContent>
+              </Card>
+            )
           )}
 
           {/* Card for Local User's Voice */}
