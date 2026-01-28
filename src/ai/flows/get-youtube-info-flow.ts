@@ -1,18 +1,14 @@
 'use server';
 /**
- * @fileOverview A flow to fetch information about YouTube videos and playlists,
- * download them as MP3s, and return their public URLs.
+ * @fileOverview A flow to fetch information about YouTube videos and playlists.
  *
- * - getYoutubeInfo - A function that fetches data for a given YouTube URL.
+ * - getYoutubeInfo - A function that fetches data for a given YouTube URL or search query.
  * - GetYoutubeInfoInput - The input type for the getYoutubeInfo function.
  * - GetYoutubeInfoOutput - The return type for the getYoutubeInfo function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'zod';
-import YoutubeMp3Downloader from 'youtube-mp3-downloader';
-import path from 'path';
-import fs from 'fs';
 import { PlaylistItem } from '@/types/playlist';
 import { google } from 'googleapis';
 
@@ -43,20 +39,6 @@ export async function getYoutubeInfo(
 ): Promise<GetYoutubeInfoOutput> {
   return getYoutubeInfoFlow(input);
 }
-
-
-// --- Downloader Configuration ---
-
-const audioOutputPath = path.join(process.cwd(), 'public', 'audio');
-fs.mkdirSync(audioOutputPath, { recursive: true });
-
-const YD = new YoutubeMp3Downloader({
-    ffmpegPath: "ffmpeg", // Assumes FFmpeg is in PATH.
-    outputPath: audioOutputPath,
-    youtubeVideoQuality: "highestaudio",
-    queueParallelism: 3, // Download 3 songs in parallel
-    progressTimeout: 1000,
-});
 
 
 // --- Helper Functions ---
@@ -91,57 +73,6 @@ function parseYouTubePlaylistId(url: string): string | null {
     return match ? match[1] : null;
 }
 
-
-/**
- * Wraps the youtube-mp3-downloader in a Promise to be used with async/await.
- * This is necessary because the library uses event emitters (.on('finished', ...))
- * instead of returning a promise directly.
- * @param videoId The ID of the YouTube video to download.
- * @returns A Promise that resolves with the PlaylistItem data.
- */
-function downloadVideoAsPromise(videoId: string, title: string, artist: string): Promise<PlaylistItem> {
-    return new Promise((resolve, reject) => {
-        // Start the download
-        YD.download(videoId, `${videoId}.mp3`);
-
-        const onFinished = (err: any, data: any) => {
-            // The 'finished' event triggers for ANY completed download, so we must check the videoId.
-            if (data && data.videoId === videoId) {
-                // Cleanup listeners to prevent memory leaks
-                YD.removeListener("finished", onFinished);
-                YD.removeListener("error", onError);
-                
-                const publicUrl = `/audio/${path.basename(data.file)}`;
-                resolve({
-                    id: data.videoId,
-                    title: data.videoTitle || title,
-                    artist: data.artist || artist,
-                    url: publicUrl,
-                    artId: selectArtId(data.videoId),
-                    duration: data.stats?.runtime || 0,
-                });
-            }
-        };
-
-        const onError = (error: any, data: any) => {
-             // The 'error' event also triggers for any download, so check the videoId.
-            if (data && data.videoId === videoId) {
-                // Cleanup listeners to prevent memory leaks
-                YD.removeListener("finished", onFinished);
-                YD.removeListener("error", onError);
-                
-                console.error(`Download failed for ${videoId}:`, error);
-                reject(new Error(`Failed to download audio for video ${videoId}. It may be region-locked or private.`));
-            }
-        };
-
-        // Attach the listeners
-        YD.on("finished", onFinished);
-        YD.on("error", onError);
-    });
-}
-
-
 // --- Genkit Flow Definition ---
 
 const getYoutubeInfoFlow = ai.defineFlow(
@@ -152,7 +83,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-        let videosToDownload: { id: string, title: string, artist: string }[] = [];
+        let videosToProcess: { id: string, title: string, artist: string, duration: number }[] = [];
         const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
         
         if (!YOUTUBE_API_KEY) {
@@ -167,9 +98,11 @@ const getYoutubeInfoFlow = ai.defineFlow(
         const playlistId = parseYouTubePlaylistId(input.url);
         const videoId = parseYouTubeVideoId(input.url);
 
+        let videoIds: string[] = [];
+
         if (playlistId) {
             const playlistResponse = await youtube.playlistItems.list({
-                part: ['snippet'],
+                part: ['snippet,contentDetails'],
                 playlistId: playlistId,
                 maxResults: 50 // YouTube API max is 50 per page
             });
@@ -178,36 +111,16 @@ const getYoutubeInfoFlow = ai.defineFlow(
             if (!items || items.length === 0) {
                 throw new Error("Could not find that playlist or it's empty.");
             }
-            
-            videosToDownload = items
-                .filter(item => item.snippet?.resourceId?.videoId && item.snippet.title)
-                .map(item => ({
-                    id: item.snippet!.resourceId!.videoId!,
-                    title: item.snippet!.title!,
-                    artist: item.snippet!.videoOwnerChannelTitle || 'Unknown Artist'
-                }));
+            videoIds = items.map(item => item.contentDetails?.videoId).filter((id): id is string => !!id);
 
         } else if (videoId) {
-            const videoResponse = await youtube.videos.list({
-                part: ['snippet'],
-                id: [videoId]
-            });
-            const video = videoResponse.data.items?.[0];
-            if (!video || !video.id || !video.snippet?.title) {
-                throw new Error('Could not find video info for the given URL.');
-            }
-            videosToDownload.push({ 
-                id: video.id, 
-                title: video.snippet.title,
-                artist: video.snippet.channelTitle || 'Unknown Artist'
-            });
+            videoIds.push(videoId);
 
         } else {
-            // Search with the official API, but get more results
             const searchResponse = await youtube.search.list({
                 part: ['snippet'],
                 q: input.url,
-                maxResults: 10, // Get more results to choose from
+                maxResults: 10,
                 type: ['video']
             });
 
@@ -215,69 +128,63 @@ const getYoutubeInfoFlow = ai.defineFlow(
                 throw new Error(`No video found for query: "${input.url}"`);
             }
 
-            // Heuristics to find the "best" match
             const items = searchResponse.data.items;
-            let bestMatch = items[0]; // Default to the first result
+            let bestMatch = items[0]; 
 
-            // Prefer official videos, avoid common non-official types
-            const officialVideo = items.find(item => item.snippet?.title.toLowerCase().includes('official music video'));
+            const officialVideo = items.find(item => item.snippet?.title?.toLowerCase().includes('official music video'));
             const goodMatch = items.find(item => 
-                !item.snippet?.title.toLowerCase().includes('cover') &&
-                !item.snippet?.title.toLowerCase().includes('lyrics') &&
-                !item.snippet?.title.toLowerCase().includes('live') &&
-                !item.snippet?.title.toLowerCase().includes('remix')
+                !item.snippet?.title?.toLowerCase().includes('cover') &&
+                !item.snippet?.title?.toLowerCase().includes('lyrics') &&
+                !item.snippet?.title?.toLowerCase().includes('live') &&
+                !item.snippet?.title?.toLowerCase().includes('remix')
             );
             
-            if (officialVideo) {
-                bestMatch = officialVideo;
-            } else if (goodMatch) {
-                bestMatch = goodMatch;
-            }
+            if (officialVideo) bestMatch = officialVideo;
+            else if (goodMatch) bestMatch = goodMatch;
             
-            // If no good match was found, bestMatch remains items[0]
-            const searchResult = bestMatch;
-
-            if (!searchResult || !searchResult.id?.videoId || !searchResult.snippet?.title) {
-                // This case should be rare now
+            if (!bestMatch.id?.videoId) {
                 throw new Error(`No usable video found for query: "${input.url}"`);
             }
-
-            videosToDownload.push({ 
-                id: searchResult.id.videoId, 
-                title: searchResult.snippet.title,
-                artist: searchResult.snippet.channelTitle || 'Unknown Artist'
-            });
+            videoIds.push(bestMatch.id.videoId);
         }
 
-        if (videosToDownload.length === 0) {
-             throw new Error('No videos found to download.');
+        if (videoIds.length === 0) {
+             throw new Error('No videos found to process.');
         }
-        
-        const downloadPromises = videosToDownload.map(video =>
-            downloadVideoAsPromise(video.id, video.title, video.artist)
-        );
 
-        const settledResults = await Promise.allSettled(downloadPromises);
-        
-        const successfulDownloads: PlaylistItem[] = [];
-        settledResults.forEach(result => {
-            if (result.status === 'fulfilled') {
-                successfulDownloads.push(result.value);
-            } else {
-                console.error("A song failed to download:", result.reason);
-            }
+        // Get details for all video IDs
+        const videoDetailsResponse = await youtube.videos.list({
+            part: ['snippet', 'contentDetails'],
+            id: videoIds
         });
 
-        if (successfulDownloads.length === 0) {
-            throw new Error('Failed to download any songs from the request. They may be private, region-locked, or too long.');
+        if (!videoDetailsResponse.data.items || videoDetailsResponse.data.items.length === 0) {
+            throw new Error('Could not fetch video details.');
         }
 
-        return successfulDownloads;
+        const parseDuration = (duration: string): number => {
+            const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+            if (!match) return 0;
+            const hours = (parseInt(match[1]) || 0);
+            const minutes = (parseInt(match[2]) || 0);
+            const seconds = (parseInt(match[3]) || 0);
+            return hours * 3600 + minutes * 60 + seconds;
+        };
+
+        const results: PlaylistItem[] = videoDetailsResponse.data.items.map(item => ({
+            id: item.id!,
+            title: item.snippet?.title || 'Unknown Title',
+            artist: item.snippet?.channelTitle || 'Unknown Artist',
+            artId: selectArtId(item.id!),
+            url: `https://www.youtube.com/watch?v=${item.id}`,
+            duration: item.contentDetails?.duration ? parseDuration(item.contentDetails.duration) : 0,
+        }));
+
+        return results;
 
     } catch (error) {
         console.error('An error occurred in the getYoutubeInfoFlow:', error);
         if (error instanceof Error) {
-            // Check for API-specific error messages
             if (error.message.includes('API key not valid')) {
                 throw new Error('The YouTube API key is invalid. Please check the server configuration.');
             }
