@@ -15,7 +15,6 @@ import {
   VolumeX,
   LoaderCircle,
   LogOut,
-  Music,
 } from 'lucide-react';
 import { useTracks, AudioTrack, useRoomContext } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
