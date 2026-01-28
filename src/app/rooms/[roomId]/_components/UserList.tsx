@@ -10,7 +10,12 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import * as LivekitClient from 'livekit-client';
+import {
+  Room as LKRoom,
+  createLocalAudioTrack,
+  Track,
+  MediaDevice,
+} from 'livekit-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import MusicJukeboxCard from "./MusicJukeboxCard";
@@ -45,8 +50,8 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>();
   
   // All available devices
-  const [allAudioInputDevices, setAllAudioInputDevices] = useState<LivekitClient.MediaDevice[]>([]);
-  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<LivekitClient.MediaDevice[]>([]);
+  const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
+  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
 
   const [duration, setDuration] = useState(0);
 
@@ -72,7 +77,9 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   const handleSpeakerDeviceChange = (deviceId: string) => {
     setSpeakerDeviceId(deviceId);
-    LivekitClient.Room.setActiveDevice('audiooutput', deviceId);
+    if (typeof LKRoom.setActiveDevice === 'function') {
+        LKRoom.setActiveDevice('audiooutput', deviceId);
+    }
     try {
       localStorage.setItem('hearmeout-user-speaker-device-id', deviceId);
     } catch (e) {
@@ -89,8 +96,8 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             await navigator.mediaDevices.getUserMedia({ audio: true });
             
             const [inputs, outputs] = await Promise.all([
-                LivekitClient.Room.getLocalDevices('audioinput'),
-                LivekitClient.Room.getLocalDevices('audiooutput'),
+                LKRoom.getLocalDevices('audioinput'),
+                LKRoom.getLocalDevices('audiooutput'),
             ]);
             setAllAudioInputDevices(inputs);
             setAllAudioOutputDevices(outputs);
@@ -103,12 +110,16 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             }
 
             const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
-            if (savedSpeakerId && outputs.some(d => d.deviceId === savedSpeakerId)) {
-              setSpeakerDeviceId(savedSpeakerId);
-              await LivekitClient.Room.setActiveDevice('audiooutput', savedSpeakerId);
-            } else if (outputs.length > 0) {
-              setSpeakerDeviceId(outputs[0].deviceId);
-              await LivekitClient.Room.setActiveDevice('audiooutput', outputs[0].deviceId);
+            if (typeof LKRoom.setActiveDevice === 'function') {
+                if (savedSpeakerId && outputs.some(d => d.deviceId === savedSpeakerId)) {
+                  setSpeakerDeviceId(savedSpeakerId);
+                  await LKRoom.setActiveDevice('audiooutput', savedSpeakerId);
+                } else if (outputs.length > 0) {
+                  setSpeakerDeviceId(outputs[0].deviceId);
+                  await LKRoom.setActiveDevice('audiooutput', outputs[0].deviceId);
+                }
+            } else {
+                console.error("LKRoom.setActiveDevice is not a function!");
             }
 
         } catch (e) {
@@ -125,14 +136,14 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     } catch (e) {
         console.error("Failed to load saved panel state from localStorage", e);
     }
-  }, [toast]); // Removed localParticipant dependency
+  }, [toast]);
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
     if (!localParticipant || !micDeviceId) return;
   
     const setupMicTrack = async () => {
-      const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+      const existingPublication = localParticipant.getTrackPublication(Track.Source.Microphone);
   
       // If the desired mic is already published, do nothing.
       if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === micDeviceId) {
@@ -146,9 +157,9 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   
       // Now, publish the new track.
       try {
-        const track = await LivekitClient.createLocalAudioTrack({ deviceId: micDeviceId });
+        const track = await createLocalAudioTrack({ deviceId: micDeviceId });
         await localParticipant.publishTrack(track, {
-          source: LivekitClient.Track.Source.Microphone,
+          source: Track.Source.Microphone,
         });
       } catch (e) {
         console.error("Failed to create and publish mic track:", e);
@@ -158,7 +169,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   
     setupMicTrack();
   
-  }, [localParticipant, micDeviceId, toast]); // Note: toast was removed as it's a stable function
+  }, [localParticipant, micDeviceId, toast]);
 
   useEffect(() => {
     if (room && !room.playlist && canControlMusic && roomRef) {

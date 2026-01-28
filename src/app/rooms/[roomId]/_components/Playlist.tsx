@@ -47,14 +47,16 @@ export default function Playlist({ playlist, onPlaySong, currentTrackId, isPlaye
               onClick={() => isPlayerControlAllowed && onPlaySong(item.id)}
             >
               {art && 
-                <Image
-                    src={art.imageUrl}
-                    alt={item.title}
-                    width={40}
-                    height={40}
-                    className="rounded-md"
-                    data-ai-hint={art.imageHint}
-                />
+                <div className="relative w-10 h-10 shrink-0">
+                    <Image
+                        src={art.imageUrl}
+                        alt={item.title}
+                        fill
+                        sizes="40px"
+                        className="rounded-md object-cover"
+                        data-ai-hint={art.imageHint}
+                    />
+                </div>
               }
               <div className="flex-1 overflow-hidden min-w-0">
                 <p className="truncate">{item.title}</p>

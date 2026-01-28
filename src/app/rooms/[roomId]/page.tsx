@@ -7,7 +7,7 @@ import {
   LiveKitRoom,
   useConnectionState,
 } from '@livekit/components-react';
-import * as LivekitClient from 'livekit-client';
+import { ConnectionState } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -38,19 +38,19 @@ function ConnectionStatusIndicator() {
     let statusText = '';
 
     switch (connectionState) {
-        case LivekitClient.ConnectionState.Connected:
+        case ConnectionState.Connected:
             indicatorClass = 'bg-green-500';
             statusText = 'Connected';
             break;
-        case LivekitClient.ConnectionState.Connecting:
+        case ConnectionState.Connecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Connecting';
             break;
-        case LivekitClient.ConnectionState.Disconnected:
+        case ConnectionState.Disconnected:
             indicatorClass = 'bg-red-500';
             statusText = 'Disconnected';
             break;
-        case LivekitClient.ConnectionState.Reconnecting:
+        case ConnectionState.Reconnecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Reconnecting';
             break;

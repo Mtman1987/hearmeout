@@ -95,20 +95,22 @@ export default function MusicPlayerCard({
     <Card className="flex flex-col h-full">
       <CardHeader>
         <div className="flex items-center gap-4">
-            {albumArt ? (
-                <Image
-                    src={albumArt.imageUrl}
-                    alt={currentTrack?.title || "Album Art"}
-                    width={64}
-                    height={64}
-                    className="rounded-lg shadow-lg object-cover aspect-square"
-                    data-ai-hint={albumArt.imageHint}
-                />
-            ) : (
-                <div className="w-16 h-16 rounded-lg shadow-lg bg-muted flex items-center justify-center">
-                    <Music className="w-8 h-8 text-muted-foreground" />
-                </div>
-            )}
+            <div className="relative w-16 h-16 shrink-0">
+              {albumArt ? (
+                  <Image
+                      src={albumArt.imageUrl}
+                      alt={currentTrack?.title || "Album Art"}
+                      fill
+                      sizes="64px"
+                      className="rounded-lg shadow-lg object-cover"
+                      data-ai-hint={albumArt.imageHint}
+                  />
+              ) : (
+                  <div className="w-full h-full rounded-lg shadow-lg bg-muted flex items-center justify-center">
+                      <Music className="w-8 h-8 text-muted-foreground" />
+                  </div>
+              )}
+            </div>
             <div className="flex-1 overflow-hidden">
                 <CardTitle className="font-headline text-lg flex items-center gap-2">
                     <Music /> Now Playing
