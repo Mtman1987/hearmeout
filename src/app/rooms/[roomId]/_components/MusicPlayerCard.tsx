@@ -40,6 +40,7 @@ type MusicPlayerCardProps = {
   onSeek: (seconds: number) => void;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
+  onForceJukeboxRestart: () => void;
 };
 
 // This component is now a "Remote Control" for the host. It only sends commands.
@@ -56,6 +57,7 @@ export default function MusicPlayerCard({
   onSeek,
   activePanels,
   onTogglePanel,
+  onForceJukeboxRestart,
 }: MusicPlayerCardProps) {
 
   const [isSeeking, setIsSeeking] = React.useState(false);
@@ -145,6 +147,16 @@ export default function MusicPlayerCard({
                   </TooltipTrigger>
                   <TooltipContent>
                       <p>Add Music</p>
+                  </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={onForceJukeboxRestart} aria-label="Restart Jukebox Stream" className="h-8 w-8">
+                          <Music className="h-4 w-4" />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                      <p>Restart Jukebox Stream</p>
                   </TooltipContent>
               </Tooltip>
           </div>

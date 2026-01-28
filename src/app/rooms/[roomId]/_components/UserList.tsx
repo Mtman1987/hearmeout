@@ -47,8 +47,10 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
     const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
 
     useEffect(() => {
+        let isCancelled = false;
+        
         const publishTrack = async () => {
-            if (!localParticipant || !playerRef.current || !url) return;
+            if (isCancelled || !localParticipant || !playerRef.current) return;
 
             // Stop any existing tracks before publishing a new one
             if (trackPublicationRef.current) {
@@ -56,6 +58,9 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
                 trackPublicationRef.current = null;
             }
             
+            // If there's no URL, we just stop here after cleanup.
+            if (!url) return;
+
             // Get the internal player element
             const internalPlayer = playerRef.current.getInternalPlayer();
             if (!internalPlayer || typeof (internalPlayer as any).captureStream !== 'function') {
@@ -68,7 +73,7 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
                 const stream = internalPlayer.captureStream();
                 const audioTrack = stream.getAudioTracks()[0];
 
-                if (audioTrack) {
+                if (audioTrack && !isCancelled) {
                     const publication = await localParticipant.publishTrack(audioTrack, {
                         name: 'jukebox-audio',
                         source: LivekitClient.Track.Source.Unknown, // Use Unknown to differentiate from user mic
@@ -81,10 +86,12 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
             }
         };
         
-        // Let the player initialize, then publish the track
+        // Let the player initialize, then publish the track. The timeout is important
+        // because the internal player might not be ready immediately.
         const timeoutId = setTimeout(publishTrack, 1000);
 
         return () => {
+            isCancelled = true;
             clearTimeout(timeoutId);
             if (localParticipant && trackPublicationRef.current) {
                 console.log("Unpublishing jukebox audio track.");
@@ -94,13 +101,12 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
         };
     }, [localParticipant, url]); // Re-publish when the URL changes
 
-    if (!url) return null;
-
+    // We render the player even if URL is empty to allow for stream capture setup
     return (
         <div className="hidden">
             <ReactPlayer
                 ref={playerRef}
-                url={url}
+                url={url || ''}
                 playing={isPlaying}
                 onEnded={onEnded}
                 onDuration={onDuration}
@@ -119,6 +125,7 @@ const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
 
 export default function UserList({ roomId }: { roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
+  const [jukeboxStreamerKey, setJukeboxStreamerKey] = useState(0);
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
   
@@ -135,7 +142,6 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   // Find the music track from any participant in the room
   const musicTrackRefs = useTracks([LivekitClient.Track.Source.Unknown]);
-
   const jukeboxTrackRef = musicTrackRefs.find(ref => ref.publication.trackName === 'jukebox-audio');
 
   // User microphone and speaker state
@@ -166,6 +172,14 @@ export default function UserList({ roomId }: { roomId: string }) {
   const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   const canShowMusicPanels = jukeboxTrackRef || isDj;
   
+  const handleForceJukeboxRestart = () => {
+    setJukeboxStreamerKey(k => k + 1);
+    toast({
+      title: "Jukebox Stream Restarted",
+      description: "Forcing the music stream to republish.",
+    });
+  };
+
   const handleMicDeviceChange = (deviceId: string) => {
       setMicDevice(deviceId);
       try {
@@ -332,6 +346,7 @@ export default function UserList({ roomId }: { roomId: string }) {
     <>
       {isDj && isClient && (
         <JukeboxStreamer 
+            key={jukeboxStreamerKey}
             url={currentTrack?.url || ''}
             isPlaying={room?.isPlaying || false}
             onEnded={handlePlayNext}
@@ -355,6 +370,7 @@ export default function UserList({ roomId }: { roomId: string }) {
                   onSeek={handleSeek}
                   activePanels={activePanels}
                   onTogglePanel={handleTogglePanel}
+                  onForceJukeboxRestart={handleForceJukeboxRestart}
                 />
               </div>
             )}
