@@ -7,7 +7,7 @@ import {
   useConnectionState,
   useRoomContext,
 } from '@livekit/components-react';
-import { Track, ConnectionState, type MediaStreamTrack } from 'livekit-client';
+import { Track, ConnectionState, type MediaStreamTrack, RoomEvent } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -79,7 +79,6 @@ function JukeboxOrchestrator({ musicAudioTrack, isPlaying }: { musicAudioTrack: 
 
 
 function JukeboxConnection({ token, serverUrl, musicAudioTrack, isPlaying }: { token: string, serverUrl: string, musicAudioTrack: MediaStreamTrack | null, isPlaying: boolean }) {
-
     return (
         <LiveKitRoom
             serverUrl={serverUrl}
@@ -204,7 +203,7 @@ function RoomHeader({
                                 variant="outline" 
                                 size="icon" 
                                 onClick={isDJ ? onRelinquishDJ : onClaimDJ} 
-                                className={cn((!djId || isDJ) ? "visible" : "invisible")}
+                                className={cn("transition-opacity", (!djId || user.uid === djId) ? "opacity-100" : "opacity-0 pointer-events-none")}
                                 >
                                 <Music className="h-4 w-4" />
                             </Button>
@@ -330,7 +329,6 @@ function RoomPageContent() {
         toast({ title: 'Action Required', description: 'Please join the voice chat before becoming the DJ.' });
         return;
     }
-    setActivePanels({ playlist: true, add: true });
     updateDocumentNonBlocking(roomRef, {
         djId: user.uid,
         djDisplayName: user.displayName || 'Anonymous DJ'
@@ -339,7 +337,6 @@ function RoomPageContent() {
 
   const handleRelinquishDJ = useCallback(() => {
     if (!roomRef || !isDJ) return;
-    setActivePanels({ playlist: false, add: false });
     updateDocumentNonBlocking(roomRef, {
         djId: '',
         djDisplayName: '',
@@ -394,6 +391,7 @@ function RoomPageContent() {
       if (!room.isPlaying && !room.currentTrackId && items.length > 0) {
           updates.currentTrackId = items[0].id;
           updates.isPlaying = true;
+          setActivePanels({ playlist: true, add: true });
       }
       updateDocumentNonBlocking(roomRef, updates);
   }, [room, roomRef, isDJ]);
@@ -403,46 +401,33 @@ function RoomPageContent() {
         playerRef.current.seekTo(seconds, 'seconds');
     }
   };
-
-  useEffect(() => {
-      setProgress(0);
-      setDuration(currentTrack?.duration || 0);
-  }, [currentTrack]);
   
-  useEffect(() => {
-      if (room?.isPlaying && isDJ) {
-          const interval = setInterval(() => {
-              setProgress(prev => {
-                  const newProgress = prev + 1;
-                  if (newProgress >= duration) {
-                      handlePlayNext();
-                      return 0;
-                  }
-                  return newProgress;
-              });
-          }, 1000);
-          return () => clearInterval(interval);
-      }
-  }, [room?.isPlaying, duration, isDJ, handlePlayNext]);
-
-  // Effect for LiveKit token generation
+  // Effect for LiveKit token generation and user presence
   useEffect(() => {
     if (isUserLoading || !user || !params.roomId || !room) return;
 
     let isCancelled = false;
 
-    const generateTokens = async () => {
+    const setupUserAndToken = async () => {
+        // Set user presence
+        setDocumentNonBlocking(userInRoomRef!, {
+            uid: user.uid,
+            displayName: user.displayName,
+            photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+        }, { merge: true });
+
+        // Generate tokens
         try {
             const userToken = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` }));
             if (isCancelled) return;
             setLivekitToken(userToken);
 
-            if (isDJ) {
+             if (isDJ) {
                 const jbToken = await generateLiveKitToken(params.roomId, `${user.uid}-jukebox`, 'Jukebox', JSON.stringify({ isJukebox: true }));
                 if (isCancelled) return;
                 setJukeboxToken(jbToken);
-            } else {
-                if (jukeboxToken) setJukeboxToken(undefined);
+            } else if (jukeboxToken) {
+                 setJukeboxToken(undefined);
             }
         } catch (e) {
             if (!isCancelled) {
@@ -451,24 +436,14 @@ function RoomPageContent() {
             }
         }
     };
-    generateTokens();
-    return () => { isCancelled = true; };
-  }, [user, isUserLoading, params.roomId, isDJ, room, toast]); // Re-run when DJ status changes.
 
-
-  // Effect for managing user presence in Firestore
-  useEffect(() => {
-    if (!user || !userInRoomRef) return;
-
-    setDocumentNonBlocking(userInRoomRef, {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-    }, { merge: true });
+    setupUserAndToken();
 
     return () => {
-        deleteDocumentNonBlocking(userInRoomRef);
-        // On leaving, if this user was the DJ, relinquish the role.
+        isCancelled = true;
+        if (userInRoomRef) {
+            deleteDocumentNonBlocking(userInRoomRef);
+        }
         if (roomRef && room?.djId === user.uid) {
             updateDocumentNonBlocking(roomRef, {
                 djId: '',
@@ -477,7 +452,47 @@ function RoomPageContent() {
             });
         }
     };
-  }, [user, userInRoomRef, roomRef, room?.djId]); // Only depends on user identity and refs.
+  }, [user, isUserLoading, params.roomId, room, isDJ, userInRoomRef, roomRef, toast]);
+  
+  // Reset progress and duration when track changes
+  useEffect(() => {
+    if (room?.currentTrackId !== currentTrack?.id) {
+      setProgress(0);
+      setDuration(0);
+    }
+    if (currentTrack) {
+        setDuration(currentTrack.duration);
+    }
+  }, [room?.currentTrackId, currentTrack]);
+
+  // Handle player progress updates
+  useEffect(() => {
+      let interval: NodeJS.Timeout | undefined = undefined;
+      if (room?.isPlaying && isDJ) {
+          interval = setInterval(() => {
+              if (playerRef.current) {
+                const currentProg = playerRef.current.getCurrentTime();
+                setProgress(currentProg);
+                if (currentProg >= duration && duration > 0) {
+                    handlePlayNext();
+                }
+              }
+          }, 1000);
+      }
+      return () => {
+          if (interval) clearInterval(interval);
+      };
+  }, [room?.isPlaying, duration, isDJ, handlePlayNext]);
+
+  // Automatically open panels when becoming DJ
+  useEffect(() => {
+      if (isDJ) {
+          setActivePanels({ playlist: true, add: true });
+      } else {
+          setActivePanels({ playlist: false, add: false });
+      }
+  }, [isDJ]);
+
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const isLoading = isUserLoading || isRoomLoading || !livekitUrl;
@@ -526,34 +541,27 @@ function RoomPageContent() {
         )}>
             <SidebarInset>
                 <div className="flex flex-col h-screen relative">
-                    <RoomHeader
-                        roomName={room.name}
-                        onToggleChat={() => setChatOpen(!chatOpen)}
-                        isConnected={!showInitialConnectScreen}
-                        isDJ={isDJ}
-                        djId={room.djId}
-                        onClaimDJ={handleClaimDJ}
-                        onRelinquishDJ={handleRelinquishDJ}
-                    />
-                    { showInitialConnectScreen ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-                            <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
-                            <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
-                            <Button size="lg" onClick={() => setUserHasInteracted(true)}>
-                                <Headphones className="mr-2 h-5 w-5" />
-                                Join Voice Chat
-                            </Button>
-                        </div>
-                    ) : (
+                    {showInitialConnectScreen ? (
                         <>
-                        {isDJ && jukeboxToken && (
-                            <JukeboxConnection 
-                                token={jukeboxToken}
-                                serverUrl={livekitUrl}
-                                musicAudioTrack={musicAudioTrack}
-                                isPlaying={!!room.isPlaying}
+                             <RoomHeader
+                                roomName={room.name}
+                                onToggleChat={() => setChatOpen(!chatOpen)}
+                                isConnected={false}
+                                isDJ={false}
+                                djId={undefined}
+                                onClaimDJ={() => toast({ title: "Please connect to voice first."})}
+                                onRelinquishDJ={() => {}}
                             />
-                        )}
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                                <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
+                                <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
+                                <Button size="lg" onClick={() => setUserHasInteracted(true)}>
+                                    <Headphones className="mr-2 h-5 w-5" />
+                                    Join Voice Chat
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
                         <LiveKitRoom
                             serverUrl={livekitUrl}
                             token={livekitToken}
@@ -565,6 +573,23 @@ function RoomPageContent() {
                                 toast({ variant: 'destructive', title: 'Connection Error', description: err.message, });
                             }}
                         >
+                            <RoomHeader
+                                roomName={room.name}
+                                onToggleChat={() => setChatOpen(!chatOpen)}
+                                isConnected={true}
+                                isDJ={isDJ}
+                                djId={room.djId}
+                                onClaimDJ={handleClaimDJ}
+                                onRelinquishDJ={handleRelinquishDJ}
+                            />
+                            {isDJ && jukeboxToken && (
+                                <JukeboxConnection 
+                                    token={jukeboxToken}
+                                    serverUrl={livekitUrl}
+                                    musicAudioTrack={musicAudioTrack}
+                                    isPlaying={!!room.isPlaying}
+                                />
+                            )}
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
                                 {isDJ && (
                                 <div className="flex flex-col lg:flex-row gap-6">
@@ -602,7 +627,7 @@ function RoomPageContent() {
                                             <div className={cn({ 'md:col-span-2': !activePanels.playlist })}>
                                                 <AddMusicPanel
                                                     onAddItems={handleAddItems}
-                                                    onClose={() => togglePanel('add')}
+                                                    onClose={() => {}}
                                                     canAddMusic={isDJ}
                                                 />
                                             </div>
@@ -641,7 +666,6 @@ function RoomPageContent() {
                                 </div>
                             </main>
                         </LiveKitRoom>
-                        </>
                     )}
                 </div>
             </SidebarInset>
