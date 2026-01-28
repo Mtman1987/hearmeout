@@ -205,10 +205,59 @@ const DiscordIcon = () => (
     </svg>
 );
 
+const PIPED_INSTANCES = [
+  "https://piped.video",
+  "https://pipedapi.kavin.rocks",
+  "https://piped.mha.fi",
+  "https://piped.privacydev.net"
+];
+
+function extractVideoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtube.com")) return u.searchParams.get("v");
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function getYoutubeAudioUrl(youtubeUrl: string) {
+  const videoId = extractVideoId(youtubeUrl);
+  if (!videoId) throw new Error("Invalid YouTube URL or failed to extract Video ID");
+
+  let lastError: Error | null = null;
+
+  for (const instance of PIPED_INSTANCES) {
+    try {
+      const apiUrl = `${instance}/streams/${videoId}`;
+      const res = await fetch(apiUrl);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status} from ${instance}`);
+
+      const data = await res.json();
+      if (!data.audioStreams?.length) throw new Error(`No audio streams found from ${instance}`);
+
+      const best = data.audioStreams.sort((a: any, b: any) => b.bitrate - a.bitrate)[0];
+      
+      return best.url;
+    } catch (err: any) {
+      console.warn(`Piped instance ${instance} failed:`, err.message);
+      lastError = err;
+      continue;
+    }
+  }
+
+  console.error("All Piped instances failed. Last error:", lastError);
+  throw new Error("All Piped instances failed: " + lastError?.message);
+}
+
+
 function MusicStreamer({ 
     isDJ, 
     isPlaying, 
-    trackUrl, // This is now a youtube.com URL
+    trackUrl, // This is a youtube.com URL
     onTrackEnd 
 } : { 
     isDJ: boolean, 
@@ -217,118 +266,90 @@ function MusicStreamer({
     onTrackEnd: () => void 
 }) {
     const room = useRoomContext();
-    const audioRef = useRef<HTMLAudioElement>(null);
+    const { toast } = useToast();
+    const audioElRef = useRef<HTMLAudioElement>(null);
     const publicationRef = useRef<RoomPublication | null>(null);
-    const [audioStreamUrl, setAudioStreamUrl] = useState<string | null>(null);
-    const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+    const [isFetching, setIsFetching] = useState(false);
 
-    // Effect 1: Resolve YouTube URL to a direct audio stream URL
     useEffect(() => {
-        if (!trackUrl || !isDJ) {
-            setAudioStreamUrl(null);
-            return;
-        }
-
         let isCancelled = false;
-        const fetchAudioUrl = async () => {
-            setIsFetchingUrl(true);
-            try {
-                const res = await fetch(`/api/youtube-audio?url=${encodeURIComponent(trackUrl)}`);
-                if (!res.ok) {
-                    throw new Error(`Failed to get audio URL: ${await res.text()}`);
-                }
-                const data = await res.json();
-                if (!isCancelled) {
-                    setAudioStreamUrl(data.url);
-                }
-            } catch (error) {
-                console.error(error);
-                if (!isCancelled) {
-                    setAudioStreamUrl(null);
-                }
-            } finally {
-                if (!isCancelled) {
-                    setIsFetchingUrl(false);
-                }
-            }
-        };
+        const audioEl = audioElRef.current;
 
-        fetchAudioUrl();
+        async function manageStream() {
+            if (isCancelled || !isDJ || !room || !audioEl) return;
 
-        return () => {
-            isCancelled = true;
-        };
-    }, [trackUrl, isDJ]);
-
-
-    // Effect 2: Manage LiveKit track publication based on resolved URL and playback state
-    useEffect(() => {
-        const audioEl = audioRef.current;
-        // Don't do anything if not DJ, no element, or still fetching the URL
-        if (!isDJ || !room || !audioEl || isFetchingUrl) {
-             if (publicationRef.current) {
-                room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
-                publicationRef.current = null;
-            }
-            if(audioEl) audioEl.pause();
-            return;
-        }
-
-        const manageTrack = async () => {
-            // If we should be playing and have a resolved stream URL
-            if (isPlaying && audioStreamUrl) {
+            if (isPlaying && trackUrl) {
+                setIsFetching(true);
                 try {
-                    // This check prevents re-publishing if the track is already published
-                    if (publicationRef.current && audioEl.src === audioStreamUrl) {
-                        if (audioEl.paused) await audioEl.play();
-                        return;
-                    }
+                    const streamUrl = await getYoutubeAudioUrl(trackUrl);
+                    if (isCancelled) return;
 
-                    // Unpublish any existing track before publishing a new one
-                    if (publicationRef.current) {
-                        await room.localParticipant.unpublishTrack(publicationRef.current.track!);
-                        publicationRef.current = null;
-                    }
+                    // If we get a valid stream URL, play it
+                    if (streamUrl) {
+                        // Unpublish any existing track before creating a new one
+                        if (publicationRef.current) {
+                           await room.localParticipant.unpublishTrack(publicationRef.current.track!, true);
+                           publicationRef.current = null;
+                        }
+                        
+                        audioEl.src = streamUrl;
+                        await audioEl.play();
 
-                    audioEl.src = audioStreamUrl;
-                    await audioEl.play();
-                    
-                    const track = await createLocalAudioTrack({
-                        mediaElement: audioEl,
-                    });
-                    
-                    const publication = await room.localParticipant.publishTrack(track, {
-                        name: 'music',
-                        source: 'music_bot_audio'
-                    });
-                    publicationRef.current = publication;
-                } catch (e) {
-                    console.error("Failed to publish music track:", e);
+                        const track = await createLocalAudioTrack({
+                            mediaElement: audioEl,
+                            // These constraints can improve echo cancellation and noise suppression
+                            noiseSuppression: true,
+                            echoCancellation: true,
+                        });
+
+                        const publication = await room.localParticipant.publishTrack(track, {
+                            name: 'music',
+                            source: 'music_bot_audio', // Custom source name
+                        });
+                        publicationRef.current = publication;
+                    } else {
+                        throw new Error("Could not retrieve a valid audio stream URL.");
+                    }
+                } catch (error: any) {
+                    if (!isCancelled) {
+                        console.error("Failed to play music track:", error);
+                        toast({
+                            variant: 'destructive',
+                            title: 'Music Playback Error',
+                            description: error.message || 'Could not fetch or play the selected song.',
+                        });
+                        // Skip to the next song on error
+                        onTrackEnd();
+                    }
+                } finally {
+                    if (!isCancelled) {
+                        setIsFetching(false);
+                    }
                 }
             } else {
-                // If we should not be playing, stop the audio and unpublish
+                // Stop playback and unpublish if not playing or no track
                 audioEl.pause();
+                audioEl.src = "";
                 if (publicationRef.current) {
-                    await room.localParticipant.unpublishTrack(publicationRef.current.track!);
+                    await room.localParticipant.unpublishTrack(publicationRef.current.track!, true);
                     publicationRef.current = null;
                 }
             }
-        };
+        }
         
-        manageTrack();
+        manageStream();
 
-        // The main cleanup function for when the component unmounts
         return () => {
-            if (room.localParticipant && publicationRef.current) {
-                room.localParticipant.unpublishTrack(publicationRef.current.track!).catch(e => console.warn("Failed to unpublish on cleanup", e));
+            isCancelled = true;
+            // Cleanup on dismount or dependency change
+            if (publicationRef.current) {
+                room.localParticipant.unpublishTrack(publicationRef.current.track!, true).catch(e => console.warn("Failed to unpublish on cleanup", e));
                 publicationRef.current = null;
             }
         };
-    // This effect now depends on the resolved audioStreamUrl
-    }, [isDJ, isPlaying, audioStreamUrl, room, isFetchingUrl]);
+    }, [isDJ, isPlaying, trackUrl, room, toast, onTrackEnd]);
 
-    // The audio element itself. It's hidden but drives the WebRTC track.
-    return <audio ref={audioRef} onEnded={onTrackEnd} crossOrigin="anonymous" className="hidden"></audio>;
+    return <audio ref={audioElRef} onEnded={onTrackEnd} crossOrigin="anonymous" className="hidden" />;
 }
 
 
