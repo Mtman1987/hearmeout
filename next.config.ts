@@ -38,7 +38,10 @@ const nextConfig: NextConfig = {
   },
   allowedDevOrigins: [
       "https://6000-firebase-studio-1769512226244.cluster-j6d3cbsvdbe5uxnhqrfzzeyj7i.cloudworkstations.dev"
-  ]
+  ],
+  experimental: {
+    serverComponentsExternalPackages: ['fluent-ffmpeg'],
+  },
 };
 
 export default nextConfig;
