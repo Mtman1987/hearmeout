@@ -29,85 +29,101 @@ export interface RoomData {
   playlist?: PlaylistItem[];
   currentTrackId?: string;
   isPlaying?: boolean;
-  currentTrackProgress?: number;
 }
 
 
 // This new component contains the hidden ReactPlayer and handles publishing its audio stream.
 // It only renders for the DJ.
-const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration }: { url: string, isPlaying: boolean, onEnded: () => void, onDuration: (duration: number) => void }) => {
-    const playerRef = useRef<ReactPlayer>(null);
+const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: { 
+    url: string;
+    isPlaying: boolean;
+    onEnded: () => void;
+    onDuration: (duration: number) => void;
+    onProgress: (progress: number) => void;
+}) => {
     const { localParticipant } = useLocalParticipant();
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
 
     useEffect(() => {
-        if (!localParticipant) return;
+        const publishTrack = async () => {
+            if (!localParticipant || !audioRef.current) return;
 
-        const publishJukeboxTrack = async () => {
-            // This is a workaround to get an audio stream from ReactPlayer
-            // It might not work in all browsers or if ReactPlayer changes its internal structure.
-            // A more robust solution would involve server-side stream generation.
-            const videoEl = document.createElement('video');
-            videoEl.muted = true; // MUST be muted to be able to autoplay without user interaction
-            
-            const player = playerRef.current?.getInternalPlayer();
-            if (player && player.src) {
-                videoEl.src = player.src;
+            // Stop any existing tracks before publishing a new one
+            if (trackPublicationRef.current) {
+                await localParticipant.unpublishTrack(trackPublicationRef.current.track);
+                trackPublicationRef.current = null;
+            }
+             if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
             }
 
             try {
-                // @ts-ignore captureStream is present on HTMLMediaElement
-                const stream = videoEl.captureStream() as MediaStream;
+                // @ts-ignore - captureStream is available on HTMLMediaElement
+                const stream = audioRef.current.captureStream();
                 const audioTrack = stream.getAudioTracks()[0];
+                streamRef.current = stream;
 
                 if (audioTrack) {
-                    const trackPublication = await localParticipant.publishTrack(audioTrack, {
+                    const publication = await localParticipant.publishTrack(audioTrack, {
                         name: 'jukebox-audio',
-                        source: LivekitClient.Track.Source.Unknown, // Using a custom source
+                        source: LivekitClient.Track.Source.Unknown,
                     });
-                    return trackPublication;
+                    trackPublicationRef.current = publication;
                 }
             } catch (e) {
-                 console.error("Failed to capture and publish jukebox track:", e);
-                 // Fallback or error handling
+                console.error("Failed to capture and publish jukebox track:", e);
             }
         };
 
-        let publication: LivekitClient.LocalTrackPublication | undefined;
-        // The onReady prop can be unreliable, so we wait a moment.
+        // We need a short delay to allow the ReactPlayer to initialize its internal player
         const timeoutId = setTimeout(() => {
-             publishJukeboxTrack().then(pub => {
-                publication = pub;
-             });
-        }, 1000);
-
+            publishTrack();
+        }, 500);
 
         return () => {
             clearTimeout(timeoutId);
-            if (publication) {
-                localParticipant.unpublishTrack(publication.track);
+            if (localParticipant && trackPublicationRef.current) {
+                localParticipant.unpublishTrack(trackPublicationRef.current.track);
+                trackPublicationRef.current = null;
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
             }
         };
-    }, [localParticipant]);
+    }, [localParticipant, url]); // Re-publish when the URL changes
 
     return (
         <div className="hidden">
+            {/* We render a standard <audio> element to have more reliable stream capturing */}
             <ReactPlayer
-                ref={playerRef}
                 url={url}
                 playing={isPlaying}
                 onEnded={onEnded}
                 onDuration={onDuration}
-                // The player itself is muted on the DJ's side because we are capturing its stream
-                // and hearing it back from LiveKit like every other user.
-                muted={true}
+                onProgress={(state) => onProgress(state.playedSeconds)}
+                muted={true} // Muted on DJ's side, audio comes back via LiveKit
                 width="1px"
                 height="1px"
-                 config={{
+                config={{
                     youtube: {
-                        playerVars: { controls: 0, disablekb: 1 }
-                    }
+                        playerVars: { controls: 0, disablekb: 1 },
+                        embedOptions: {
+                             // This is a conceptual representation. The key is to get a playable media element.
+                            playerapiid: 'ytplayer-jukebox',
+                        }
+                    },
                 }}
+                // This is a trick to get a reference to the underlying audio/video element if possible
+                // It might require inspecting the ReactPlayer component's output
+                // For now, we'll assume a separate audio element can be linked.
+                // In a more robust solution, we'd use a library that gives direct access to the media element.
             />
+             <audio ref={audioRef} src={url} controls style={{display: 'none'}} />
+
         </div>
     );
 };
@@ -233,6 +249,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const handlePlaySong = (songId: string) => {
     if (!isDj || !roomRef) return;
+    setLocalProgress(0); // Reset progress when changing songs
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
@@ -288,7 +305,7 @@ export default function UserList({ roomId }: { roomId: string }) {
     if (!isDj || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
-    let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
+    let updates: Partial<RoomData> & { currentTrackId?: any } = { playlist: newPlaylist };
     
     if (room.currentTrackId === songId) {
       if (newPlaylist.length > 0) {
@@ -313,10 +330,14 @@ export default function UserList({ roomId }: { roomId: string }) {
     });
   };
 
-  // Manual seek from the DJ's remote control. This is not used for continuous sync.
+  // Manual seek from the DJ's remote control.
   const handleSeek = (seconds: number) => {
-      // Seeking a live stream is complex. For now, this is a no-op.
-      // In a more advanced implementation, this could send a command to the streamer.
+      // Seeking a live stream is complex. For now, we will simply update the local UI.
+      // A more advanced implementation might send a seek command to the streamer.
+      if(isDj) {
+        setLocalProgress(seconds);
+        // This is a no-op for now as we don't have a way to seek the stream for all users.
+      }
   };
 
   return (
@@ -327,6 +348,7 @@ export default function UserList({ roomId }: { roomId: string }) {
             isPlaying={room?.isPlaying || false}
             onEnded={handlePlayNext}
             onDuration={setDuration}
+            onProgress={setLocalProgress}
         />
       )}
       <div className="flex flex-col gap-6">

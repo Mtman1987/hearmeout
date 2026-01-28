@@ -292,14 +292,23 @@ function RoomPageContent() {
         )}>
             <SidebarInset>
                 <div className="flex flex-col h-screen relative">
-                    { isLoading ? (
+                    { !room && !isRoomLoading && (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
+                            <h2 className="text-2xl font-bold">Room not found</h2>
+                            <p className="text-muted-foreground">This room may have been deleted or you may not have permission to view it.</p>
+                            <Button asChild>
+                                <a href="/">Go to Dashboard</a>
+                            </Button>
+                        </div>
+                    )}
+                    { (isLoading && room) ? (
                          <div className="flex-1 flex items-center justify-center">
                             <div className="flex flex-col items-center gap-4 text-center">
                             <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
                             <p className="text-muted-foreground">Connecting to room...</p>
                             </div>
                         </div>
-                    ) : !userHasInteracted ? (
+                    ) : (room && !userHasInteracted) ? (
                         <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
                             <RoomHeader
                                 roomName={room?.name || 'Loading room...'}
@@ -316,9 +325,9 @@ function RoomPageContent() {
                                 </Button>
                             </div>
                         </div>
-                    ) : (
+                    ) : ( room && userHasInteracted && livekitUrl && livekitToken &&
                         <LiveKitRoom
-                            serverUrl={livekitUrl!}
+                            serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
                             audio={true}
@@ -333,7 +342,7 @@ function RoomPageContent() {
                             }}
                         >
                             <RoomHeader
-                                roomName={room?.name || 'Loading room...'}
+                                roomName={room.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
                                 onMusicIconClick={handleMusicIconClick}
                                 showMusicIcon={showMusicIcon}
