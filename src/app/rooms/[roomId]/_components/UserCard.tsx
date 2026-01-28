@@ -244,7 +244,7 @@ export default function UserCard({
                                          <div className="grid gap-4">
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor='audioinput'>Microphone</Label>
-                                                <Select onValueChange={onMicDeviceChange} value={activeMicId} disabled={!micDevices || micDevices.length === 0}>
+                                                <Select onValueChange={(value) => onMicDeviceChange?.(value)} value={activeMicId} disabled={!micDevices || micDevices.length === 0}>
                                                     <SelectTrigger id='audioinput' className="col-span-2">
                                                         <SelectValue placeholder="Select a microphone" />
                                                     </SelectTrigger>
@@ -259,7 +259,7 @@ export default function UserCard({
                                             </div>
                                             <div className="grid grid-cols-3 items-center gap-4">
                                                 <Label htmlFor='audiooutput'>Speaker</Label>
-                                                <Select onValueChange={onSpeakerDeviceChange} value={activeSpeakerId} disabled={!speakerDevices || speakerDevices.length === 0}>
+                                                <Select onValueChange={(value) => onSpeakerDeviceChange?.(value)} value={activeSpeakerId} disabled={!speakerDevices || speakerDevices.length === 0}>
                                                     <SelectTrigger id='audiooutput' className="col-span-2">
                                                         <SelectValue placeholder="Select a speaker" />
                                                     </SelectTrigger>

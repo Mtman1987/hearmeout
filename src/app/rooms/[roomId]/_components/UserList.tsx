@@ -2,7 +2,7 @@
 
 import UserCard from "./UserCard";
 import MusicPlayerCard from "./MusicPlayerCard";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
@@ -31,13 +31,18 @@ export interface RoomData {
   currentTrackProgress?: number;
 }
 
-export default function UserList({ roomId, isDj }: { roomId: string, isDj: boolean }) {
+export default function UserList({ roomId }: { roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
   const { toast } = useToast();
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
+
+  const allParticipants = [
+    ...(localParticipant ? [localParticipant] : []),
+    ...remoteParticipants,
+  ];
 
   // User microphone and speaker state
   const { 
@@ -53,7 +58,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
-  const isPublishingRef = React.useRef(false);
+  const isPublishingRef = useRef(false);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -63,9 +68,8 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
-  const canControlMusic = isDj;
-
-  // Handler for changing user's primary microphone
+  const isDj = user?.uid === room?.djId;
+  
   const handleMicDeviceChange = (deviceId: string) => {
       setMicDevice(deviceId);
       try {
@@ -120,31 +124,42 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     if (!localParticipant || !activeMicId) return;
   
     const setupMicTrack = async () => {
-      if (isPublishingRef.current) return;
-      isPublishingRef.current = true;
-
-      try {
-        const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
-  
-        // If the device ID changes, we need to unpublish the old track
-        if (existingPublication && existingPublication.track?.mediaStreamTrack.getSettings().deviceId !== activeMicId) {
-            await localParticipant.unpublishTrack(existingPublication.track, true);
+        if (isPublishingRef.current) {
+            console.log("Already publishing, skipping setup.");
+            return;
         }
+        isPublishingRef.current = true;
 
-        // Only publish a new track if one doesn't already exist for the source
-        const currentPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
-        if (!currentPublication) {
-            const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
-            await localParticipant.publishTrack(track, {
-              source: LivekitClient.Track.Source.Microphone,
-            });
+        try {
+            const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+    
+            if (existingPublication) {
+                // If the device ID changes, we need to unpublish the old track
+                if (existingPublication.track?.mediaStreamTrack.getSettings().deviceId !== activeMicId) {
+                    await localParticipant.unpublishTrack(existingPublication.track, true);
+                    const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
+                    await localParticipant.publishTrack(track, {
+                        source: LivekitClient.Track.Source.Microphone,
+                    });
+                }
+            } else {
+                // Publish a new track if one doesn't already exist for the source
+                const track = await LivekitClient.createLocalAudioTrack({ deviceId: activeMicId });
+                await localParticipant.publishTrack(track, {
+                    source: LivekitClient.Track.Source.Microphone,
+                });
+            }
+        } catch (e) {
+            console.error("Failed to create and publish mic track:", e);
+            if (String(e).includes('already publishing')) {
+              // This is a common race condition, we can often ignore it.
+              console.warn("Attempted to publish a track that was already being published.");
+            } else {
+              toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
+            }
+        } finally {
+            isPublishingRef.current = false;
         }
-      } catch (e) {
-        console.error("Failed to create and publish mic track:", e);
-        toast({ variant: "destructive", title: "Microphone Error", description: "Could not use the selected microphone." });
-      } finally {
-        isPublishingRef.current = false;
-      }
     };
   
     setupMicTrack();
@@ -152,7 +167,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   }, [localParticipant, activeMicId, toast]);
 
   useEffect(() => {
-    if (room && !room.playlist && canControlMusic && roomRef) {
+    if (room && !room.playlist && isDj && roomRef) {
         updateDocumentNonBlocking(roomRef, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
@@ -160,11 +175,11 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             currentTrackProgress: 0,
         });
     }
-  }, [room, canControlMusic, roomRef]);
+  }, [room, isDj, roomRef]);
 
 
   const handlePlaySong = (songId: string) => {
-    if (!canControlMusic || !roomRef) return;
+    if (!isDj || !roomRef) return;
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
@@ -173,19 +188,19 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   }
 
   const handlePlayPause = (playing: boolean) => {
-    if (!canControlMusic || !roomRef) return;
+    if (!isDj || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { isPlaying: playing });
   }
 
   const handlePlayNext = () => {
-    if (!canControlMusic || !roomRef || !room?.playlist || !room.currentTrackId) return;
+    if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
     const nextIndex = (currentIndex + 1) % room.playlist.length;
     handlePlaySong(room.playlist[nextIndex].id);
   };
 
   const handlePlayPrev = () => {
-     if (!canControlMusic || !roomRef || !room?.playlist || !room.currentTrackId) return;
+     if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
     const prevIndex = (currentIndex - 1 + room.playlist.length) % room.playlist.length;
     handlePlaySong(room.playlist[prevIndex].id);
@@ -196,7 +211,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     const newPlaylist = [...(room.playlist || []), ...newItems];
     updateDocumentNonBlocking(roomRef, { playlist: newPlaylist });
 
-    if (canControlMusic && !room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
+    if (isDj && !room.isPlaying && (!room.playlist || room.playlist.length === 0)) {
        handlePlaySong(newItems[0].id);
     }
   };
@@ -214,7 +229,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   }
 
   const handleRemoveSong = (songId: string) => {
-    if (!canControlMusic || !roomRef || !room?.playlist) return;
+    if (!isDj || !roomRef || !room?.playlist) return;
     const newPlaylist = room.playlist.filter(song => song.id !== songId);
 
     let updates: Partial<RoomData> & { currentTrackId?: any, currentTrackProgress?: any } = { playlist: newPlaylist };
@@ -236,7 +251,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   };
 
   const handleClearPlaylist = () => {
-    if (!canControlMusic || !roomRef) return;
+    if (!isDj || !roomRef) return;
     updateDocumentNonBlocking(roomRef, { 
       playlist: [],
       currentTrackId: deleteField(),
@@ -246,7 +261,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   };
 
   const handleSeek = (seconds: number) => {
-      if (canControlMusic && roomRef) {
+      if (isDj && roomRef) {
           updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
       }
   };
@@ -262,7 +277,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
                   progress={room?.currentTrackProgress || 0}
                   duration={duration}
                   playing={room?.isPlaying || false}
-                  isPlayerControlAllowed={canControlMusic}
+                  isPlayerControlAllowed={isDj}
                   onPlayPause={handlePlayPause}
                   onPlayNext={handlePlayNext}
                   onPlayPrev={handlePlayPrev}
@@ -281,7 +296,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
                                 playlist={room?.playlist || []}
                                 onPlaySong={handlePlaySong}
                                 currentTrackId={room?.currentTrackId || ""}
-                                isPlayerControlAllowed={canControlMusic}
+                                isPlayerControlAllowed={isDj}
                                 onRemoveSong={handleRemoveSong}
                                 onClearPlaylist={handleClearPlaylist}
                             />
@@ -305,7 +320,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
           {room?.currentTrackId && (
             <MusicJukeboxCard 
               room={room} 
-              isHost={canControlMusic}
+              isHost={isDj}
               roomRef={roomRef}
               setDuration={setDuration}
               activePanels={activePanels}
@@ -313,31 +328,25 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             />
           )}
 
-          {localParticipant && (
-            <UserCard
-              key={localParticipant.sid}
-              participant={localParticipant}
-              isLocal={true}
-              isHost={user?.uid === room?.ownerId}
-              roomId={roomId}
-              micDevices={micDevices}
-              speakerDevices={speakerDevices}
-              activeMicId={activeMicId || ''}
-              activeSpeakerId={activeSpeakerId || ''}
-              onMicDeviceChange={handleMicDeviceChange}
-              onSpeakerDeviceChange={handleSpeakerDeviceChange}
-            />
-          )}
-
-          {remoteParticipants.map((participant) => (
-            <UserCard
-              key={participant.sid}
-              participant={participant}
-              isLocal={false}
-              isHost={false}
-              roomId={roomId}
-            />
-          ))}
+          {allParticipants.map((participant) => {
+              const amITheLocalParticipant = participant.sid === localParticipant?.sid;
+              return (
+                <UserCard
+                  key={participant.sid}
+                  participant={participant}
+                  isLocal={amITheLocalParticipant}
+                  isHost={participant.identity === room?.ownerId}
+                  roomId={roomId}
+                  micDevices={amITheLocalParticipant ? micDevices : undefined}
+                  speakerDevices={amITheLocalParticipant ? speakerDevices : undefined}
+                  activeMicId={amITheLocalParticipant ? activeMicId : ''}
+                  activeSpeakerId={amITheLocalParticipant ? activeSpeakerId : ''}
+                  onMicDeviceChange={amITheLocalParticipant ? handleMicDeviceChange : undefined}
+                  onSpeakerDeviceChange={amITheLocalParticipant ? handleSpeakerDeviceChange : undefined}
+                />
+              )
+            })
+          }
         </div>
       </div>
     </>
