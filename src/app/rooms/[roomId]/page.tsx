@@ -14,7 +14,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Copy, MessageSquare, X, Music, LoaderCircle } from 'lucide-react';
+import { Copy, MessageSquare, X, Music, LoaderCircle, Headphones } from 'lucide-react';
 import LeftSidebar from '@/app/components/LeftSidebar';
 import UserList from './_components/UserList';
 import type { RoomData } from './_components/UserList';
@@ -29,6 +29,7 @@ import {
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
+import * as LivekitClient from 'livekit-client';
 
 function ConnectionStatusIndicator() {
     const connectionState = useConnectionState();
@@ -187,6 +188,7 @@ function RoomPageContent() {
   const { toast } = useToast();
   const [chatOpen, setChatOpen] = useState(false);
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
 
   const roomRef = useMemoFirebase(() => {
       if (!firestore || !params.roomId) return null;
@@ -283,7 +285,7 @@ function RoomPageContent() {
           <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
               <div className="flex flex-col items-center gap-4 text-center">
                 <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-muted-foreground">Connecting to voice...</p>
+                <p className="text-muted-foreground">Connecting to room...</p>
               </div>
           </main>
       </div>
@@ -293,7 +295,7 @@ function RoomPageContent() {
     <LiveKitRoom
         serverUrl={livekitUrl!}
         token={livekitToken!}
-        connect={true}
+        connect={userHasInteracted}
         audio={true}
         video={false}
         onError={(err) => {
@@ -314,6 +316,16 @@ function RoomPageContent() {
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
             <UserList roomId={params.roomId} isDj={isDj} />
         </main>
+        {!userHasInteracted && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
+              <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
+              <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
+              <Button size="lg" onClick={() => setUserHasInteracted(true)}>
+                <Headphones className="mr-2 h-5 w-5" />
+                Join Voice Chat
+              </Button>
+          </div>
+        )}
     </LiveKitRoom>
   );
 
@@ -325,7 +337,7 @@ function RoomPageContent() {
           chatOpen && "md:mr-[28rem]"
         )}>
             <SidebarInset>
-                <div className="flex flex-col h-screen">
+                <div className="flex flex-col h-screen relative">
                   { isLoading ? renderLoadingState() : renderContent() }
                 </div>
             </SidebarInset>
