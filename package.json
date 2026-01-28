@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "next dev --turbopack",
     "twitch-bot": "tsx src/bots/twitch-bot.ts",
     "jukebox-bot": "tsx src/bots/jukebox-bot.ts",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
