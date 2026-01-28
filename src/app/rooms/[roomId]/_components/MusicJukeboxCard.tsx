@@ -44,8 +44,8 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, a
   const playerRef = useRef<ReactPlayer>(null);
   const lastProgressUpdateTime = useRef(0);
 
-  const [volume, setVolume] = useState(1);
-  const lastNonZeroVolume = useRef(1);
+  const [volume, setVolume] = useState(0);
+  const lastNonZeroVolume = useRef(0.5);
 
   useEffect(() => {
     if (volume > 0) {
@@ -157,7 +157,9 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, a
                     </TooltipContent>
                 </Tooltip>
             </div>
-             <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
+             <div className="h-8 flex items-end">
+                <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
+             </div>
             <div className="flex items-center gap-2 pt-2">
               <Button
                 variant="outline"
