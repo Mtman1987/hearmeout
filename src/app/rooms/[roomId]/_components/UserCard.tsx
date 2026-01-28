@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Headphones,
   Mic,
@@ -16,7 +16,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack } from '@livekit/components-react';
+import { useTracks } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -105,6 +105,7 @@ export default function UserCard({
   const [volume, setVolume] = useState(isLocal ? 0 : 0.8);
   const [isMutedByMe, setIsMutedByMe] = useState(volume === 0);
   const lastNonZeroVolume = React.useRef(volume);
+  const audioEl = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (volume > 0) {
@@ -142,15 +143,35 @@ export default function UserCard({
 
   // This effect syncs the LiveKit track's state FROM the Firestore state.
   useEffect(() => {
-    if (isLocal) {
-        const micTrack = audioTrackRef?.publication.track;
-        if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
-            if (micTrack.isMuted !== isMuted) {
-                micTrack.setMuted(isMuted);
-            }
-        }
+    const micTrack = audioTrackRef?.publication.track;
+    if (isLocal && micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
+      if (micTrack.isMuted !== isMuted) {
+          micTrack.setMuted(isMuted);
+      }
     }
-}, [isLocal, audioTrackRef, isMuted]);
+  }, [isLocal, audioTrackRef, isMuted]);
+
+  // This effect replaces the <AudioTrack> component.
+  // It manually attaches the remote participant's audio stream to an <audio> element.
+  useEffect(() => {
+    const track = audioTrackRef?.publication.track;
+    const el = audioEl.current;
+    if (track && el) {
+      track.attach(el);
+    }
+    return () => {
+      if (track && el) {
+        track.detach(el);
+      }
+    };
+  }, [audioTrackRef]);
+
+  // Effect to control volume directly on the audio element.
+  useEffect(() => {
+    if (audioEl.current) {
+      audioEl.current.volume = volume;
+    }
+  }, [volume]);
   
   const handleToggleMic = async () => {
     if (isLocal && userInRoomRef) {
@@ -185,7 +206,7 @@ export default function UserCard({
 
   return (
     <>
-      {!isLocal && audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={volume} />}
+      {!isLocal && <audio ref={audioEl} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
