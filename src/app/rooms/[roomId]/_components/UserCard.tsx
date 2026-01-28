@@ -17,6 +17,7 @@ import {
   LoaderCircle,
   Youtube,
   ListMusic,
+  LogOut,
 } from 'lucide-react';
 import { useTracks, AudioTrack, useRoomContext } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
@@ -66,6 +67,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAudioDevice } from '@/hooks/use-audio-device';
+import { useRouter } from 'next/navigation';
 
 
 interface RoomParticipantData {
@@ -95,6 +97,7 @@ export default function UserCard({
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const room = useRoomContext();
+  const router = useRouter();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
@@ -162,6 +165,11 @@ export default function UserCard({
   const displayName = isJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
   const photoURL = isJukebox ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
   
+  const handleLeaveRoom = () => {
+    room.disconnect();
+    router.push('/');
+  };
+
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
         toast({ variant: "destructive", title: "Error", description: "You do not have permission to delete this room." });
@@ -173,7 +181,7 @@ export default function UserCard({
         const roomRef = doc(firestore, 'rooms', roomId);
         await deleteDoc(roomRef);
         toast({ title: "Room Deleted", description: "The room has been successfully deleted." });
-        window.location.assign('/');
+        router.push('/');
     } catch (error) {
         console.error("Error deleting room:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not delete the room.' });
@@ -294,20 +302,30 @@ export default function UserCard({
                                 </PopoverContent>
                             </Popover>
 
-                            {isHost && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        <DropdownMenuItem disabled><Pen className="mr-2 h-4 w-4" /> Rename Room</DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive">
-                                            <Trash2 className="mr-2 h-4 w-4" /> Delete Room
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={handleLeaveRoom}>
+                                        <LogOut className="mr-2 h-4 w-4" />
+                                        <span>Leave Room</span>
+                                    </DropdownMenuItem>
+                                    {isHost && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem disabled>
+                                                <Pen className="mr-2 h-4 w-4" />
+                                                <span>Rename Room</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setIsDeleteDialogOpen(true)} className="text-destructive focus:text-destructive">
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Delete Room</span>
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                          </div>
                     ): (
                         isHost && (
