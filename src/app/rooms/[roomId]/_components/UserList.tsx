@@ -13,6 +13,7 @@ import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
 import * as LivekitClient from 'livekit-client';
 import MusicJukeboxCard from "./MusicJukeboxCard";
+import JukeboxConnector from "./JukeboxConnector";
 
 
 export interface RoomData {
@@ -93,7 +94,7 @@ export default function UserList({ roomId }: { roomId: string }) {
     if (isDj && room?.isPlaying && currentTrack) {
         progressIntervalRef.current = setInterval(() => {
             setPlaybackProgress(prev => {
-                if (currentTrack.duration && prev >= currentTrack.duration - 1) {
+                if (currentTrack.duration && prev >= currentTrack.duration) {
                     clearInterval(progressIntervalRef.current!);
                     progressIntervalRef.current = null;
                     // Automatically play next song when one finishes
@@ -245,6 +246,7 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   return (
     <>
+      {isDj && <JukeboxConnector roomId={roomId} />}
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {isDj && (
