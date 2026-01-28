@@ -206,7 +206,7 @@ export default function UserCard({
 
   return (
     <>
-      {!isLocal && <audio ref={audioEl} />}
+      {!isLocal && <audio ref={audioEl} autoPlay />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
