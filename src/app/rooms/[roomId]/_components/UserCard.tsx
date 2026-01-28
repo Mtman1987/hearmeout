@@ -101,6 +101,24 @@ export default function UserCard({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
+  
+  const [volume, setVolume] = useState(isLocal ? 0 : 0.8);
+  const [isMutedByMe, setIsMutedByMe] = useState(volume === 0);
+  const lastNonZeroVolume = React.useRef(volume);
+
+  useEffect(() => {
+    if (volume > 0) {
+        lastNonZeroVolume.current = volume;
+        setIsMutedByMe(false);
+    } else {
+        setIsMutedByMe(true);
+    }
+  }, [volume]);
+  
+  const toggleMuteByMe = () => {
+    setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current || 0.8));
+  };
+
 
   const userInRoomRef = useMemoFirebase(() => {
     if (!firestore || !roomId || !identity) return null;
@@ -162,7 +180,7 @@ export default function UserCard({
 
   return (
     <>
-      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} />}
+      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} volume={volume} />}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
@@ -295,6 +313,30 @@ export default function UserCard({
             </div>
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
+                 {!isLocal && (
+                     <div className="flex items-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={toggleMuteByMe}
+                                >
+                                    {isMutedByMe ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>{isMutedByMe ? 'Unmute' : 'Mute for me'}</p></TooltipContent>
+                        </Tooltip>
+                        <Slider
+                            aria-label="Participant Volume"
+                            value={[volume]}
+                            onValueChange={(value) => setVolume(value[0])}
+                            max={1}
+                            step={0.05}
+                        />
+                    </div>
+                )}
                 <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
             </div>
         </CardContent>
