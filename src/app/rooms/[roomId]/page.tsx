@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
-import { generateLiveKitToken } from '@/app/actions';
+import { generateLiveKitToken, postToDiscord } from '@/app/actions';
 
 function ConnectionStatusIndicator() {
     const connectionState = useConnectionState();
@@ -70,6 +70,13 @@ function ConnectionStatusIndicator() {
     );
 }
 
+const DiscordIcon = () => (
+    <svg role="img" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16.29 5.23a10.08 10.08 0 0 0-2.2-.62.84.84 0 0 0-1 .75c.18.25.36.5.52.75a8.62 8.62 0 0 0-4.14 0c.16-.25.34-.5.52-.75a.84.84 0 0 0-1-.75 10.08 10.08 0 0 0-2.2.62.81.81 0 0 0-.54.78c-.28 3.24.78 6.28 2.82 8.25a.85.85 0 0 0 .93.12 7.55 7.55 0 0 0 1.45-.87.82.82 0 0 1 .9-.06 6.53 6.53 0 0 0 2.22 0 .82.82 0 0 1 .9.06 7.55 7.55 0 0 0 1.45.87.85.85 0 0 0 .93-.12c2.04-1.97 3.1-5 2.82-8.25a.81.81 0 0 0-.55-.78zM10 11.85a1.45 1.45 0 0 1-1.45-1.45A1.45 1.45 0 0 1 10 8.95a1.45 1.45 0 0 1 1.45 1.45A1.45 1.45 0 0 1 10 11.85zm4 0a1.45 1.45 0 0 1-1.45-1.45A1.45 1.45 0 0 1 14 8.95a1.45 1.45 0 0 1 1.45 1.45A1.45 1.45 0 0 1 14 11.85z"/>
+    </svg>
+);
+
+
 function RoomHeader({ 
     roomName, 
     onToggleChat, 
@@ -94,6 +101,23 @@ function RoomHeader({
         });
     }
 
+    const handlePostToDiscord = async () => {
+        try {
+            await postToDiscord();
+            toast({
+                title: "Posted to Discord!",
+                description: "The control embed has been sent to your channel.",
+            });
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Discord Error",
+                description: error.message || "Could not post to Discord. Check server logs.",
+            });
+        }
+    }
+
+
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
             <SidebarTrigger className={isMobile ? "" : "hidden md:flex"} />
@@ -104,6 +128,18 @@ function RoomHeader({
             </div>
 
             <div className="flex flex-initial items-center justify-end space-x-2">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={handlePostToDiscord}>
+                            <DiscordIcon />
+                            <span className="sr-only">Post Controls to Discord</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Post Controls to Discord</p>
+                    </TooltipContent>
+                </Tooltip>
+
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button variant="outline" size="icon" onClick={copyOverlayUrl}>

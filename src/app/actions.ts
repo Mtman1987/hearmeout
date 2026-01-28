@@ -5,6 +5,7 @@ import type { ModerateContentOutput } from "@/ai/flows/sentiment-based-moderatio
 import { getYoutubeInfo as getYoutubeInfoFlow } from "@/ai/flows/get-youtube-info-flow";
 import type { PlaylistItem } from "@/app/rooms/[roomId]/_components/Playlist";
 import { AccessToken } from 'livekit-server-sdk';
+import { sendControlEmbed } from '@/bots/discord-bot';
 
 export async function runModeration(
   conversationHistory: string
@@ -47,4 +48,20 @@ export async function generateLiveKitToken(roomName: string, participantIdentity
   at.addGrant({ room: roomName, roomJoin: true, canPublish: true, canSubscribe: true });
 
   return at.toJwt();
+}
+
+export async function postToDiscord() {
+    const channelId = process.env.DISCORD_CHANNEL_ID;
+    if (!channelId) {
+        console.error("DISCORD_CHANNEL_ID is not set in environment variables.");
+        throw new Error("Discord channel ID is not configured on the server.");
+    }
+    try {
+        await sendControlEmbed(channelId);
+    } catch (error) {
+        console.error("Error posting to Discord:", error);
+        // We throw the error so the client can catch it and display a message.
+        // The error from sendControlEmbed is already descriptive.
+        throw error;
+    }
 }

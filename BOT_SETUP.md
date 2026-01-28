@@ -42,3 +42,39 @@ In your `.env` file, you need to fill in the following values:
 -   `TARGET_ROOM_ID`: The ID of the HearMeOut room you want the bot to add songs to. You can get this from the URL when you are in a room (e.g., `.../rooms/<this_is_the_id>`).
 
 Once these are set up, you can run the bot in a separate terminal with `npm run twitch-bot`.
+
+## 3. Discord Bot Credentials
+
+To enable Discord integration, you need to create a Discord Application and add a Bot user to it.
+
+### Creating the Discord Bot:
+
+1.  **Go to the Discord Developer Portal:** [https://discord.com/developers/applications](https://discord.com/developers/applications)
+2.  Click **"New Application"** in the top right corner and give it a name (e.g., "HearMeOut Bot").
+3.  Navigate to the **"Bot"** tab on the left.
+4.  Click **"Add Bot"** and confirm.
+
+### Getting the Bot Token:
+
+1.  On the **"Bot"** tab, under the bot's username, you'll see a section for the token.
+2.  Click **"Reset Token"** and confirm.
+3.  **Copy the token immediately.** This is a secret, treat it like a password!
+4.  In your `.env` file, paste this token as the value for `DISCORD_BOT_TOKEN`.
+
+### Inviting the Bot to Your Server:
+
+1.  Go to the **"OAuth2" -> "URL Generator"** tab.
+2.  In the "Scopes" section, check the `bot` box.
+3.  A new "Bot Permissions" section will appear below. Check the following permissions, which are required for the bot to post messages and create interactions:
+    *   `Send Messages`
+    *   `Read Message History`
+4.  Scroll down and copy the **Generated URL**.
+5.  Paste this URL into your browser, select the server you want to add the bot to, and click **"Authorize"**.
+
+### Getting the Channel ID:
+
+1.  In your Discord client, go to **User Settings -> Advanced**.
+2.  Enable **"Developer Mode"**.
+3.  Go to the channel in your server where you want the bot to post messages.
+4.  Right-click on the channel name in the channel list and click **"Copy Channel ID"**.
+5.  In your `.env` file, paste this ID as the value for `DISCORD_CHANNEL_ID`.
