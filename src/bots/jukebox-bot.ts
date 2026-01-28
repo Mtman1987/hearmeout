@@ -1,39 +1,38 @@
 
 import 'dotenv/config';
-import { Room, RoomServiceClient, AccessToken } from 'livekit-server-sdk';
+import { Room, AccessToken } from 'livekit-server-sdk';
 
 const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 const livekitApiKey = process.env.LIVEKIT_API_KEY;
 const livekitApiSecret = process.env.LIVEKIT_API_SECRET;
 const targetRoomId = process.env.TARGET_ROOM_ID;
 
-if (!livekitUrl || !livekitApiKey || !livekitApiSecret || !targetRoomId) {
-    console.error("Missing required LiveKit or Room environment variables. Please check your .env file and BOT_SETUP.md.");
+// A clearer startup check
+if (!livekitUrl || !livekitApiKey || !livekitApiSecret || !targetRoomId || livekitUrl.includes("REPLACE_ME") || livekitApiKey.includes("REPLACE_ME") || livekitApiSecret.includes("REPLACE_ME") || targetRoomId.includes("REPLACE_ME")) {
+    console.error("🔴 Jukebox Bot is not configured. Please fill in the LiveKit details in your .env file.");
+    console.error("   - NEXT_PUBLIC_LIVEKIT_URL");
+    console.error("   - LIVEKIT_API_KEY");
+    console.error("   - LIVEKIT_API_SECRET");
+    console.error("   - TARGET_ROOM_ID");
     process.exit(1);
 }
 
-const roomService = new RoomServiceClient(livekitUrl, livekitApiKey, livekitApiSecret);
-let room: Room;
 
 async function connectBot() {
     try {
-        room = new Room();
+        const room = new Room();
 
-        // On successful connection, log it. The bot will then just idle.
         room.on('connected', () => {
-            console.log(`Jukebox bot successfully connected to room: ${room.name}`);
-            console.log(`Bot identity: ${room.localParticipant.identity}`);
-            console.log("The bot is now idling and producing SILENCE as requested.");
-            console.log("It will not play any music until it is programmed to do so in the next step.");
+            console.log(`✅ Jukebox bot connected silently to room: ${targetRoomId}`);
+            console.log(`   Bot Participant ID: ${room.localParticipant.identity}`);
+            console.log("   The bot is now waiting silently as a connected user.");
         });
         
         room.on('disconnected', () => {
-            console.log('Jukebox bot disconnected from the room. It will try to reconnect.');
-            // Basic reconnection logic
+            console.log('Jukebox bot disconnected. Reconnecting in 5 seconds...');
             setTimeout(connectBot, 5000);
         });
 
-        // Create a token for the bot with the identity 'jukebox'
         const token = new AccessToken(livekitApiKey, livekitApiSecret, {
             identity: 'jukebox',
             name: 'Jukebox',
@@ -44,15 +43,10 @@ async function connectBot() {
         await room.connect(livekitUrl, token.toJwt());
 
     } catch (error) {
-        console.error("Failed to connect Jukebox bot to LiveKit room:", error);
-        // Retry connection after a delay
+        console.error("🔴 Failed to connect Jukebox bot:", error);
+        console.log("   Please check your LiveKit credentials in the .env file.");
         setTimeout(connectBot, 5000);
     }
 }
 
-async function main() {
-    console.log(`Initializing silent Jukebox bot for room: ${targetRoomId}`);
-    await connectBot();
-}
-
-main();
+connectBot();
