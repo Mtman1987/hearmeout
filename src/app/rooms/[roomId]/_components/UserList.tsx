@@ -40,8 +40,11 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   const remoteParticipants = useRemoteParticipants();
 
   // User microphone and speaker state
-  const [micDeviceId, setMicDeviceId] = useState<string | undefined>();
-  const [allAudioInputDevices, setAllAudioInputDevices] = useState<LivekitClient.MediaDevice[]>([]);
+  const { 
+    devices: allAudioInputDevices, 
+    activeDeviceId: micDeviceId, 
+    setActiveMediaDevice: setMicDevice 
+  } = useMediaDeviceSelect({ kind: 'audioinput' });
   
   const { 
     devices: allAudioOutputDevices, 
@@ -63,7 +66,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   // Handler for changing user's primary microphone
   const handleMicDeviceChange = (deviceId: string) => {
-      setMicDeviceId(deviceId);
+      setMicDevice(deviceId);
       try {
           localStorage.setItem('hearmeout-user-mic-device-id', deviceId);
       } catch (e) {
@@ -80,37 +83,17 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     }
   }
 
-  // Effect to load mic devices and preferences from local storage on mount
+  // Effect to load device preferences from local storage on mount
   useEffect(() => {
-    const getMicDevices = async () => {
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            const inputs = await LivekitClient.MediaDevice.getAudioInputDevices();
-            setAllAudioInputDevices(inputs);
-
-            const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
-            if (savedUserMicId && inputs.some(d => d.deviceId === savedUserMicId)) {
-                setMicDeviceId(savedUserMicId);
-            } else if (inputs.length > 0) {
-                setMicDeviceId(inputs[0].deviceId);
-            }
-        } catch (e) {
-            console.error("Failed to get local mic devices", e);
-            toast({ variant: 'destructive', title: "Device Error", description: "Could not access audio devices. Please check browser permissions." });
-        }
-    };
-    
-    getMicDevices();
-    
     try {
         const savedPanels = localStorage.getItem('hearmeout-active-panels');
         if (savedPanels) setActivePanels(JSON.parse(savedPanels));
     } catch (e) {
         console.error("Failed to load saved panel state from localStorage", e);
     }
-  }, [toast]);
+  }, []);
 
-  // Effect to set the initial speaker from local storage, since the hook doesn't have a built-in way to do this.
+  // Effect to set the initial speaker from local storage
   useEffect(() => {
       if (allAudioOutputDevices.length > 0) {
           const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
@@ -120,6 +103,17 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
       }
   }, [allAudioOutputDevices, setSpeakerDevice]);
 
+  // Effect to set initial microphone from local storage
+  useEffect(() => {
+    if (allAudioInputDevices.length > 0) {
+        const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
+        if (savedUserMicId && allAudioInputDevices.some(d => d.deviceId === savedUserMicId)) {
+            setMicDevice(savedUserMicId);
+        }
+    }
+  }, [allAudioInputDevices, setMicDevice]);
+
+
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
     if (!localParticipant || !micDeviceId) return;
@@ -127,17 +121,14 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     const setupMicTrack = async () => {
       const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
   
-      // If the desired mic is already published, do nothing.
       if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === micDeviceId) {
         return;
       }
   
-      // If a different mic is published, unpublish it first.
       if (existingPublication) {
         await localParticipant.unpublishTrack(existingPublication.track, true);
       }
   
-      // Now, publish the new track.
       try {
         const track = await LivekitClient.createLocalAudioTrack({ deviceId: micDeviceId });
         await localParticipant.publishTrack(track, {

@@ -88,8 +88,8 @@ export default function UserCard({
     participant: LivekitClient.Participant;
     isHost?: boolean;
     roomId: string;
-    micDevices?: LivekitClient.MediaDevice[];
-    speakerDevices?: LivekitClient.MediaDevice[];
+    micDevices?: MediaDeviceInfo[];
+    speakerDevices?: MediaDeviceInfo[];
     activeMicId?: string;
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
