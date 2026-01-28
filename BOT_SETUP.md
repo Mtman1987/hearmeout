@@ -36,9 +36,9 @@ This variable allows all server-side parts of your application (including the bo
 
 ## 2. Common Bot Configuration
 
-Both the Twitch and Discord bots need to know which HearMeOut room to add songs to.
+All bots need to know which HearMeOut room to operate in.
 
--   `TARGET_ROOM_ID`: The ID of the HearMeOut room you want the bots to add songs to. You can get this from the URL when you are in a room (e.g., `.../rooms/<this_is_the_id>`).
+-   `TARGET_ROOM_ID`: The ID of the HearMeOut room you want the bots to interact with. You can get this from the URL when you are in a room (e.g., `.../rooms/<this_is_the_id>`).
 
 ## 3. Twitch Bot Credentials
 
@@ -88,9 +88,9 @@ To enable Discord integration, you need to create a Discord Application and add 
 4.  Right-click on the channel name in the channel list and click **"Copy Channel ID"**.
 5.  In your `.env` file, paste this ID as the value for `DISCORD_CHANNEL_ID`.
 
-## 5. LiveKit Credentials (for Voice Chat)
+## 5. LiveKit Credentials (for Voice Chat & Jukebox)
 
-The voice chat rooms are powered by LiveKit. You need to create a free LiveKit Cloud account and get API keys.
+The voice chat rooms and the Jukebox bot are powered by LiveKit. You need to create a free LiveKit Cloud account and get API keys.
 
 1.  **Go to LiveKit Cloud:** [https://cloud.livekit.io/](https://cloud.livekit.io/) and sign up or log in.
 2.  Create a new project if you don't have one already.
@@ -103,3 +103,9 @@ The voice chat rooms are powered by LiveKit. You need to create a free LiveKit C
 -   `NEXT_PUBLIC_LIVEKIT_URL`: Paste the **WebSocket URL** here.
 -   `LIVEKIT_API_KEY`: Paste the **API Key** here.
 -   `LIVEKIT_API_SECRET`: Paste the **API Secret** here.
+
+## 6. Jukebox Bot (Server-Side Music)
+
+The Jukebox Bot is a server process that connects to a room, fetches audio from YouTube, and streams it into the room for everyone to hear. It requires the LiveKit credentials to be set up correctly.
+
+Once your LiveKit and `TARGET_ROOM_ID` environment variables are set, you can run this bot in a separate terminal with `npm run jukebox-bot`.

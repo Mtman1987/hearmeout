@@ -19,6 +19,7 @@ import {
   Youtube,
   Music,
   ListMusic,
+  Bot,
 } from "lucide-react";
 import placeholderData from "@/lib/placeholder-images.json";
 import { type PlaylistItem } from "./Playlist";
@@ -44,7 +45,7 @@ type MusicPlayerCardProps = {
 };
 
 // This component is now a "Remote Control" for the host. It only sends commands.
-// The actual audio playback is handled by MusicJukeboxCard via a WebRTC stream.
+// The actual audio playback is handled by the server-side Jukebox bot.
 export default function MusicPlayerCard({
   currentTrack,
   progress,
@@ -60,36 +61,11 @@ export default function MusicPlayerCard({
   onForceJukeboxRestart,
 }: MusicPlayerCardProps) {
 
-  const [isSeeking, setIsSeeking] = React.useState(false);
-  const [seekValue, setSeekValue] = React.useState(progress);
-
-  React.useEffect(() => {
-    if (!isSeeking) {
-      setSeekValue(progress);
-    }
-  }, [progress, isSeeking]);
-
   const albumArt = currentTrack ? placeholderData.placeholderImages.find(p => p.id === currentTrack.artId) : undefined;
 
   const handlePlayPause = () => isPlayerControlAllowed && currentTrack && onPlayPause(!playing);
   const handlePlayNextWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayNext();
   const handlePlayPrevWithTrack = () => isPlayerControlAllowed && currentTrack && onPlayPrev();
-  
-  const handleSeekChange = (value: number[]) => {
-    if (!isSeeking) setIsSeeking(true);
-    setSeekValue(value[0]);
-  }
-  
-  const handleSeekCommit = (value: number[]) => {
-    // Seeking a live stream is disabled for now.
-    if (isPlayerControlAllowed) {
-        onSeek(value[0]);
-    }
-    setIsSeeking(false);
-    // After commit, we want the slider to reflect the actual progress again
-    // so we snap it back to the prop value.
-    setSeekValue(progress);
-  }
   
   const formatTime = (seconds: number) => {
     const floorSeconds = Math.floor(seconds);
@@ -149,21 +125,28 @@ export default function MusicPlayerCard({
                       <p>Add Music</p>
                   </TooltipContent>
               </Tooltip>
+               <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button variant={"ghost"} size="icon" onClick={onForceJukeboxRestart} aria-label="Restart Jukebox Bot" className="h-8 w-8">
+                          <Bot className="h-4 w-4" />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                      <p>Restart Jukebox Bot</p>
+                  </TooltipContent>
+              </Tooltip>
           </div>
         </div>
 
         <div className="pt-2">
             <Slider
-                value={[seekValue]}
-                onValueChange={handleSeekChange}
-                onValueCommit={handleSeekCommit}
-                max={duration > 0 ? duration : 1}
-                step={1}
-                disabled={!isPlayerControlAllowed || !currentTrack}
+                value={[0]}
+                max={1}
+                disabled={true}
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{formatTime(seekValue)}</span>
-                <span>{formatTime(duration)}</span>
+                <span>{formatTime(0)}</span>
+                <span>{formatTime(0)}</span>
             </div>
         </div>
        

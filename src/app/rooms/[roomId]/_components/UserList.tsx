@@ -26,86 +26,6 @@ export interface RoomData {
   isPlaying?: boolean;
 }
 
-// This component contains the hidden ReactPlayer and handles publishing its audio stream.
-// It only renders for the DJ. This version is robust and event-driven to avoid race conditions.
-const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration, onProgress }: {
-    url: string;
-    isPlaying: boolean;
-    onEnded: () => void;
-    onDuration: (duration: number) => void;
-    onProgress: (progress: number) => void;
-}) => {
-    const { localParticipant } = useLocalParticipant();
-    const playerRef = useRef<ReactPlayer>(null);
-    const trackPublicationRef = useRef<LivekitClient.LocalTrackPublication | null>(null);
-
-    // This is the core logic. It's called when the player is ready to be used.
-    const handlePlayerReady = useCallback(async () => {
-        if (!localParticipant || !playerRef.current || trackPublicationRef.current) {
-            return;
-        }
-
-        const internalPlayer = playerRef.current.getInternalPlayer();
-        if (!internalPlayer || typeof (internalPlayer as any).captureStream !== 'function') {
-            console.error("Failed to get internal player or captureStream function.");
-            return;
-        }
-
-        try {
-            // @ts-ignore - captureStream is a valid method on media elements
-            const stream = internalPlayer.captureStream();
-            const audioTrack = stream.getAudioTracks()[0];
-            
-            if (audioTrack) {
-                console.log("Jukebox player ready. Publishing audio track...");
-                const publication = await localParticipant.publishTrack(audioTrack, {
-                    name: 'jukebox-audio',
-                    source: LivekitClient.Track.Source.Unknown,
-                });
-                trackPublicationRef.current = publication;
-                console.log("Jukebox audio track published successfully.");
-            } else {
-                 console.error("Could not find an audio track in the player stream.");
-            }
-        } catch (e) {
-            console.error("Failed to publish jukebox track:", e);
-        }
-    }, [localParticipant]);
-
-    // This effect handles cleanup. It unpublishes the track when the component is unmounted.
-    useEffect(() => {
-        // Return a cleanup function.
-        return () => {
-            if (localParticipant && trackPublicationRef.current) {
-                console.log("JukeboxStreamer unmounting, unpublishing track.");
-                localParticipant.unpublishTrack(trackPublicationRef.current.track);
-                trackPublicationRef.current = null;
-            }
-        };
-    }, [localParticipant]);
-
-    return (
-        <div className="hidden">
-            <ReactPlayer
-                ref={playerRef}
-                url={url || ''}
-                playing={isPlaying}
-                onReady={handlePlayerReady}
-                onEnded={onEnded}
-                onDuration={onDuration}
-                onProgress={(state) => onProgress(state.playedSeconds)}
-                muted={true} // The DJ hears the audio through the regular jukebox card like everyone else
-                width="1px"
-                height="1px"
-                config={{
-                    youtube: { playerVars: { controls: 0, disablekb: 1 } },
-                }}
-            />
-        </div>
-    );
-};
-
-
 export default function UserList({ roomId }: { roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
@@ -114,14 +34,19 @@ export default function UserList({ roomId }: { roomId: string }) {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
-  const allParticipants = [
+  // Find the Jukebox participant and filter it out from the main user list
+  const jukeboxParticipant = remoteParticipants.find(p => p.identity === 'jukebox');
+  const humanParticipants = [
     ...(localParticipant ? [localParticipant] : []),
-    ...remoteParticipants,
+    ...remoteParticipants.filter(p => p.identity !== 'jukebox'),
   ];
+  
+  const jukeboxTrackRefs = useTracks(
+    [LivekitClient.Track.Source.Unknown], 
+    { participant: jukeboxParticipant }
+  );
+  const jukeboxAudioTrack = jukeboxTrackRefs.find(t => t.publication.kind === LivekitClient.Track.Kind.Audio);
 
-  // Find the music track from any participant in the room
-  const musicTrackRefs = useTracks([LivekitClient.Track.Source.Unknown]);
-  const jukeboxTrackRef = musicTrackRefs.find(ref => ref.publication.trackName === 'jukebox-audio');
 
   // User microphone and speaker state
   const { 
@@ -136,9 +61,6 @@ export default function UserList({ roomId }: { roomId: string }) {
     setActiveMediaDevice: setSpeakerDevice 
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
-  const [duration, setDuration] = useState(0);
-  const [localProgress, setLocalProgress] = useState(0); // For DJ's remote control UI
-  const [jukeboxRestartKey, setJukeboxRestartKey] = useState(0);
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -209,7 +131,6 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const handlePlaySong = (songId: string) => {
     if (!isDj || !roomRef) return;
-    setLocalProgress(0); // Reset progress when changing songs
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
@@ -290,58 +211,35 @@ export default function UserList({ roomId }: { roomId: string }) {
     });
   };
 
-  // Manual seek from the DJ's remote control.
-  const handleSeek = (seconds: number) => {
-      if(isDj) {
-        setLocalProgress(seconds);
-      }
-  };
-  
-  const handleForceJukeboxRestart = () => {
-    if (isDj) {
-        console.log("Forcing jukebox restart...");
-        setJukeboxRestartKey(prev => prev + 1);
-        toast({ title: "Jukebox Restarted", description: "The audio stream has been force-restarted." });
-    }
-  };
-
   return (
     <>
-      {isDj && (
-        <JukeboxStreamer 
-            key={jukeboxRestartKey} // This key is critical for the restart mechanism
-            url={currentTrack?.url || ''}
-            isPlaying={room?.isPlaying || false}
-            onEnded={handlePlayNext}
-            onDuration={setDuration}
-            onProgress={setLocalProgress}
-        />
-      )}
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {isDj && (
               <div className="lg:col-span-1 h-full">
                 <MusicPlayerCard
                   currentTrack={currentTrack}
-                  progress={localProgress}
-                  duration={duration}
+                  progress={0}
+                  duration={0}
                   playing={room?.isPlaying || false}
                   isPlayerControlAllowed={isDj}
                   onPlayPause={handlePlayPause}
                   onPlayNext={handlePlayNext}
                   onPlayPrev={handlePlayPrev}
-                  onSeek={handleSeek}
+                  onSeek={() => {}}
                   activePanels={activePanels}
                   onTogglePanel={handleTogglePanel}
-                  onForceJukeboxRestart={handleForceJukeboxRestart}
+                  onForceJukeboxRestart={() => {
+                      toast({ title: 'Jukebox Bot', description: 'The server-side bot controls the stream. Restart it from the terminal if needed.'})
+                  }}
                 />
               </div>
             )}
             
             <div className={isDj ? "lg:col-span-2" : "lg:col-span-3"}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {((isDj || activePanels.playlist) && (jukeboxTrackRef || isDj)) && (
-                        <div className={(isDj || activePanels.add) ? "md:col-span-1" : "md:col-span-2"}>
+                    {(activePanels.playlist) && (
+                        <div className={activePanels.add ? "md:col-span-1" : "md:col-span-2"}>
                             <PlaylistPanel
                                 playlist={room?.playlist || []}
                                 onPlaySong={handlePlaySong}
@@ -353,8 +251,8 @@ export default function UserList({ roomId }: { roomId: string }) {
                         </div>
                     )}
 
-                    {((isDj || activePanels.add) && (jukeboxTrackRef || isDj)) && (
-                        <div className={(isDj || activePanels.playlist) ? "md:col-span-1" : "md:col-span-2"}>
+                    {(activePanels.add) && (
+                        <div className={activePanels.playlist ? "md:col-span-1" : "md:col-span-2"}>
                             <AddMusicPanel
                                 onAddItems={handleAddItems}
                                 onClose={() => handleTogglePanel('add')}
@@ -369,13 +267,13 @@ export default function UserList({ roomId }: { roomId: string }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           <MusicJukeboxCard 
             key="jukebox-permanent"
-            trackRef={jukeboxTrackRef}
+            trackRef={jukeboxAudioTrack}
             activePanels={activePanels}
             onTogglePanel={handleTogglePanel}
-            onPlayNext={isDj ? handlePlayNext : () => {}}
+            onPlayNext={() => {}}
           />
 
-          {allParticipants.map((participant) => {
+          {humanParticipants.map((participant) => {
               const isLocal = participant.sid === localParticipant?.sid;
               return (
                 <UserCard
