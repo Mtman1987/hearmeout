@@ -15,6 +15,7 @@ import {
   VolumeX,
   LoaderCircle,
   LogOut,
+  Music,
 } from 'lucide-react';
 import { useTracks, AudioTrack, useRoomContext } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
@@ -100,23 +101,24 @@ export default function UserCard({
   const { devices: audioInputDevices, activeDeviceId: activeAudioInputDeviceId, setDevice: setAudioInputDevice } = useAudioDevice({ kind: 'audioinput' });
   const { devices: audioOutputDevices, activeDeviceId: activeAudioOutputDeviceId, setDevice: setAudioOutputDevice } = useAudioDevice({ kind: 'audiooutput' });
 
-  const trackSource = LivekitClient.Track.Source.Microphone;
-  const tracks = useTracks([trackSource], { participant });
-  const audioTrackRef = tracks[0];
+  const trackRef = useTracks([LivekitClient.Track.Source.Microphone, LivekitClient.Track.Source.ScreenShareAudio], { participant })[0];
+  const audioTrackRef = trackRef?.source === LivekitClient.Track.Source.Microphone ? trackRef : undefined;
+  const jukeboxTrackRef = trackRef?.source === LivekitClient.Track.Source.ScreenShareAudio ? trackRef : undefined;
 
   const { name, identity } = participant;
+  const isJukebox = identity === 'jukebox';
 
   const [trackAudioLevel, setTrackAudioLevel] = useState(0);
 
   useEffect(() => {
-    if (audioTrackRef?.publication?.track) {
-      const track = audioTrackRef.publication.track as LivekitClient.RemoteAudioTrack | LivekitClient.LocalAudioTrack;
+    if (trackRef?.publication?.track) {
+      const track = trackRef.publication.track as LivekitClient.RemoteAudioTrack | LivekitClient.LocalAudioTrack;
       const interval = setInterval(() => {
         setTrackAudioLevel(track.audioLevel ?? 0);
       }, 100);
       return () => clearInterval(interval);
     }
-  }, [audioTrackRef]);
+  }, [trackRef]);
   
   const isSpeaking = trackAudioLevel > 0.1;
 
@@ -136,9 +138,9 @@ export default function UserCard({
   };
 
   const userInRoomRef = useMemoFirebase(() => {
-    if (!firestore || !roomId || !identity) return null;
+    if (!firestore || !roomId || !identity || isJukebox) return null;
     return doc(firestore, 'rooms', roomId, 'users', identity);
-  }, [firestore, roomId, identity]);
+  }, [firestore, roomId, identity, isJukebox]);
 
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef, {
       ignoreUpdates: (data) => 'isSpeaking' in data
@@ -153,8 +155,8 @@ export default function UserCard({
   const isMuted = !participant.isMicrophoneEnabled;
   
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = name || participantMeta.displayName || firestoreUser?.displayName || 'User';
-  const photoURL = participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`;
+  const displayName = isJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
+  const photoURL = isJukebox ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
   
   const handleLeaveRoom = () => {
     room.disconnect();
@@ -185,6 +187,9 @@ export default function UserCard({
 
   return (
     <>
+      {jukeboxTrackRef && (
+        <AudioTrack key={jukeboxTrackRef.publication.trackSid} trackRef={jukeboxTrackRef} volume={volume} />
+      )}
       {!isLocal && audioTrackRef && (
         <AudioTrack key={audioTrackRef.publication.trackSid} trackRef={audioTrackRef} volume={volume} />
       )}
@@ -194,10 +199,18 @@ export default function UserCard({
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
-                        <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                       {isJukebox ? (
+                           <div className="flex h-full w-full items-center justify-center rounded-full bg-muted">
+                               <Music className="h-8 w-8 text-muted-foreground" />
+                           </div>
+                       ) : (
+                           <>
+                            <AvatarImage src={photoURL} alt={displayName || 'User'} data-ai-hint="person portrait" />
+                            <AvatarFallback>{displayName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                           </>
+                       )}
                     </Avatar>
-                     {isMuted && (
+                     {isMuted && !isJukebox && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
                             <MicOff className="w-3 h-3 text-destructive-foreground" />
                         </div>
@@ -205,7 +218,7 @@ export default function UserCard({
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-lg truncate">{displayName}</p>
-                    {(isLocal) ? (
+                    {(isLocal && !isJukebox) ? (
                          <div className="flex items-center gap-1 text-muted-foreground">
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -288,7 +301,7 @@ export default function UserCard({
                             </DropdownMenu>
                          </div>
                     ): (
-                        isHost && (
+                        (isHost && !isJukebox) && (
                            <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -321,7 +334,7 @@ export default function UserCard({
             </div>
           
             <div className="space-y-2 flex-grow flex flex-col justify-end">
-                 {!isLocal && (
+                 {(!isLocal || isJukebox) && (
                      <div className="flex items-center gap-2">
                         <Tooltip>
                             <TooltipTrigger asChild>

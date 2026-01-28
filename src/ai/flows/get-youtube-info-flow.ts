@@ -10,6 +10,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { YouTube } from 'youtube-sr';
+import ytdl from 'ytdl-core';
 
 const GetYoutubeInfoInputSchema = z.object({
   url: z.string().describe('The YouTube URL for a video or playlist.'),
@@ -23,6 +24,7 @@ const PlaylistItemSchema = z.object({
     artId: z.string(),
     url: z.string(),
     duration: z.number(),
+    streamUrl: z.string().optional(),
 });
 
 export type PlaylistItem = z.infer<typeof PlaylistItemSchema>;
@@ -55,6 +57,19 @@ function selectArtId(videoId: string): string {
     return artIds[hash % artIds.length];
 }
 
+const getStreamUrl = async (videoUrl: string): Promise<string | undefined> => {
+    try {
+        const info = await ytdl.getInfo(videoUrl);
+        // Prioritize audio-only formats for efficiency
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+        return format.url;
+    } catch (e) {
+        console.warn(`ytdl-core failed to get stream for ${videoUrl}. This might be due to age restrictions or other video limitations.`, e);
+        // Return undefined if fetching the stream fails. The client will handle this gracefully.
+        return undefined;
+    }
+};
+
 const getYoutubeInfoFlow = ai.defineFlow(
   {
     name: 'getYoutubeInfoFlow',
@@ -67,16 +82,26 @@ const getYoutubeInfoFlow = ai.defineFlow(
         const playlist = await YouTube.getPlaylist(input.url, { fetchAll: true });
         if (!playlist || playlist.videos.length === 0) return [];
         
-        return playlist.videos
+        const videoPromises = playlist.videos
           .filter(video => video.id && video.title && video.duration)
-          .map((video): PlaylistItem => ({
-            id: video.id!,
-            title: video.title!,
-            artist: video.channel?.name || 'Unknown Artist',
-            url: video.url,
-            artId: selectArtId(video.id!),
-            duration: video.duration / 1000, 
-          }));
+          .map(async (video): Promise<PlaylistItem | null> => {
+            const streamUrl = await getStreamUrl(video.url);
+            // Only include the video if we could get a stream URL
+            if (!streamUrl) return null;
+
+            return {
+              id: video.id!,
+              title: video.title!,
+              artist: video.channel?.name || 'Unknown Artist',
+              url: video.url,
+              artId: selectArtId(video.id!),
+              duration: video.duration / 1000, 
+              streamUrl,
+            };
+          });
+
+        const results = await Promise.all(videoPromises);
+        return results.filter((item): item is PlaylistItem => item !== null);
 
       } else {
         const isUrl = YouTube.isYouTube(input.url, {checkVideo: true});
@@ -84,6 +109,12 @@ const getYoutubeInfoFlow = ai.defineFlow(
 
         if (!video || !video.id || !video.title || !video.duration) {
             throw new Error(`Could not find a valid video for "${input.url}"`);
+        }
+        
+        const streamUrl = await getStreamUrl(video.url);
+        if (!streamUrl) {
+            // If a single video fails, we can inform the user more directly.
+            throw new Error(`Could not get a playable audio stream for "${video.title}". It might be age-restricted or private.`);
         }
 
         return [{
@@ -93,6 +124,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
           url: video.url,
           artId: selectArtId(video.id),
           duration: video.duration / 1000,
+          streamUrl,
         }];
       }
     } catch (error) {

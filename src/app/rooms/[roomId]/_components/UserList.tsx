@@ -19,10 +19,12 @@ export default function UserList({
 }: { 
     roomId: string
 }) {
-  const { firestore } = useFirebase();
+  const { firestore, user } = useFirebase();
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
+
+  const allParticipants = [localParticipant, ...remoteParticipants];
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -35,24 +37,12 @@ export default function UserList({
     <>
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Card for Local User's Voice */}
-          {localParticipant && (
-            <UserCard
-              key={localParticipant.sid}
-              participant={localParticipant}
-              isLocal={true}
-              isHost={localParticipant.identity === room?.ownerId}
-              roomId={roomId}
-            />
-          )}
-
-          {/* Cards for Remote Users */}
-          {remoteParticipants.map((participant) => (
+          {allParticipants.map((participant) => (
             <UserCard
               key={participant.sid}
               participant={participant}
-              isLocal={false}
-              isHost={participant.identity === room?.ownerId}
+              isLocal={participant.isLocal}
+              isHost={user?.uid === room?.ownerId}
               roomId={roomId}
             />
           ))}
