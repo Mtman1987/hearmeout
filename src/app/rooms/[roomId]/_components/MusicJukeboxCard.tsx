@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import ReactPlayer from 'react-player/youtube';
+import React, { useState, useEffect, useRef } from 'react';
 import { Music, Volume2, VolumeX, ListMusic, Youtube } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -9,43 +8,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { AudioVisualizer } from "./AudioVisualizer";
-import { type PlaylistItem } from "./Playlist";
-import { updateDocumentNonBlocking } from '@/firebase';
-import { DocumentReference } from 'firebase/firestore';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AudioTrack, useTrackVolume } from '@livekit/components-react';
+import type { TrackReference } from '@livekit/components-react';
 
-
-interface RoomData {
-  name: string;
-  ownerId: string;
-  playlist?: PlaylistItem[];
-  currentTrackId?: string;
-  isPlaying?: boolean;
-  currentTrackProgress?: number;
-}
 
 interface MusicJukeboxCardProps {
-  room: RoomData;
-  isHost: boolean;
-  roomRef: DocumentReference | null;
-  setDuration: (duration: number) => void;
-  setLocalProgress: (progress: number) => void;
+  trackRef: TrackReference | undefined;
   activePanels: { playlist: boolean, add: boolean };
   onTogglePanel: (panel: 'playlist' | 'add') => void;
-  onPlayNext: () => void;
 }
 
-export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, setLocalProgress, activePanels, onTogglePanel, onPlayNext }: MusicJukeboxCardProps) {
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => { setIsClient(true); }, []);
-
-  const playerRef = useRef<ReactPlayer>(null);
-
-  const [volume, setVolume] = useState(0);
+export default function MusicJukeboxCard({ trackRef, activePanels, onTogglePanel }: MusicJukeboxCardProps) {
+  const [volume, setVolume] = useState(0.5);
+  const { volume: trackVolume, isMuted: isTrackMuted } = useTrackVolume(trackRef);
   const lastNonZeroVolume = useRef(0.5);
 
   useEffect(() => {
@@ -53,38 +33,6 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, s
       lastNonZeroVolume.current = volume;
     }
   }, [volume]);
-
-  // Sync player to Firestore's progress, this keeps listeners in sync
-  useEffect(() => {
-    if (!isHost && playerRef.current && typeof room.currentTrackProgress === 'number') {
-      const localProgress = playerRef.current.getCurrentTime();
-      // Only seek if the difference is significant, to avoid jumpiness
-      if (Math.abs(localProgress - room.currentTrackProgress) > 5) {
-        playerRef.current.seekTo(room.currentTrackProgress, 'seconds');
-      }
-    }
-  }, [room.currentTrackProgress, isHost]);
-
-  const handleProgress = (state: { playedSeconds: number }) => {
-    // This now only updates the local state for the DJ's UI.
-    if (isHost) {
-      setLocalProgress(state.playedSeconds);
-    }
-  };
-
-  const handleDuration = (duration: number) => {
-    setDuration(duration);
-    if (isHost && roomRef) {
-        // When a new track loads, reset progress for all clients to 0.
-        updateDocumentNonBlocking(roomRef, { currentTrackProgress: 0 });
-    }
-  };
-
-  const handleEnded = () => {
-    if (isHost) {
-      onPlayNext();
-    }
-  };
   
   const handleVolumeChange = (value: number[]) => {
     setVolume(value[0]);
@@ -94,39 +42,19 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, s
     setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current));
   };
 
-  const isMuted = volume === 0;
-  const isAudioPlayingForMe = !!room.isPlaying && !isMuted;
-  const currentTrack = room.playlist?.find(t => t.id === room.currentTrackId);
+  const isMutedByMe = volume === 0;
+  const isAudioPlayingForMe = !!trackRef && !isMutedByMe && !isTrackMuted;
+  
+  const audioLevel = trackRef?.participant.audioLevel ?? 0;
 
   return (
     <>
-      <div className="hidden">
-        {isClient && currentTrack && (
-          <ReactPlayer
-            ref={playerRef}
-            url={currentTrack.url}
-            playing={room.isPlaying}
-            volume={volume}
-            onDuration={handleDuration}
-            onProgress={handleProgress}
-            onEnded={handleEnded}
-            progressInterval={1000}
-            width="1px"
-            height="1px"
-            config={{
-              youtube: {
-                playerVars: { controls: 0, disablekb: 1 }
-              }
-            }}
-          />
-        )}
-      </div>
-
+      {trackRef && <AudioTrack trackRef={trackRef} volume={volume} />}
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
           <div className="flex items-start gap-4">
             <div className="relative">
-              <Avatar className={cn("h-16 w-16 transition-all", room.isPlaying && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
+              <Avatar className={cn("h-16 w-16 transition-all", isAudioPlayingForMe && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
                 <AvatarFallback>
                   <Music className="h-8 w-8" />
                 </AvatarFallback>
@@ -161,7 +89,7 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, s
                 </Tooltip>
             </div>
              <div className="h-8 flex items-end">
-                <AudioVisualizer isSpeaking={isAudioPlayingForMe} />
+                <AudioVisualizer isSpeaking={isAudioPlayingForMe && audioLevel > 0.05} />
              </div>
             <div className="flex items-center gap-2 pt-2">
               <Button
@@ -169,9 +97,9 @@ export default function MusicJukeboxCard({ room, isHost, roomRef, setDuration, s
                 size="icon"
                 className="h-9 w-9"
                 onClick={toggleMute}
-                aria-label={isMuted ? "Unmute" : "Mute"}
+                aria-label={isMutedByMe ? "Unmute" : "Mute"}
               >
-                {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                {isMutedByMe ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </Button>
               <Slider
                 aria-label="Volume"

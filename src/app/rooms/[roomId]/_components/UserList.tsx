@@ -3,6 +3,7 @@
 import UserCard from "./UserCard";
 import MusicPlayerCard from "./MusicPlayerCard";
 import React, { useState, useEffect, useRef } from "react";
+import ReactPlayer from 'react-player/youtube';
 import type { PlaylistItem } from "./Playlist";
 import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
@@ -31,6 +32,87 @@ export interface RoomData {
   currentTrackProgress?: number;
 }
 
+
+// This new component contains the hidden ReactPlayer and handles publishing its audio stream.
+// It only renders for the DJ.
+const JukeboxStreamer = ({ url, isPlaying, onEnded, onDuration }: { url: string, isPlaying: boolean, onEnded: () => void, onDuration: (duration: number) => void }) => {
+    const playerRef = useRef<ReactPlayer>(null);
+    const { localParticipant } = useLocalParticipant();
+
+    useEffect(() => {
+        if (!localParticipant) return;
+
+        const publishJukeboxTrack = async () => {
+            // This is a workaround to get an audio stream from ReactPlayer
+            // It might not work in all browsers or if ReactPlayer changes its internal structure.
+            // A more robust solution would involve server-side stream generation.
+            const videoEl = document.createElement('video');
+            videoEl.muted = true; // MUST be muted to be able to autoplay without user interaction
+            
+            const player = playerRef.current?.getInternalPlayer();
+            if (player && player.src) {
+                videoEl.src = player.src;
+            }
+
+            try {
+                // @ts-ignore captureStream is present on HTMLMediaElement
+                const stream = videoEl.captureStream() as MediaStream;
+                const audioTrack = stream.getAudioTracks()[0];
+
+                if (audioTrack) {
+                    const trackPublication = await localParticipant.publishTrack(audioTrack, {
+                        name: 'jukebox-audio',
+                        source: LivekitClient.Track.Source.Unknown, // Using a custom source
+                    });
+                    return trackPublication;
+                }
+            } catch (e) {
+                 console.error("Failed to capture and publish jukebox track:", e);
+                 // Fallback or error handling
+            }
+        };
+
+        let publication: LivekitClient.LocalTrackPublication | undefined;
+        // The onReady prop can be unreliable, so we wait a moment.
+        const timeoutId = setTimeout(() => {
+             publishJukeboxTrack().then(pub => {
+                publication = pub;
+             });
+        }, 1000);
+
+
+        return () => {
+            clearTimeout(timeoutId);
+            if (publication) {
+                localParticipant.unpublishTrack(publication.track);
+            }
+        };
+    }, [localParticipant]);
+
+    return (
+        <div className="hidden">
+            <ReactPlayer
+                ref={playerRef}
+                url={url}
+                playing={isPlaying}
+                onEnded={onEnded}
+                onDuration={onDuration}
+                // The player itself is muted on the DJ's side because we are capturing its stream
+                // and hearing it back from LiveKit like every other user.
+                muted={true}
+                width="1px"
+                height="1px"
+                 config={{
+                    youtube: {
+                        playerVars: { controls: 0, disablekb: 1 }
+                    }
+                }}
+            />
+        </div>
+    );
+};
+
+
 export default function UserList({ roomId }: { roomId: string }) {
   const [activePanels, setActivePanels] = useState({ playlist: true, add: false });
   const { firestore, user } = useFirebase();
@@ -39,10 +121,20 @@ export default function UserList({ roomId }: { roomId: string }) {
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
 
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => setIsClient(true), []);
+
   const allParticipants = [
     ...(localParticipant ? [localParticipant] : []),
     ...remoteParticipants,
   ];
+
+  // Find the music track from any participant in the room
+  const musicTrackRefs = useTracks([LivekitClient.Track.Source.Unknown], {
+    updateOnlyOn: [],
+  });
+
+  const jukeboxTrackRef = musicTrackRefs.find(ref => ref.publication.trackName === 'jukebox-audio');
 
   // User microphone and speaker state
   const { 
@@ -58,7 +150,7 @@ export default function UserList({ roomId }: { roomId: string }) {
   } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
-  const [localProgress, setLocalProgress] = useState(0);
+  const [localProgress, setLocalProgress] = useState(0); // For DJ's remote control UI
 
   // Firestore state
   const roomRef = useMemoFirebase(() => {
@@ -68,12 +160,8 @@ export default function UserList({ roomId }: { roomId: string }) {
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
-  // When the track changes in Firestore, reset the local progress state.
-  useEffect(() => {
-    setLocalProgress(room?.currentTrackProgress || 0);
-  }, [room?.currentTrackId, room?.currentTrackProgress]);
-
   const isDj = user?.uid === room?.djId;
+  const currentTrack = room?.playlist?.find(t => t.id === room?.currentTrackId);
   
   const handleMicDeviceChange = (deviceId: string) => {
       setMicDevice(deviceId);
@@ -124,21 +212,11 @@ export default function UserList({ roomId }: { roomId: string }) {
   }, [micDevices, setMicDevice]);
 
 
-  // This effect ensures the local participant's microphone is enabled with the correct device.
-  // The <LiveKitRoom> component handles the initial publication. This effect handles changes.
   useEffect(() => {
     if (localParticipant && activeMicId) {
       const audioOptions: LivekitClient.AudioCaptureOptions = { deviceId: activeMicId };
-      const enableMicrophone = async () => {
-          await localParticipant.setMicrophoneEnabled(true, audioOptions);
-      };
-      enableMicrophone();
+      localParticipant.setMicrophoneEnabled(true, audioOptions);
     }
-     return () => {
-      // In development with React.StrictMode, components mount, unmount, and remount.
-      // We should NOT disable the microphone here on unmount, as that causes instability.
-      // The LiveKitRoom component's unmount will handle the final cleanup.
-    };
   }, [localParticipant, activeMicId]);
 
 
@@ -147,8 +225,7 @@ export default function UserList({ roomId }: { roomId: string }) {
         updateDocumentNonBlocking(roomRef, { 
             playlist: initialPlaylist,
             currentTrackId: initialPlaylist[0].id,
-            isPlaying: false,
-            currentTrackProgress: 0,
+            isPlaying: true, // Start playing automatically
         });
     }
   }, [room, isDj, roomRef]);
@@ -159,7 +236,6 @@ export default function UserList({ roomId }: { roomId: string }) {
     updateDocumentNonBlocking(roomRef, {
         currentTrackId: songId,
         isPlaying: true,
-        currentTrackProgress: 0,
     });
   }
 
@@ -171,8 +247,8 @@ export default function UserList({ roomId }: { roomId: string }) {
   const handlePlayNext = () => {
     if (!isDj || !roomRef || !room?.playlist || !room.currentTrackId) return;
     const currentIndex = room.playlist.findIndex(t => t.id === room.currentTrackId);
-    if (currentIndex === -1) { // If track not found, play first song
-        handlePlaySong(room.playlist[0].id);
+    if (currentIndex === -1) { 
+        if (room.playlist.length > 0) handlePlaySong(room.playlist[0].id);
         return;
     }
     const nextIndex = (currentIndex + 1) % room.playlist.length;
@@ -219,11 +295,9 @@ export default function UserList({ roomId }: { roomId: string }) {
         const deletedIndex = room.playlist.findIndex(t => t.id === songId);
         const nextIndex = deletedIndex >= newPlaylist.length ? 0 : deletedIndex;
         updates.currentTrackId = newPlaylist[nextIndex]?.id;
-        updates.currentTrackProgress = 0;
       } else {
         updates.currentTrackId = deleteField();
         updates.isPlaying = false;
-        updates.currentTrackProgress = deleteField();
       }
     }
     
@@ -236,25 +310,31 @@ export default function UserList({ roomId }: { roomId: string }) {
       playlist: [],
       currentTrackId: deleteField(),
       isPlaying: false,
-      currentTrackProgress: deleteField(),
     });
   };
 
+  // Manual seek from the DJ's remote control. This is not used for continuous sync.
   const handleSeek = (seconds: number) => {
-      if (isDj && roomRef) {
-          updateDocumentNonBlocking(roomRef, { currentTrackProgress: seconds });
-          setLocalProgress(seconds); // Also update local state for immediate feedback
-      }
+      // Seeking a live stream is complex. For now, this is a no-op.
+      // In a more advanced implementation, this could send a command to the streamer.
   };
 
   return (
     <>
+      {isDj && isClient && currentTrack && (
+        <JukeboxStreamer 
+            url={currentTrack.url}
+            isPlaying={room?.isPlaying || false}
+            onEnded={handlePlayNext}
+            onDuration={setDuration}
+        />
+      )}
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {isDj && (
               <div className="lg:col-span-1 h-full">
                 <MusicPlayerCard
-                  currentTrack={room?.playlist?.find(t => t.id === room?.currentTrackId)}
+                  currentTrack={currentTrack}
                   progress={localProgress}
                   duration={duration}
                   playing={room?.isPlaying || false}
@@ -298,16 +378,11 @@ export default function UserList({ roomId }: { roomId: string }) {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {room?.currentTrackId && (
+          {jukeboxTrackRef && (
             <MusicJukeboxCard 
-              room={room} 
-              isHost={isDj}
-              roomRef={roomRef}
-              setDuration={setDuration}
-              setLocalProgress={setLocalProgress}
+              trackRef={jukeboxTrackRef}
               activePanels={activePanels}
               onTogglePanel={handleTogglePanel}
-              onPlayNext={handlePlayNext}
             />
           )}
 

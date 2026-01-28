@@ -208,6 +208,7 @@ function RoomPageContent() {
         updateDocumentNonBlocking(roomRef, { 
             djId: deleteField(),
             djDisplayName: deleteField(),
+            isPlaying: false,
         });
     } else if (isDjSpotOpen) {
         // A listener is taking the open DJ spot.
@@ -292,20 +293,28 @@ function RoomPageContent() {
             <SidebarInset>
                 <div className="flex flex-col h-screen relative">
                     { isLoading ? (
-                        <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
+                         <div className="flex-1 flex items-center justify-center">
                             <div className="flex flex-col items-center gap-4 text-center">
                             <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
                             <p className="text-muted-foreground">Connecting to room...</p>
                             </div>
-                        </main>
+                        </div>
                     ) : !userHasInteracted ? (
                         <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
-                            <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
-                            <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
-                            <Button size="lg" onClick={() => setUserHasInteracted(true)}>
-                                <Headphones className="mr-2 h-5 w-5" />
-                                Join Voice Chat
-                            </Button>
+                            <RoomHeader
+                                roomName={room?.name || 'Loading room...'}
+                                onToggleChat={() => setChatOpen(!chatOpen)}
+                                onMusicIconClick={handleMusicIconClick}
+                                showMusicIcon={showMusicIcon}
+                            />
+                            <div className="flex-1 flex flex-col items-center justify-center">
+                                <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
+                                <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
+                                <Button size="lg" onClick={() => setUserHasInteracted(true)}>
+                                    <Headphones className="mr-2 h-5 w-5" />
+                                    Join Voice Chat
+                                </Button>
+                            </div>
                         </div>
                     ) : (
                         <LiveKitRoom
@@ -362,4 +371,3 @@ export default function RoomPage() {
     );
 }
 
-    

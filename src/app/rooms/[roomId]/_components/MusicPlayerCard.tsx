@@ -42,7 +42,7 @@ type MusicPlayerCardProps = {
 };
 
 // This component is now a "Remote Control" for the host. It only sends commands.
-// The actual audio playback is handled by MusicJukeboxCard.
+// The actual audio playback is handled by MusicJukeboxCard via a WebRTC stream.
 export default function MusicPlayerCard({
   currentTrack,
   progress,
@@ -121,7 +121,6 @@ export default function MusicPlayerCard({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-end gap-2 p-3 sm:p-4">
         <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
-          {/* Visualizer is now in the Jukebox card */}
           <div className="flex items-center gap-2 ml-auto">
               <Tooltip>
                   <TooltipTrigger asChild>
