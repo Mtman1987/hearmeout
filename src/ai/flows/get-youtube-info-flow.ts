@@ -11,9 +11,10 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { google } from 'googleapis';
 import { PlaylistItem } from '@/types/playlist';
-import YoutubeMp3Downloader from 'youtube-mp3-downloader';
+import { YtDlp } from 'ytdlp-nodejs';
 import path from 'path';
 import fs from 'fs';
+
 
 // --- Types and Schemas ---
 
@@ -97,15 +98,7 @@ const getYoutubeInfoFlow = ai.defineFlow(
         throw new Error('YouTube API key is not configured. Please add YOUTUBE_API_KEY to your .env file.');
       }
       
-      const outputPath = path.resolve(process.cwd(), 'public/audio');
-      fs.mkdirSync(outputPath, { recursive: true });
-
-      const YD = new YoutubeMp3Downloader({
-        ffmpegPath: 'ffmpeg',
-        outputPath: outputPath,
-        youtubeVideoQuality: 'highestaudio',
-      });
-
+      const ytdlp = new YtDlp();
       const youtube = google.youtube({ version: 'v3', auth: YOUTUBE_API_KEY });
 
       const playlistId = parseYouTubePlaylistId(input.url);
@@ -131,29 +124,36 @@ const getYoutubeInfoFlow = ai.defineFlow(
       const videoDetailsResponse = await youtube.videos.list({ part: ['snippet', 'contentDetails'], id: videoIds });
       if (!videoDetailsResponse.data.items || videoDetailsResponse.data.items.length === 0) throw new Error('Could not fetch video details.');
 
-      const downloadPromises = videoDetailsResponse.data.items.map(item => {
-        return new Promise<PlaylistItem>((resolve, reject) => {
-          if (!item.id) {
-            return reject(new Error('Video item is missing an ID.'));
-          }
-          YD.download(item.id);
-          YD.on('finished', (err, data) => {
-            if (err) return reject(err);
-            const webPath = '/' + path.relative(path.resolve(process.cwd(), 'public'), data.file).replace(/\\/g, '/');
-            const playlistItem: PlaylistItem = {
-              id: item.id!,
-              title: item.snippet?.title || 'Unknown Title',
-              artist: item.snippet?.channelTitle || 'Unknown Artist',
-              artId: selectArtId(item.id!),
-              url: webPath,
-              duration: item.contentDetails?.duration ? parseDuration(item.contentDetails.duration) : 0,
-            };
-            resolve(playlistItem);
-          });
-          YD.on('error', (error) => {
-            reject(error);
-          });
-        });
+      const downloadPromises = videoDetailsResponse.data.items.map(async (item) => {
+        if (!item.id || !item.snippet || !item.contentDetails) {
+            throw new Error('Video item is missing required details.');
+        }
+
+        const videoUrl = `https://www.youtube.com/watch?v=${item.id}`;
+        const outputPath = path.resolve(process.cwd(), 'public/audio');
+        const outputTemplate = path.join(outputPath, `${item.id}.mp3`);
+        
+        fs.mkdirSync(outputPath, { recursive: true });
+
+        // Using the builder API to ensure we get file path and control format
+        await ytdlp
+          .download(videoUrl)
+          .filter('audioonly')
+          .type('mp3')
+          .output(outputTemplate)
+          .run();
+
+        const webPath = `/audio/${item.id}.mp3`;
+
+        const playlistItem: PlaylistItem = {
+            id: item.id,
+            title: item.snippet.title || 'Unknown Title',
+            artist: item.snippet.channelTitle || 'Unknown Artist',
+            artId: selectArtId(item.id),
+            url: webPath,
+            duration: item.contentDetails.duration ? parseDuration(item.contentDetails.duration) : 0,
+        };
+        return playlistItem;
       });
       
       const results = await Promise.all(downloadPromises);
