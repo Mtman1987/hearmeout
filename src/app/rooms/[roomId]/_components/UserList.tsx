@@ -14,7 +14,15 @@ export interface RoomData {
   djDisplayName?: string;
 }
 
-export default function UserList({ roomId, jukeboxAudioStream }: { roomId: string, jukeboxAudioStream: MediaStream | null }) {
+export default function UserList({ 
+    roomId, 
+    jukeboxAudioStream,
+    isPlaying
+}: { 
+    roomId: string, 
+    jukeboxAudioStream: MediaStream | null,
+    isPlaying: boolean
+}) {
   const { firestore } = useFirebase();
   
   const { localParticipant } = useLocalParticipant();
@@ -42,6 +50,12 @@ export default function UserList({ roomId, jukeboxAudioStream }: { roomId: strin
               const isLocal = participant.sid === localParticipant?.sid;
 
               if (isLocal) {
+                 // The local participant is the Jukebox.
+                 // It's a "permanent resident" because it's always connected when a user is in the room.
+                 // It's hidden by default and only appears when music is playing.
+                 if (!isPlaying) {
+                    return null;
+                 }
                  return (
                     <UserCard
                       key={participant.sid}

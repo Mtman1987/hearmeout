@@ -235,7 +235,6 @@ function RoomPageContent() {
           sourceNode.disconnect();
         };
       } catch (error) {
-        // This can happen if the source is already connected, which is fine.
         if (!(error instanceof DOMException && error.name === 'InvalidStateError')) {
           console.error("Error connecting audio source:", error);
         }
@@ -311,18 +310,17 @@ function RoomPageContent() {
 
     const setupUserAndToken = async () => {
         try {
-            const participantData = {
-                uid: user.uid,
-                displayName: user.displayName,
-                photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
-                isSpeaking: false,
-            };
             if (userInRoomRef) {
-                // Non-blocking write to create/merge the user document.
-                setDocumentNonBlocking(userInRoomRef, participantData, { merge: true });
+                // Wait for the document to be created before proceeding.
+                await setDoc(userInRoomRef, {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
+                    isSpeaking: false,
+                }, { merge: true });
             }
 
-            const metadataForToken = JSON.stringify({ photoURL: participantData.photoURL });
+            const metadataForToken = JSON.stringify({ photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100` });
             const token = await generateLiveKitToken(params.roomId, user.uid, user.displayName!, metadataForToken);
             
             if (!isCancelled) {
@@ -345,9 +343,7 @@ function RoomPageContent() {
     return () => {
         isCancelled = true;
         if (userInRoomRef) {
-            // Attempt to delete the user document when they leave.
             deleteDoc(userInRoomRef).catch(err => {
-                // This might fail if permissions are lost, but it's okay to just log it.
                 console.warn("Failed to clean up user document in room on dismount:", err);
             });
         }
@@ -405,7 +401,7 @@ function RoomPageContent() {
                             serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
-                            audio={false} // Initially connect without mic to publish custom track
+                            audio={false} 
                             video={false}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
@@ -423,9 +419,13 @@ function RoomPageContent() {
                                 showMusicIcon={true}
                             />
                             <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    <div className="lg:col-span-2">
-                                        <UserList roomId={params.roomId} jukeboxAudioStream={audioDestination?.stream ?? null}/>
+                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="lg:col-span-1">
+                                        <UserList 
+                                            roomId={params.roomId} 
+                                            jukeboxAudioStream={audioDestination?.stream ?? null}
+                                            isPlaying={!!room?.isPlaying}
+                                        />
                                     </div>
                                     <div className="lg:col-span-1 space-y-6">
                                         <MusicPlayerCard 
@@ -433,7 +433,7 @@ function RoomPageContent() {
                                             progress={progress}
                                             duration={duration}
                                             playing={!!room.isPlaying}
-                                            isPlayerControlAllowed={true} // Local user is always the controller
+                                            isPlayerControlAllowed={true}
                                             onPlayPause={handlePlayPause}
                                             onPlayNext={handlePlayNext}
                                             onPlayPrev={handlePlayPrev}
@@ -474,7 +474,6 @@ function RoomPageContent() {
                                         config={{
                                             youtube: {
                                                 playerVars: {
-                                                    // This is important for some browsers to allow audio capture
                                                     origin: typeof window !== 'undefined' ? window.location.origin : ''
                                                 }
                                             }
