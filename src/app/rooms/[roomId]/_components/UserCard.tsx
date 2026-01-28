@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, 'useEffect, useRef, useState' from 'react';
 import {
   Headphones,
   Mic,
@@ -16,7 +16,7 @@ import {
   VolumeX,
   LoaderCircle
 } from 'lucide-react';
-import { useTracks, AudioTrack, useLocalParticipant } from '@livekit/components-react';
+import { useTracks, AudioTrack, useTrack } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -56,8 +56,6 @@ interface RoomParticipantData {
   uid: string;
   displayName: string;
   photoURL: string;
-  isSpeaking: boolean;
-  isMuted?: boolean;
 }
 
 export default function UserCard({
@@ -65,60 +63,46 @@ export default function UserCard({
     isLocal,
     isHost,
     roomId,
-    isActingAsJukebox,
-    jukeboxAudioTrack,
+    audioType,
 }: {
     participant: LivekitClient.Participant;
     isLocal: boolean;
     isHost?: boolean;
     roomId: string;
-    isActingAsJukebox?: boolean;
-    jukeboxAudioTrack?: MediaStreamTrack | null;
+    audioType: 'voice' | 'music';
 }) {
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  const { isSpeaking, name, identity, audioLevel } = participant;
-  const { localParticipant } = useLocalParticipant();
-  
+  const isJukeboxCard = audioType === 'music';
+
   const [volume, setVolume] = React.useState(1);
   const [isMutedByMe, setIsMutedByMe] = React.useState(false);
   const lastNonZeroVolume = React.useRef(volume);
+  
+  const trackSource = isJukeboxCard ? LivekitClient.Track.Source.ScreenShareAudio : LivekitClient.Track.Source.Microphone;
+  const tracks = useTracks([trackSource], { participant });
+  const audioTrackRef = tracks[0];
 
-  const audioTracks = useTracks(
-    [LivekitClient.Track.Source.Microphone], 
-    { participant }
-  );
+  const { name, identity } = participant;
+
+  const [trackAudioLevel, setTrackAudioLevel] = useState(0);
 
   useEffect(() => {
-    if (isLocal && isActingAsJukebox && jukeboxAudioTrack && localParticipant) {
-      const publishTrack = async () => {
-        // Unpublish any existing microphone tracks
-        const micPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
-        if (micPublication && micPublication.track) {
-          await localParticipant.unpublishTrack(micPublication.track, true);
-        }
-        
-        // Publish the new jukebox audio track
-        if (jukeboxAudioTrack.readyState === 'live') {
-            await localParticipant.publishTrack(jukeboxAudioTrack, {
-              source: LivekitClient.Track.Source.Microphone,
-              name: 'Jukebox',
-            });
-        }
-      };
-
-      publishTrack().catch(err => {
-        console.error("Failed to publish jukebox audio track:", err);
-      });
-
+    if (audioTrackRef?.publication?.track) {
+      const track = audioTrackRef.publication.track as LivekitClient.RemoteAudioTrack | LivekitClient.LocalAudioTrack;
+      const interval = setInterval(() => {
+        setTrackAudioLevel(track.audioLevel ?? 0);
+      }, 100);
+      return () => clearInterval(interval);
     }
-  }, [isLocal, isActingAsJukebox, jukeboxAudioTrack, localParticipant]);
+  }, [audioTrackRef]);
+  
+  const isSpeaking = trackAudioLevel > 0.1;
 
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (isLocal) return;
     if (volume > 0) {
         lastNonZeroVolume.current = volume;
@@ -133,43 +117,24 @@ export default function UserCard({
     setVolume(prevVolume => (prevVolume > 0 ? 0 : lastNonZeroVolume.current || 1));
   };
 
-
   const userInRoomRef = useMemoFirebase(() => {
     if (!firestore || !roomId || !identity) return null;
     return doc(firestore, 'rooms', roomId, 'users', identity);
   }, [firestore, roomId, identity]);
 
-  const { data: firestoreUser, isLoading: isFirestoreUserLoading } = useDoc<RoomParticipantData>(userInRoomRef);
-
-  useEffect(() => {
-    if (userInRoomRef && firestoreUser && !isFirestoreUserLoading && isSpeaking !== firestoreUser.isSpeaking) {
-      updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
-    }
-  }, [isSpeaking, userInRoomRef, firestoreUser, isFirestoreUserLoading]);
-
-
-  const isMuted = firestoreUser?.isMuted ?? false;
-
-  React.useEffect(() => {
-    if (isLocal && !isActingAsJukebox) {
-        const micTrack = audioTracks[0]?.publication.track;
-        if (micTrack && 'setMuted' in micTrack && typeof micTrack.setMuted === 'function') {
-          if (micTrack.isMuted !== isMuted) {
-              micTrack.setMuted(isMuted);
-          }
-        }
-    }
-  }, [isLocal, audioTracks, isMuted, isActingAsJukebox]);
+  const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
   
   const handleToggleMic = async () => {
-    if (isLocal && userInRoomRef) {
-        updateDocumentNonBlocking(userInRoomRef, { isMuted: !isMuted });
+    if (isLocal && !isJukeboxCard) {
+        await participant.setMicrophoneEnabled(!participant.isMicrophoneEnabled);
     }
   };
   
+  const isMuted = isJukeboxCard ? false : !participant.isMicrophoneEnabled;
+  
   const participantMeta = participant.metadata ? JSON.parse(participant.metadata) : {};
-  const displayName = isActingAsJukebox ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
-  const photoURL = isActingAsJukebox ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
+  const displayName = isJukeboxCard ? 'Jukebox' : (name || participantMeta.displayName || firestoreUser?.displayName || 'User');
+  const photoURL = isJukeboxCard ? '' : (participantMeta.photoURL || firestoreUser?.photoURL || `https://picsum.photos/seed/${identity}/100/100`);
   
   const handleDeleteRoom = async () => {
     if (!isHost || !firestore || !roomId) {
@@ -194,16 +159,16 @@ export default function UserCard({
 
   return (
     <>
-      {!isLocal && audioTracks.map((trackRef) => (
-        <AudioTrack key={trackRef.publication.trackSid} trackRef={trackRef} volume={volume} />
-      ))}
+      {!isLocal && audioTrackRef && (
+        <AudioTrack key={audioTrackRef.publication.trackSid} trackRef={audioTrackRef} volume={volume} />
+      )}
 
       <Card className="flex flex-col h-full">
         <CardContent className="p-4 flex flex-col gap-4 flex-grow">
             <div className="flex items-start gap-4">
                 <div className="relative">
                     <Avatar className={cn("h-16 w-16 transition-all", isSpeaking && "ring-4 ring-primary ring-offset-2 ring-offset-card")}>
-                        {isActingAsJukebox ? (
+                        {isJukeboxCard ? (
                             <AvatarFallback>
                                 <Music className="h-8 w-8" />
                             </AvatarFallback>
@@ -214,7 +179,7 @@ export default function UserCard({
                             </>
                         )}
                     </Avatar>
-                     {(isMuted && !isActingAsJukebox) && (
+                     {(isMuted && !isJukeboxCard) && (
                         <div className="absolute -bottom-1 -right-1 bg-destructive rounded-full p-1 border-2 border-card">
                             <MicOff className="w-3 h-3 text-destructive-foreground" />
                         </div>
@@ -222,7 +187,7 @@ export default function UserCard({
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-lg truncate">{displayName}</p>
-                    {isLocal && !isActingAsJukebox ? (
+                    {isLocal && !isJukeboxCard ? (
                          <div className="flex items-center gap-1 text-muted-foreground">
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -249,7 +214,7 @@ export default function UserCard({
                             )}
                          </div>
                     ): (
-                        isHost && !isActingAsJukebox && (
+                        isHost && !isJukeboxCard && (
                            <div className='flex items-center gap-1'>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -306,7 +271,7 @@ export default function UserCard({
                         />
                     </div>
                 )}
-                <SpeakingIndicator audioLevel={isMuted ? 0 : audioLevel} />
+                <SpeakingIndicator audioLevel={isMuted ? 0 : trackAudioLevel} />
             </div>
         </CardContent>
       </Card>

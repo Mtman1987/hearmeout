@@ -15,23 +15,16 @@ export interface RoomData {
 }
 
 export default function UserList({ 
-    roomId, 
-    jukeboxAudioStream,
+    roomId,
     isPlaying
 }: { 
     roomId: string, 
-    jukeboxAudioStream: MediaStream | null,
     isPlaying: boolean
 }) {
   const { firestore } = useFirebase();
   
   const { localParticipant } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  
-  const participants = [
-    ...(localParticipant ? [localParticipant] : []),
-    ...remoteParticipants,
-  ];
 
   const roomRef = useMemoFirebase(() => {
     if (!firestore || !roomId) return null;
@@ -40,46 +33,45 @@ export default function UserList({
 
   const { data: room } = useDoc<RoomData>(roomRef);
 
-  const jukeboxAudioTrack = jukeboxAudioStream ? jukeboxAudioStream.getAudioTracks()[0] : null;
-
   return (
     <>
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {participants.map((participant) => {
-              const isLocal = participant.sid === localParticipant?.sid;
+          {/* Card for Local User's Voice */}
+          {localParticipant && (
+            <UserCard
+              key={`${localParticipant.sid}-voice`}
+              participant={localParticipant}
+              isLocal={true}
+              isHost={localParticipant.identity === room?.ownerId}
+              roomId={roomId}
+              audioType="voice"
+            />
+          )}
 
-              if (isLocal) {
-                 // The local participant is the Jukebox.
-                 // It's a "permanent resident" because it's always connected when a user is in the room.
-                 // It's hidden by default and only appears when music is playing.
-                 if (!isPlaying) {
-                    return null;
-                 }
-                 return (
-                    <UserCard
-                      key={participant.sid}
-                      participant={participant}
-                      isLocal={true}
-                      isHost={participant.identity === room?.ownerId}
-                      roomId={roomId}
-                      isActingAsJukebox={true}
-                      jukeboxAudioTrack={jukeboxAudioTrack}
-                    />
-                )
-              } else {
-                return (
-                  <UserCard
-                    key={participant.sid}
-                    participant={participant}
-                    isLocal={false}
-                    isHost={participant.identity === room?.ownerId}
-                    roomId={roomId}
-                  />
-                )
-              }
-            })
-          }
+          {/* Card for Jukebox (Music Stream from Local User) */}
+          {localParticipant && isPlaying && (
+            <UserCard
+              key={`${localParticipant.sid}-music`}
+              participant={localParticipant}
+              isLocal={true}
+              isHost={false} // The Jukebox itself can't be a host
+              roomId={roomId}
+              audioType="music"
+            />
+          )}
+
+          {/* Cards for Remote Users */}
+          {remoteParticipants.map((participant) => (
+            <UserCard
+              key={participant.sid}
+              participant={participant}
+              isLocal={false}
+              isHost={participant.identity === room?.ownerId}
+              roomId={roomId}
+              audioType="voice"
+            />
+          ))}
         </div>
       </div>
     </>

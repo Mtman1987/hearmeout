@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import {
   LiveKitRoom,
   useConnectionState,
+  useLocalParticipant,
 } from '@livekit/components-react';
 import * as LivekitClient from 'livekit-client';
 import {
@@ -311,8 +312,7 @@ function RoomPageContent() {
     const setupUserAndToken = async () => {
         try {
             if (userInRoomRef) {
-                // Wait for the document to be created before proceeding.
-                await setDoc(userInRoomRef, {
+                await setDocumentNonBlocking(userInRoomRef, {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
@@ -349,6 +349,26 @@ function RoomPageContent() {
         }
     };
 }, [user, isUserLoading, params.roomId, firestore, toast, livekitToken, userInRoomRef]);
+
+  const { localParticipant } = useLocalParticipant();
+  const jukeboxAudioTrack = audioDestination?.stream.getAudioTracks()[0] ?? null;
+
+  useEffect(() => {
+    if (!localParticipant) return;
+    
+    const musicTrackPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShareAudio);
+
+    if (room?.isPlaying && jukeboxAudioTrack && !musicTrackPublication) {
+        localParticipant.publishTrack(jukeboxAudioTrack, {
+            source: LivekitClient.Track.Source.ScreenShareAudio,
+            name: 'JukeboxAudio'
+        });
+    } else if (!room?.isPlaying && musicTrackPublication) {
+        if (musicTrackPublication.track) {
+            localParticipant.unpublishTrack(musicTrackPublication.track);
+        }
+    }
+  }, [localParticipant, jukeboxAudioTrack, room?.isPlaying]);
 
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
@@ -401,7 +421,7 @@ function RoomPageContent() {
                             serverUrl={livekitUrl}
                             token={livekitToken}
                             connect={true}
-                            audio={false} 
+                            audio={true} 
                             video={false}
                             onError={(err) => {
                                 console.error("LiveKit connection error:", err);
@@ -422,8 +442,7 @@ function RoomPageContent() {
                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <div className="lg:col-span-1">
                                         <UserList 
-                                            roomId={params.roomId} 
-                                            jukeboxAudioStream={audioDestination?.stream ?? null}
+                                            roomId={params.roomId}
                                             isPlaying={!!room?.isPlaying}
                                         />
                                     </div>
