@@ -139,10 +139,12 @@ export default function UserCard({
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   React.useEffect(() => {
-    if (userInRoomRef && isSpeaking !== firestoreUser?.isSpeaking) {
+    // This prevents the race condition. Only update the speaking status
+    // if the user's document has already been created in Firestore.
+    if (userInRoomRef && firestoreUser && isSpeaking !== firestoreUser.isSpeaking) {
       updateDocumentNonBlocking(userInRoomRef, { isSpeaking });
     }
-  }, [isSpeaking, userInRoomRef, firestoreUser?.isSpeaking]);
+  }, [isSpeaking, userInRoomRef, firestoreUser]);
 
 
   const isMuted = firestoreUser?.isMuted ?? false;
