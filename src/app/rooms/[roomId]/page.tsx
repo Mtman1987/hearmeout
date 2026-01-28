@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -459,7 +458,7 @@ function RoomPageContent() {
                                     )}
                                 </div>
                             </main>
-                            <div className="hidden">
+                            <div>
                                <ReactPlayer
                                   ref={playerRef}
                                   url={currentTrack?.url || ''}
@@ -467,9 +466,7 @@ function RoomPageContent() {
                                   onProgress={(p) => setProgress(p.playedSeconds)}
                                   onDuration={setDuration}
                                   onEnded={handlePlayNext}
-                                  controls={false}
-                                  width="1px"
-                                  height="1px"
+                                  controls={true}
                                />
                             </div>
                         </LiveKitRoom>
