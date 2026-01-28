@@ -19,22 +19,34 @@ function extractVideoId(url: string): string | null {
 }
 
 async function getYoutubeAudioUrl(youtubeUrl: string) {
+  // 1. Log the incoming URL
+  console.log("Incoming URL for audio processing:", youtubeUrl);
+
   const videoId = extractVideoId(youtubeUrl);
-  if (!videoId) throw new Error("Invalid YouTube URL");
+  // 2. Log the extracted video ID
+  console.log("Extracted video ID:", videoId);
+
+  if (!videoId) throw new Error("Invalid YouTube URL or failed to extract Video ID");
 
   let lastError: Error | null = null;
 
   for (const instance of PIPED_INSTANCES) {
     try {
       const apiUrl = `${instance}/streams/${videoId}`;
-      // Use global fetch available in Next.js
+      console.log(`Trying Piped instance: ${apiUrl}`);
+
+      // Use global fetch available in Next.js, with caching
       const res = await fetch(apiUrl, { next: { revalidate: 3600 } }); // Cache for 1 hour
+
       if (!res.ok) throw new Error(`HTTP ${res.status} from ${instance}`);
 
       const data = await res.json();
-      if (!data.audioStreams?.length) throw new Error("No audio streams found");
+      if (!data.audioStreams?.length) throw new Error(`No audio streams found from ${instance}`);
 
       const best = data.audioStreams.sort((a: any, b: any) => b.bitrate - a.bitrate)[0];
+      
+      // 3. Log the resolved audio URL
+      console.log(`Successfully resolved audio URL from ${instance}:`, best.url);
 
       return {
         url: best.url,
