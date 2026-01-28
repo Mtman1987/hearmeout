@@ -7,7 +7,7 @@ import {
   LiveKitRoom,
   useConnectionState,
 } from '@livekit/components-react';
-import { ConnectionState } from 'livekit-client';
+import * as LivekitClient from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -30,7 +30,6 @@ import {
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { generateLiveKitToken, postToDiscord } from '@/app/actions';
-import * as LivekitClient from 'livekit-client';
 
 function ConnectionStatusIndicator() {
     const connectionState = useConnectionState();
@@ -39,19 +38,19 @@ function ConnectionStatusIndicator() {
     let statusText = '';
 
     switch (connectionState) {
-        case ConnectionState.Connected:
+        case LivekitClient.ConnectionState.Connected:
             indicatorClass = 'bg-green-500';
             statusText = 'Connected';
             break;
-        case ConnectionState.Connecting:
+        case LivekitClient.ConnectionState.Connecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Connecting';
             break;
-        case ConnectionState.Disconnected:
+        case LivekitClient.ConnectionState.Disconnected:
             indicatorClass = 'bg-red-500';
             statusText = 'Disconnected';
             break;
-        case ConnectionState.Reconnecting:
+        case LivekitClient.ConnectionState.Reconnecting:
             indicatorClass = 'bg-yellow-500 animate-pulse';
             statusText = 'Reconnecting';
             break;
@@ -318,7 +317,7 @@ function RoomPageContent() {
                           </main>
                         ) }
 
-                        {!userHasInteracted && (
+                        {!userHasInteracted && !isLoading && (
                           <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
                               <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
                               <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>

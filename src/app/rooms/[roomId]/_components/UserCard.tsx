@@ -17,7 +17,7 @@ import {
   LoaderCircle
 } from 'lucide-react';
 import { useTracks, AudioTrack } from '@livekit/components-react';
-import { Track, type Participant, type MediaDevice, LocalAudioTrack } from 'livekit-client';
+import * as LivekitClient from 'livekit-client';
 import { doc, deleteDoc } from 'firebase/firestore';
 
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
@@ -85,11 +85,11 @@ export default function UserCard({
     onMicDeviceChange,
     onSpeakerDeviceChange,
 }: {
-    participant: Participant;
+    participant: LivekitClient.Participant;
     isHost?: boolean;
     roomId: string;
-    micDevices?: MediaDevice[];
-    speakerDevices?: MediaDevice[];
+    micDevices?: LivekitClient.MediaDevice[];
+    speakerDevices?: LivekitClient.MediaDevice[];
     activeMicId?: string;
     activeSpeakerId?: string;
     onMicDeviceChange?: (deviceId: string) => void;
@@ -128,7 +128,7 @@ export default function UserCard({
   const { data: firestoreUser } = useDoc<RoomParticipantData>(userInRoomRef);
 
   const audioTrackRef = useTracks(
-      [Track.Source.Microphone], 
+      [LivekitClient.Track.Source.Microphone], 
       { participant }
   ).find((t) => t.publication.kind === 'audio');
 

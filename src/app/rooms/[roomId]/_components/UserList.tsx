@@ -10,7 +10,6 @@ import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
 import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
-import { createLocalAudioTrack, Track, type MediaDevice } from 'livekit-client';
 import * as LivekitClient from 'livekit-client';
 import '@livekit/components-styles';
 import { useToast } from "@/hooks/use-toast";
@@ -46,8 +45,8 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>();
   
   // All available devices
-  const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
-  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
+  const [allAudioInputDevices, setAllAudioInputDevices] = useState<LivekitClient.MediaDevice[]>([]);
+  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<LivekitClient.MediaDevice[]>([]);
 
   const [duration, setDuration] = useState(0);
 
@@ -133,7 +132,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     if (!localParticipant || !micDeviceId) return;
   
     const setupMicTrack = async () => {
-      const existingPublication = localParticipant.getTrackPublication(Track.Source.Microphone);
+      const existingPublication = localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
   
       // If the desired mic is already published, do nothing.
       if (existingPublication?.track?.mediaStreamTrack.getSettings().deviceId === micDeviceId) {
@@ -147,9 +146,9 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   
       // Now, publish the new track.
       try {
-        const track = await createLocalAudioTrack({ deviceId: micDeviceId });
+        const track = await LivekitClient.createLocalAudioTrack({ deviceId: micDeviceId });
         await localParticipant.publishTrack(track, {
-          source: Track.Source.Microphone,
+          source: LivekitClient.Track.Source.Microphone,
         });
       } catch (e) {
         console.error("Failed to create and publish mic track:", e);
@@ -159,7 +158,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   
     setupMicTrack();
   
-  }, [localParticipant, micDeviceId]); // Note: toast was removed as it's a stable function
+  }, [localParticipant, micDeviceId, toast]); // Note: toast was removed as it's a stable function
 
   useEffect(() => {
     if (room && !room.playlist && canControlMusic && roomRef) {
