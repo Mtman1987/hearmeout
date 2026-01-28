@@ -1,4 +1,3 @@
-
 'use client';
 
 import UserCard from "./UserCard";
@@ -9,9 +8,8 @@ import PlaylistPanel from "./PlaylistPanel";
 import AddMusicPanel from "./AddMusicPanel";
 import { useFirebase, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, deleteField } from 'firebase/firestore';
-import { useLocalParticipant, useRemoteParticipants } from '@livekit/components-react';
+import { useLocalParticipant, useRemoteParticipants, useMediaDeviceSelect } from '@livekit/components-react';
 import {
-  Room as LKRoom,
   createLocalAudioTrack,
   Track,
   MediaDevice,
@@ -47,11 +45,13 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
 
   // User microphone and speaker state
   const [micDeviceId, setMicDeviceId] = useState<string | undefined>();
-  const [speakerDeviceId, setSpeakerDeviceId] = useState<string | undefined>();
-  
-  // All available devices
   const [allAudioInputDevices, setAllAudioInputDevices] = useState<MediaDevice[]>([]);
-  const [allAudioOutputDevices, setAllAudioOutputDevices] = useState<MediaDevice[]>([]);
+  
+  const { 
+    devices: allAudioOutputDevices, 
+    activeDeviceId: activeSpeakerId, 
+    setActiveMediaDevice: setSpeakerDevice 
+  } = useMediaDeviceSelect({ kind: 'audiooutput' });
 
   const [duration, setDuration] = useState(0);
 
@@ -76,10 +76,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
   };
 
   const handleSpeakerDeviceChange = (deviceId: string) => {
-    setSpeakerDeviceId(deviceId);
-    if (typeof LKRoom.setActiveDevice === 'function') {
-        LKRoom.setActiveDevice('audiooutput', deviceId);
-    }
+    setSpeakerDevice(deviceId);
     try {
       localStorage.setItem('hearmeout-user-speaker-device-id', deviceId);
     } catch (e) {
@@ -87,20 +84,13 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
     }
   }
 
-  // Effect to load ALL saved settings from local storage on mount
+  // Effect to load mic devices and preferences from local storage on mount
   useEffect(() => {
-    // This effect runs once on mount to get devices and set initial state
-    const getDevices = async () => {
+    const getMicDevices = async () => {
         try {
-            // Wait for user permissions to be granted for listing devices
             await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            const [inputs, outputs] = await Promise.all([
-                LKRoom.getLocalDevices('audioinput'),
-                LKRoom.getLocalDevices('audiooutput'),
-            ]);
+            const inputs = await MediaDevice.getAudioInputDevices();
             setAllAudioInputDevices(inputs);
-            setAllAudioOutputDevices(outputs);
 
             const savedUserMicId = localStorage.getItem('hearmeout-user-mic-device-id');
             if (savedUserMicId && inputs.some(d => d.deviceId === savedUserMicId)) {
@@ -108,27 +98,13 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             } else if (inputs.length > 0) {
                 setMicDeviceId(inputs[0].deviceId);
             }
-
-            const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
-            if (typeof LKRoom.setActiveDevice === 'function') {
-                if (savedSpeakerId && outputs.some(d => d.deviceId === savedSpeakerId)) {
-                  setSpeakerDeviceId(savedSpeakerId);
-                  await LKRoom.setActiveDevice('audiooutput', savedSpeakerId);
-                } else if (outputs.length > 0) {
-                  setSpeakerDeviceId(outputs[0].deviceId);
-                  await LKRoom.setActiveDevice('audiooutput', outputs[0].deviceId);
-                }
-            } else {
-                console.error("LKRoom.setActiveDevice is not a function!");
-            }
-
         } catch (e) {
-            console.error("Failed to get local devices", e);
+            console.error("Failed to get local mic devices", e);
             toast({ variant: 'destructive', title: "Device Error", description: "Could not access audio devices. Please check browser permissions." });
         }
     };
     
-    getDevices();
+    getMicDevices();
     
     try {
         const savedPanels = localStorage.getItem('hearmeout-active-panels');
@@ -137,6 +113,16 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
         console.error("Failed to load saved panel state from localStorage", e);
     }
   }, [toast]);
+
+  // Effect to set the initial speaker from local storage, since the hook doesn't have a built-in way to do this.
+  useEffect(() => {
+      if (allAudioOutputDevices.length > 0) {
+          const savedSpeakerId = localStorage.getItem('hearmeout-user-speaker-device-id');
+          if (savedSpeakerId && allAudioOutputDevices.some(d => d.deviceId === savedSpeakerId)) {
+              setSpeakerDevice(savedSpeakerId);
+          }
+      }
+  }, [allAudioOutputDevices, setSpeakerDevice]);
 
   // Effect to publish/unpublish the microphone track
   useEffect(() => {
@@ -342,7 +328,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
               micDevices={allAudioInputDevices}
               speakerDevices={allAudioOutputDevices}
               activeMicId={micDeviceId || ''}
-              activeSpeakerId={speakerDeviceId || ''}
+              activeSpeakerId={activeSpeakerId || ''}
               onMicDeviceChange={handleMicDeviceChange}
               onSpeakerDeviceChange={handleSpeakerDeviceChange}
             />
