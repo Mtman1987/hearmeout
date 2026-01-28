@@ -292,7 +292,7 @@ function RoomPageContent() {
       </div>
   );
   
-  const renderContent = () => (
+  const renderRoomContent = () => (
     <>
         <RoomHeader
             roomName={room?.name || 'Loading room...'}
@@ -301,25 +301,7 @@ function RoomPageContent() {
             showMusicIcon={showMusicIcon}
         />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            {livekitToken && livekitUrl && (
-                <LiveKitRoom
-                    serverUrl={livekitUrl}
-                    token={livekitToken}
-                    connect={userHasInteracted}
-                    audio={false}
-                    video={false}
-                    onError={(err) => {
-                        console.error("LiveKit connection error:", err);
-                        toast({
-                            variant: 'destructive',
-                            title: 'Connection Error',
-                            description: err.message,
-                        });
-                    }}
-                >
-                    <UserList roomId={params.roomId} isDj={isDj} />
-                </LiveKitRoom>
-            )}
+            <UserList roomId={params.roomId} isDj={isDj} />
         </main>
         {!userHasInteracted && (
           <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
@@ -343,7 +325,25 @@ function RoomPageContent() {
         )}>
             <SidebarInset>
                 <div className="flex flex-col h-screen relative">
-                  { isLoading ? renderLoadingState() : renderContent() }
+                  { isLoading ? renderLoadingState() : (
+                      <LiveKitRoom
+                        serverUrl={livekitUrl!}
+                        token={livekitToken!}
+                        connect={userHasInteracted}
+                        audio={false}
+                        video={false}
+                        onError={(err) => {
+                            console.error("LiveKit connection error:", err);
+                            toast({
+                                variant: 'destructive',
+                                title: 'Connection Error',
+                                description: err.message,
+                            });
+                        }}
+                      >
+                        {renderRoomContent()}
+                      </LiveKitRoom>
+                  ) }
                 </div>
             </SidebarInset>
         </div>
