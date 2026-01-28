@@ -188,7 +188,7 @@ function RoomPageContent() {
   const { firestore, user, isUserLoading } = useFirebase();
   const { toast } = useToast();
   const [chatOpen, setChatOpen] = useState(false);
-  const [livekitToken, setLivekitToken] = useState<string | null>(null);
+  const [livekitToken, setLivekitToken] = useState<string | undefined>(undefined);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
 
   const roomRef = useMemoFirebase(() => {
@@ -270,51 +270,9 @@ function RoomPageContent() {
   }, [user, isUserLoading, params.roomId, firestore, toast]);
 
   const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-  const { isMobile } = useSidebar();
 
   const isLoading = isUserLoading || isRoomLoading || !livekitToken || !livekitUrl;
   const showMusicIcon = isDj || isDjSpotOpen;
-
-  const renderLoadingState = () => (
-      <div className="flex flex-col h-screen">
-          <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
-              <SidebarTrigger className={isMobile ? "" : "hidden md:flex"} />
-              <div className="flex-1 flex items-center gap-4 truncate">
-                <h2 className="text-xl font-bold font-headline truncate">{room?.name || 'Loading room...'}</h2>
-              </div>
-          </header>
-          <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4 text-center">
-                <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-muted-foreground">Connecting to room...</p>
-              </div>
-          </main>
-      </div>
-  );
-  
-  const renderRoomContent = () => (
-    <>
-        <RoomHeader
-            roomName={room?.name || 'Loading room...'}
-            onToggleChat={() => setChatOpen(!chatOpen)}
-            onMusicIconClick={handleMusicIconClick}
-            showMusicIcon={showMusicIcon}
-        />
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-            <UserList roomId={params.roomId} isDj={isDj} />
-        </main>
-        {!userHasInteracted && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
-              <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
-              <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
-              <Button size="lg" onClick={() => setUserHasInteracted(true)}>
-                <Headphones className="mr-2 h-5 w-5" />
-                Join Voice Chat
-              </Button>
-          </div>
-        )}
-    </>
-  );
 
   return (
     <>
@@ -324,27 +282,54 @@ function RoomPageContent() {
           chatOpen && "md:mr-[28rem]"
         )}>
             <SidebarInset>
-                <div className="flex flex-col h-screen relative">
-                  { isLoading ? renderLoadingState() : (
-                      <LiveKitRoom
-                        serverUrl={livekitUrl!}
-                        token={livekitToken!}
-                        connect={userHasInteracted}
-                        audio={false}
-                        video={false}
-                        onError={(err) => {
-                            console.error("LiveKit connection error:", err);
-                            toast({
-                                variant: 'destructive',
-                                title: 'Connection Error',
-                                description: err.message,
-                            });
-                        }}
-                      >
-                        {renderRoomContent()}
-                      </LiveKitRoom>
-                  ) }
-                </div>
+                <LiveKitRoom
+                  serverUrl={livekitUrl!}
+                  token={livekitToken}
+                  connect={userHasInteracted && !isLoading}
+                  audio={false}
+                  video={false}
+                  onError={(err) => {
+                      console.error("LiveKit connection error:", err);
+                      toast({
+                          variant: 'destructive',
+                          title: 'Connection Error',
+                          description: err.message,
+                      });
+                  }}
+                >
+                    <div className="flex flex-col h-screen relative">
+                        <RoomHeader
+                            roomName={room?.name || 'Loading room...'}
+                            onToggleChat={() => setChatOpen(!chatOpen)}
+                            onMusicIconClick={handleMusicIconClick}
+                            showMusicIcon={showMusicIcon}
+                        />
+
+                        { isLoading ? (
+                          <main className="flex-1 p-4 md:p-6 overflow-y-auto flex items-center justify-center">
+                              <div className="flex flex-col items-center gap-4 text-center">
+                                <LoaderCircle className="h-10 w-10 animate-spin text-primary" />
+                                <p className="text-muted-foreground">Connecting to room...</p>
+                              </div>
+                          </main>
+                        ) : (
+                          <main className="flex-1 p-4 md:p-6 overflow-y-auto">
+                              <UserList roomId={params.roomId} isDj={isDj} />
+                          </main>
+                        ) }
+
+                        {!userHasInteracted && (
+                          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
+                              <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
+                              <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
+                              <Button size="lg" onClick={() => setUserHasInteracted(true)}>
+                                <Headphones className="mr-2 h-5 w-5" />
+                                Join Voice Chat
+                              </Button>
+                          </div>
+                        )}
+                    </div>
+                </LiveKitRoom>
             </SidebarInset>
         </div>
 
