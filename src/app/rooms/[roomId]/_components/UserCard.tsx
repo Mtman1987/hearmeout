@@ -76,6 +76,7 @@ interface RoomParticipantData {
 
 export default function UserCard({
     participant,
+    isLocal,
     isHost,
     roomId,
     micDevices,
@@ -86,6 +87,7 @@ export default function UserCard({
     onSpeakerDeviceChange,
 }: {
     participant: LivekitClient.Participant;
+    isLocal: boolean;
     isHost?: boolean;
     roomId: string;
     micDevices?: MediaDeviceInfo[];
@@ -100,7 +102,7 @@ export default function UserCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { isLocal, isSpeaking, name, identity, audioLevel } = participant;
+  const { isSpeaking, name, identity, audioLevel } = participant;
   
   const [volume, setVolume] = useState(isLocal ? 0 : 0.8);
   const [isMutedByMe, setIsMutedByMe] = useState(volume === 0);
@@ -154,6 +156,8 @@ export default function UserCard({
   // This effect replaces the <AudioTrack> component.
   // It manually attaches the remote participant's audio stream to an <audio> element.
   useEffect(() => {
+    if (isLocal) return; // Never attach a local track to an audio element.
+
     const track = audioTrackRef?.publication.track;
     const el = audioEl.current;
     if (track && el) {
@@ -164,7 +168,7 @@ export default function UserCard({
         track.detach(el);
       }
     };
-  }, [audioTrackRef]);
+  }, [audioTrackRef, isLocal]);
 
   // Effect to control volume directly on the audio element.
   useEffect(() => {

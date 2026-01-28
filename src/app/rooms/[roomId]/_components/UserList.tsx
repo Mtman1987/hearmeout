@@ -317,6 +317,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             <UserCard
               key={localParticipant.sid}
               participant={localParticipant}
+              isLocal={true}
               isHost={user?.uid === room?.ownerId}
               roomId={roomId}
               micDevices={micDevices}
@@ -332,6 +333,7 @@ export default function UserList({ roomId, isDj }: { roomId: string, isDj: boole
             <UserCard
               key={participant.sid}
               participant={participant}
+              isLocal={false}
               isHost={false}
               roomId={roomId}
             />
