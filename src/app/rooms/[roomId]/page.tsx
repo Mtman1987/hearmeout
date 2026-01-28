@@ -356,11 +356,18 @@ function RoomPageContent() {
         });
         return;
     };
+    if (!userHasInteracted) {
+        toast({
+            title: 'Action Required',
+            description: 'Please join the voice chat before becoming the DJ.',
+        });
+        return;
+    }
     updateDocumentNonBlocking(roomRef, {
         djId: user.uid,
         djDisplayName: user.displayName || 'Anonymous DJ'
     });
-  }, [roomRef, user, toast]);
+  }, [roomRef, user, toast, userHasInteracted]);
 
   const handleRelinquishDJ = useCallback(() => {
     if (!roomRef || !isDJ) return;
@@ -457,20 +464,13 @@ function RoomPageContent() {
 
     const setupUserAndToken = async () => {
         try {
-            await new Promise<void>((resolve) => {
-                if (!userInRoomRef) return resolve();
-                const unsub = onSnapshot(userInRoomRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        unsub();
-                        resolve();
-                    }
-                });
-                 setDocumentNonBlocking(userInRoomRef, {
+            if (userInRoomRef) {
+                await setDocumentNonBlocking(userInRoomRef, {
                     uid: user.uid,
                     displayName: user.displayName,
                     photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/100/100`,
                 }, { merge: true });
-            });
+            }
 
             if (isCancelled) return;
 
@@ -486,7 +486,7 @@ function RoomPageContent() {
                     .then(token => {
                         if (!isCancelled) setJukeboxToken(token);
                     });
-            } else {
+            } else if (jukeboxToken) {
                 setJukeboxToken(undefined); // Clear jukebox token if not DJ
             }
 
@@ -534,7 +534,7 @@ function RoomPageContent() {
                             </div>
                         </div>
                     ) : (room && !userHasInteracted) ? (
-                        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
+                        <>
                             <RoomHeader
                                 roomName={room?.name || 'Loading room...'}
                                 onToggleChat={() => setChatOpen(!chatOpen)}
@@ -544,7 +544,7 @@ function RoomPageContent() {
                                 onClaimDJ={handleClaimDJ}
                                 onRelinquishDJ={handleRelinquishDJ}
                             />
-                            <div className="flex-1 flex flex-col items-center justify-center">
+                            <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                                 <h3 className="text-2xl font-bold font-headline mb-4">You're in the room</h3>
                                 <p className="text-muted-foreground mb-8 max-w-sm">Click the button below to connect your microphone and speakers.</p>
                                 <Button size="lg" onClick={() => setUserHasInteracted(true)}>
@@ -552,7 +552,7 @@ function RoomPageContent() {
                                     Join Voice Chat
                                 </Button>
                             </div>
-                        </div>
+                        </>
                     ) : ( room && userHasInteracted && livekitUrl && livekitToken &&
                         <>
                         {isDJ && jukeboxToken && (
@@ -598,7 +598,7 @@ function RoomPageContent() {
                                         />
                                     </div>
                                     <div className="lg:col-span-2 space-y-6">
-                                        {isDJ && isPlayerVisible && (
+                                        {isPlayerVisible && (
                                             <MusicPlayerCard 
                                                 currentTrack={currentTrack}
                                                 progress={progress}
