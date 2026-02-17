@@ -7,7 +7,7 @@ import {
   useConnectionState,
   useRoomContext,
 } from '@livekit/components-react';
-import { ConnectionState, createLocalAudioTrack, RoomPublication } from 'livekit-client';
+import { ConnectionState, LocalAudioTrack, RoomPublication } from 'livekit-client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -257,7 +257,7 @@ async function getYoutubeAudioUrl(youtubeUrl: string) {
 function MusicStreamer({ 
     isDJ, 
     isPlaying, 
-    trackUrl, // This is a youtube.com URL
+    trackUrl,
     onTrackEnd 
 } : { 
     isDJ: boolean, 
@@ -267,73 +267,93 @@ function MusicStreamer({
 }) {
     const room = useRoomContext();
     const { toast } = useToast();
+    
     const audioElRef = useRef<HTMLAudioElement>(null);
     const publicationRef = useRef<RoomPublication | null>(null);
-    const [isFetching, setIsFetching] = useState(false);
-
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const trackRef = useRef<MediaStreamTrack | null>(null);
+    
     useEffect(() => {
         let isCancelled = false;
-        const audioEl = audioElRef.current;
+        
+        const cleanup = () => {
+            if (publicationRef.current) {
+                room.localParticipant.unpublishTrack(publicationRef.current.track!, true).catch(console.warn);
+                publicationRef.current = null;
+            }
+            if (trackRef.current) {
+                trackRef.current.stop();
+                trackRef.current = null;
+            }
+            if (sourceNodeRef.current) {
+                sourceNodeRef.current.disconnect();
+                sourceNodeRef.current = null;
+            }
+            if (audioElRef.current) {
+                audioElRef.current.pause();
+                audioElRef.current.src = "";
+            }
+        };
 
         async function manageStream() {
-            if (isCancelled || !isDJ || !room || !audioEl) return;
+            if (isCancelled || !isDJ || !room) {
+                cleanup();
+                return;
+            }
 
             if (isPlaying && trackUrl) {
-                setIsFetching(true);
+                cleanup(); // Clean up previous track before starting a new one
                 try {
                     const streamUrl = await getYoutubeAudioUrl(trackUrl);
-                    if (isCancelled) return;
+                    if (isCancelled || !streamUrl) return;
 
-                    // If we get a valid stream URL, play it
-                    if (streamUrl) {
-                        // Unpublish any existing track before creating a new one
-                        if (publicationRef.current) {
-                           await room.localParticipant.unpublishTrack(publicationRef.current.track!, true);
-                           publicationRef.current = null;
-                        }
-                        
-                        audioEl.src = streamUrl;
-                        await audioEl.play();
+                    const audioEl = audioElRef.current;
+                    if (!audioEl) return;
+                    
+                    if (!audioContextRef.current) {
+                        audioContextRef.current = new AudioContext();
+                    }
+                    const audioContext = audioContextRef.current;
 
-                        const track = await createLocalAudioTrack({
-                            mediaElement: audioEl,
-                            // These constraints can improve echo cancellation and noise suppression
-                            noiseSuppression: true,
-                            echoCancellation: true,
-                        });
+                    audioEl.src = streamUrl;
+                    await audioEl.play();
 
-                        const publication = await room.localParticipant.publishTrack(track, {
-                            name: 'music',
-                            source: 'music_bot_audio', // Custom source name
-                        });
-                        publicationRef.current = publication;
+                    const sourceNode = audioContext.createMediaElementSource(audioEl);
+                    const destinationNode = audioContext.createMediaStreamDestination();
+                    sourceNode.connect(destinationNode);
+                    sourceNode.connect(audioContext.destination); // DJ hears the audio
+                    sourceNodeRef.current = sourceNode;
+                    
+                    const [audioTrack] = destinationNode.stream.getAudioTracks();
+                    trackRef.current = audioTrack;
+
+                    const localTrack = new LocalAudioTrack(audioTrack, {
+                        name: 'music',
+                    });
+
+                    const publication = await room.localParticipant.publishTrack(localTrack, {
+                        source: 'music_bot_audio',
+                    });
+
+                    if (isCancelled) {
+                        cleanup();
                     } else {
-                        throw new Error("Could not retrieve a valid audio stream URL.");
+                        publicationRef.current = publication;
                     }
+
                 } catch (error: any) {
-                    if (!isCancelled) {
-                        console.error("Failed to play music track:", error);
-                        toast({
-                            variant: 'destructive',
-                            title: 'Music Playback Error',
-                            description: error.message || 'Could not fetch or play the selected song.',
-                        });
-                        // Skip to the next song on error
-                        onTrackEnd();
-                    }
-                } finally {
-                    if (!isCancelled) {
-                        setIsFetching(false);
-                    }
+                    console.error("Failed to play music track:", error);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Music Playback Error',
+                        description: error.message || 'Could not fetch or play the selected song.',
+                    });
+
+                    onTrackEnd();
                 }
             } else {
-                // Stop playback and unpublish if not playing or no track
-                audioEl.pause();
-                audioEl.src = "";
-                if (publicationRef.current) {
-                    await room.localParticipant.unpublishTrack(publicationRef.current.track!, true);
-                    publicationRef.current = null;
-                }
+                cleanup();
             }
         }
         
@@ -341,11 +361,7 @@ function MusicStreamer({
 
         return () => {
             isCancelled = true;
-            // Cleanup on dismount or dependency change
-            if (publicationRef.current) {
-                room.localParticipant.unpublishTrack(publicationRef.current.track!, true).catch(e => console.warn("Failed to unpublish on cleanup", e));
-                publicationRef.current = null;
-            }
+            cleanup();
         };
     }, [isDJ, isPlaying, trackUrl, room, toast, onTrackEnd]);
 
@@ -678,3 +694,5 @@ export default function RoomPage() {
         </SidebarProvider>
     );
 }
+
+    
